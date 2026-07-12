@@ -73,35 +73,11 @@ if %ERRORLEVEL% neq 0 (
     exit /b %ERRORLEVEL%
 )
 
-call npx gulp setup --prefix "%PREFIX%" --database "%DBNAME%" --pguser "%PGUSER%" --pgpassword "%PGPASSWORD%" --api-http-port "%APIHTTPPORT%" --api-https-port "%APIHTTPSPORT%" --react-port "%REACTPORT%" --use-http "%USEHTTP%" --default-from-email "%FROMEMAIL%" --default-from-name "%FROMNAME%"
-
-if %ERRORLEVEL% neq 0 (
-    echo.
-    echo Failed to customize solution. Make sure Node.js and gulp are installed.
-    exit /b %ERRORLEVEL%
-)
-
-echo.
-echo Installing web client dependencies...
-
-set "CLIENT_DIR=%~dp0%PREFIX%.Web.Client"
-if not exist "%CLIENT_DIR%" set "CLIENT_DIR=%~dp0Datasilk.Web.Client"
-
-pushd "%CLIENT_DIR%"
-call npm install
-if %ERRORLEVEL% neq 0 (
-    echo.
-    echo Failed to install web client dependencies.
-    popd
-    exit /b %ERRORLEVEL%
-)
-popd
-
 echo.
 echo Generating SQL deployment script...
 
-set "SQL_DIR=%~dp0%PREFIX%.SQL"
-if not exist "%SQL_DIR%" set "SQL_DIR=%~dp0Datasilk.SQL"
+set "SQL_DIR=%~dp0Datasilk.SQL"
+if not exist "%SQL_DIR%" set "SQL_DIR=%~dp0%PREFIX%.SQL"
 
 pushd "%SQL_DIR%"
 call npm install
@@ -141,6 +117,30 @@ if %ERRORLEVEL% neq 0 (
     exit /b %ERRORLEVEL%
 )
 
+popd
+
+call npx gulp setup --prefix "%PREFIX%" --database "%DBNAME%" --pguser "%PGUSER%" --pgpassword "%PGPASSWORD%" --api-http-port "%APIHTTPPORT%" --api-https-port "%APIHTTPSPORT%" --react-port "%REACTPORT%" --use-http "%USEHTTP%" --default-from-email "%FROMEMAIL%" --default-from-name "%FROMNAME%"
+
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo Failed to customize solution. Make sure Node.js and gulp are installed.
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Installing web client dependencies...
+
+set "CLIENT_DIR=%~dp0%PREFIX%.Web.Client"
+if not exist "%CLIENT_DIR%" set "CLIENT_DIR=%~dp0Datasilk.Web.Client"
+
+pushd "%CLIENT_DIR%"
+call npm install
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo Failed to install web client dependencies.
+    popd
+    exit /b %ERRORLEVEL%
+)
 popd
 
 echo.
