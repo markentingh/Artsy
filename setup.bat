@@ -16,6 +16,7 @@ if "%PREFIX%"=="" (
 echo.
 set /p DBNAME="Database name (default: %PREFIX%): "
 if "%DBNAME%"=="" set DBNAME=%PREFIX%
+for /f "usebackq delims=" %%a in (`powershell -Command "'%DBNAME%'.ToLower()"`) do set "DBNAME=%%a"
 
 echo.
 set /p PGUSER="PostgreSQL username (default: postgres): "
