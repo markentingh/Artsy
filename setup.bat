@@ -88,7 +88,7 @@ if %ERRORLEVEL% neq 0 (
     exit /b %ERRORLEVEL%
 )
 
-call npx gulp
+call npx gulp --database "%DBNAME%"
 if %ERRORLEVEL% neq 0 (
     echo.
     echo Failed to generate deploy.sql.
@@ -101,18 +101,10 @@ echo Creating database and deploying schema...
 
 set "PGPASSWORD=%PGPASSWORD%"
 
-psql -h localhost -U %PGUSER% -tc "SELECT 'CREATE DATABASE %DBNAME%' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '%DBNAME%')" | psql -h localhost -U %PGUSER%
+psql -h localhost -U %PGUSER% -d template1 -f deploy.sql
 if %ERRORLEVEL% neq 0 (
     echo.
-    echo Failed to create database.
-    popd
-    exit /b %ERRORLEVEL%
-)
-
-psql -h localhost -U %PGUSER% -d %DBNAME% -f deploy.sql
-if %ERRORLEVEL% neq 0 (
-    echo.
-    echo Failed to deploy schema.
+    echo Failed to create database or deploy schema.
     popd
     exit /b %ERRORLEVEL%
 )

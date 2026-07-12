@@ -70,5 +70,9 @@ This is a template web application solution for the Datasilk stack. It contains 
 ## Manual Setup
 
 1. Run `npm install` from `Datasilk.Web.Client` (or `<Prefix>.Web.Client` after setup).
-2. Create a PostgreSQL database and run `Datasilk.SQL/deploy.sql` (or `<Prefix>.SQL/deploy.sql` after setup).
+2. Run `Datasilk.SQL/deploy.sql` (or `<Prefix>.SQL/deploy.sql` after setup) while connected to a default database such as `template1`. The script creates the application database if it does not exist.
+
+   ```bash
+   psql -U <username> -d template1 -f <Prefix>.SQL/deploy.sql
+   ```
 3. Open `Datasilk.sln` (or `<Prefix>.sln` after setup) in Visual Studio or run `dotnet run` from `Datasilk.Web.Server` (or `<Prefix>.Web.Server` after setup).
