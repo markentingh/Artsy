@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100;
+  }
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.icon-spin {
+  animation: spin 1s linear infinite;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -1,13 +1,13 @@
-# Datasilk Framework
+# Artsy Framework
 
-This is a template web application solution for the Datasilk stack. It contains a .NET API, authentication library, Dapper data access layer, PostgreSQL schema, and a React + Vite + TailwindCSS web client.
+This is a template web application solution for the Artsy stack. It contains a .NET API, authentication library, Dapper data access layer, PostgreSQL schema, and a React + Vite + TailwindCSS web client.
 
 ## Quick Start
 
 You can go from `git clone` to a running local dashboard in **less than 60 seconds**:
 
 ```bash
-git clone https://github.com/Datasilk/Framework
+git clone https://github.com/Artsy/Framework
 cd Framework
 setup.bat
 ```
@@ -16,12 +16,12 @@ setup.bat
 
 ## Projects
 
-- **Datasilk.API** - ASP.NET Core API controllers. Contains user management APIs.
-- **Datasilk.Auth** - Authentication services, JWT setup, and account controller.
-- **Datasilk.Data** - Dapper-based data access layer with auth repositories and entities.
-- **Datasilk.SQL** - PostgreSQL schema scripts (tables, indexes, functions, sequences).
-- **Datasilk.Web.Server** - ASP.NET Core web host that serves the API and SPA fallback.
-- **Datasilk.Web.Client** - React + Vite + TailwindCSS front-end application.
+- **Artsy.API** - ASP.NET Core API controllers. Contains user management APIs.
+- **Artsy.Auth** - Authentication services, JWT setup, and account controller.
+- **Artsy.Data** - Dapper-based data access layer with auth repositories and entities.
+- **Artsy.SQL** - PostgreSQL schema scripts (tables, indexes, functions, sequences).
+- **Artsy.Web.Server** - ASP.NET Core web host that serves the API and SPA fallback.
+- **Artsy.Web.Client** - React + Vite + TailwindCSS front-end application.
 
 ## Prerequisites
 
@@ -37,7 +37,7 @@ setup.bat
 1. Clone the repository.
 
    ```bash
-   git clone https://github.com/Datasilk/Framework
+   git clone https://github.com/Artsy/Framework
    cd Framework
    ```
 
@@ -53,7 +53,7 @@ setup.bat
 
    The script performs the following steps:
 
-   - Replaces `Datasilk`/`datasilk` identifiers in project files, namespaces, and content with the chosen prefix.
+   - Replaces `Artsy`/`artsy` identifiers in project files, namespaces, and content with the chosen prefix.
    - Renames solution folders and the `.sln` file to match the prefix.
    - Updates connection strings/ports in `appsettings.json`, `appsettings.Development.json`, `launchSettings.json`, and `vite.config.js`.
    - Generates a 32-character JWT secret.
@@ -83,10 +83,10 @@ setup.bat
 
 ## Manual Setup
 
-1. Run `npm install` from `Datasilk.Web.Client` (or `<Prefix>.Web.Client` after setup).
-2. Run `Datasilk.SQL/deploy.sql` (or `<Prefix>.SQL/deploy.sql` after setup) while connected to a default database such as `template1`. The script creates the application database if it does not exist.
+1. Run `npm install` from `Artsy.Web.Client` (or `<Prefix>.Web.Client` after setup).
+2. Run `Artsy.SQL/deploy.sql` (or `<Prefix>.SQL/deploy.sql` after setup) while connected to a default database such as `template1`. The script creates the application database if it does not exist.
 
    ```bash
    psql -U <username> -d template1 -f <Prefix>.SQL/deploy.sql
    ```
-3. Open `Datasilk.sln` (or `<Prefix>.sln` after setup) in Visual Studio or run `dotnet run` from `Datasilk.Web.Server` (or `<Prefix>.Web.Server` after setup).
+3. Open `Artsy.sln` (or `<Prefix>.sln` after setup) in Visual Studio or run `dotnet run` from `Artsy.Web.Server` (or `<Prefix>.Web.Server` after setup).
