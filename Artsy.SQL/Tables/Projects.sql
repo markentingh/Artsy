@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS public."Projects" (
+    "Id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "AppUserId" UUID NOT NULL,
+    "Title" VARCHAR(64) NOT NULL,
+    "Description" VARCHAR(255) NULL,
+    "Key" VARCHAR(16) NOT NULL UNIQUE,
+    "Color" VARCHAR(16) NOT NULL,
+    "Status" INTEGER NOT NULL DEFAULT 1,
+    "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

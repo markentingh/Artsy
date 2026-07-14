@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Artsy.API.Models;
@@ -74,8 +73,15 @@ namespace Artsy.API.Controllers
                 user.TelegramConnectionToken = token;
                 _userRepository.UpdateTelegramConnection(user);
 
-                var url = $"https://t.me/{ConnectionSettings.TelegramBotUsername}?start={Uri.EscapeDataString(token)}";
-                return Json(new ApiResponse { success = true, data = new { url } });
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = new
+                    {
+                        botUsername = ConnectionSettings.TelegramBotUsername,
+                        token
+                    }
+                });
             }
             catch (Exception ex)
             {
@@ -83,25 +89,22 @@ namespace Artsy.API.Controllers
             }
         }
 
-        [HttpPost("webhook")]
+        [HttpPost("/api/webhooks/telegram")]
         [AllowAnonymous]
-        public async Task<IActionResult> Webhook([FromBody] JsonElement update)
+        public async Task<IActionResult> Webhook([FromBody] Models.Telegram.TelegramUpdate update)
         {
             if (string.IsNullOrEmpty(ConnectionSettings.TelegramBotToken))
                 return Ok();
 
             try
             {
-                if (!update.TryGetProperty("message", out var message))
+                var message = update.Message;
+                if (message?.Chat == null || message.From == null)
                     return Ok();
 
-                if (!message.TryGetProperty("chat", out var chat) || !message.TryGetProperty("from", out var from))
-                    return Ok();
-
-                var chatId = chat.GetProperty("id").GetInt64().ToString();
-                var telegramUserId = from.GetProperty("id").GetInt64().ToString();
-                var text = message.TryGetProperty("text", out var textProp) ? textProp.GetString() ?? "" : "";
-                var username = from.TryGetProperty("username", out var usernameProp) ? usernameProp.GetString() ?? "" : "";
+                var chatId = message.Chat.Id.ToString();
+                var telegramUserId = message.From.Id.ToString();
+                var text = message.Text ?? "";
 
                 if (!string.IsNullOrEmpty(text) && text.StartsWith("/start "))
                 {
@@ -161,8 +164,7 @@ namespace Artsy.API.Controllers
 
         private static string GenerateConnectionToken()
         {
-            var bytes = RandomNumberGenerator.GetBytes(32);
-            return Convert.ToHexString(bytes).ToLowerInvariant();
+            return Guid.NewGuid().ToString();
         }
 
         private async Task SendTelegramMessage(string chatId, string text)

@@ -93,6 +93,9 @@ export default function DashboardConnections() {
       const response = await connect();
       if (response.data.success && response.data.data.viaApiToken) {
         await fetchStatus(key);
+      } else if (response.data.success && response.data.data.botUsername && response.data.data.token) {
+        const { botUsername, token } = response.data.data;
+        window.location.href = `tg://resolve?domain=${encodeURIComponent(botUsername)}&start=${encodeURIComponent(token)}`;
       } else if (response.data.success && response.data.data.url) {
         window.location.href = response.data.data.url;
       } else {
@@ -142,24 +145,29 @@ export default function DashboardConnections() {
               Not connected
             </span>
           )}
+          {!status.connected && !isLoadingStatus && service.key === 'telegram' && (
+            <p className="pt-4 text-xs text-amber-600 dark:text-amber-400">
+              Make sure Telegram is installed before connecting.
+            </p>
+          )}
         </div>
         {status.connected && (
           <div className="mb-4 text-sm text-gray-600 dark:text-gray-400 space-y-1">
             {status.userId && <p>User ID: {status.userId}</p>}
             {status.shopNames && <p>Shops: {status.shopNames}</p>}
-            {status.telegramUserId && <p>Telegram User ID: {status.telegramUserId}</p>}
-            {status.telegramChatId && <p>Telegram Chat ID: {status.telegramChatId}</p>}
             {status.instagramBusinessAccountId && <p>IG Business ID: {status.instagramBusinessAccountId}</p>}
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => handleConnect(service.key)}
-          disabled={isLoading}
-          className="mt-auto px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isLoading ? 'Connecting...' : status.connected ? (status.viaApiToken ? 'API Token' : 'Reconnect') : 'Connect'}
-        </button>
+        {!isLoadingStatus && !(service.key === 'printify' && status.viaApiToken) && (
+          <button
+            type="button"
+            onClick={() => handleConnect(service.key)}
+            disabled={isLoading}
+            className="mt-auto px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading ? 'Connecting...' : status.connected ? 'Reconnect' : 'Connect'}
+          </button>
+        )}
       </div>
     );
   };

@@ -1,5 +1,7 @@
 using Artsy.Data.Interfaces.Auth;
+using Artsy.Data.Interfaces.Projects;
 using Artsy.Data.Repositories.Auth;
+using Artsy.Data.Repositories.Projects;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -17,6 +19,7 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<IAppRoleRepository, AppRoleRepository>();
             builder.Services.AddTransient<IAppUserRolesRepository, AppUserRolesRepository>();
             builder.Services.AddTransient<IAppUserTokenRepository, AppUserTokenRepository>();
+            builder.Services.AddTransient<IProjectRepository, ProjectRepository>();
         }
     }
 }

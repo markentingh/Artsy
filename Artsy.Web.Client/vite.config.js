@@ -50,6 +50,7 @@ export default defineConfig(({ mode }) => {
         },
         server: {
             host: '0.0.0.0',
+            allowedHosts: ['localhost', 'tunnel.datasilk.io'],
             proxy: {
                 '^/api': {
                     target,

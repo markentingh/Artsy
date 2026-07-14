@@ -10,9 +10,12 @@ export default function Sidebar() {
   const isAdmin = user?.roles?.includes('admin') ?? false;
 
   const navItems = [
-    { path: '/dashboard', label: 'Dashboard' },
+    { path: '/dashboard', label: 'Projects' },
     { path: '/dashboard/connections', label: 'Connections' },
-    ...(isAdmin ? [{ path: '/dashboard/users', label: 'Users' }] : [])
+    ...(isAdmin ? [
+      { path: '/dashboard/services', label: 'Services' },
+      { path: '/dashboard/users', label: 'Users' }
+    ] : [])
   ];
 
   return (
