@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Text;
-using System.Text.Json;
 using Artsy.API.Models;
 using Artsy.API.Services;
 using Artsy.Data.Entities.Auth;
@@ -13,13 +11,14 @@ namespace Artsy.API.Controllers
     public class TelegramController : ApiController
     {
         readonly IAppUserRepository _userRepository;
-        readonly IHttpClientFactory _httpClientFactory;
+        readonly ITelegramService _telegramService;
 
-        public TelegramController(IAppUserRepository userRepository, IHttpClientFactory httpClientFactory)
+        public TelegramController(IAppUserRepository userRepository, ITelegramService telegramService)
         {
             _userRepository = userRepository;
-            _httpClientFactory = httpClientFactory;
+            _telegramService = telegramService;
         }
+
 
         [HttpGet("status")]
         [Authorize]
@@ -91,50 +90,22 @@ namespace Artsy.API.Controllers
 
         [HttpPost("/api/webhooks/telegram")]
         [AllowAnonymous]
-        public async Task<IActionResult> Webhook([FromBody] Models.Telegram.TelegramUpdate update)
+        public IActionResult Webhook([FromBody] Models.Telegram.TelegramUpdate update)
         {
             if (string.IsNullOrEmpty(ConnectionSettings.TelegramBotToken))
                 return Ok();
 
-            try
-            {
-                var message = update.Message;
-                if (message?.Chat == null || message.From == null)
-                    return Ok();
-
-                var chatId = message.Chat.Id.ToString();
-                var telegramUserId = message.From.Id.ToString();
-                var text = message.Text ?? "";
-
-                if (!string.IsNullOrEmpty(text) && text.StartsWith("/start "))
-                {
-                    var token = text.Substring("/start ".Length).Trim();
-                    var user = await _userRepository.FindByTelegramConnectionTokenAsync(token);
-                    if (user != null)
-                    {
-                        user.TelegramUserId = telegramUserId;
-                        user.TelegramChatId = chatId;
-                        user.TelegramConnectionToken = null;
-                        _userRepository.UpdateTelegramConnection(user);
-                        await SendTelegramMessage(chatId, $"Connected to Artsy as {user.FullName}. Reply here to send messages back to the app.");
-                    }
-                }
-                else if (!string.IsNullOrEmpty(text))
-                {
-                    var user = await _userRepository.FindByTelegramUserIdAsync(telegramUserId);
-                    if (user != null)
-                    {
-                        // Inbound message from a known user. Persist or process as needed.
-                        await SendTelegramMessage(chatId, $"Message received from {user.FullName}.");
-                    }
-                }
-
+            var message = update.Message;
+            if (message?.Chat == null || message.From == null)
                 return Ok();
-            }
-            catch (Exception ex)
+
+            var text = message.Text ?? "";
+            if (!string.IsNullOrEmpty(text))
             {
-                return Ok(new { error = ex.Message });
+                _ = _telegramService.Reply(message);
             }
+
+            return Ok();
         }
 
         [HttpPost("send")]
@@ -153,7 +124,7 @@ namespace Artsy.API.Controllers
                 if (string.IsNullOrEmpty(user.TelegramChatId))
                     return Json(new ApiResponse { success = false, message = "User has not connected Telegram." });
 
-                await SendTelegramMessage(user.TelegramChatId, request.Text);
+                await _telegramService.SendMessage(user.TelegramChatId, request.Text);
                 return Json(new ApiResponse { success = true });
             }
             catch (Exception ex)
@@ -167,17 +138,5 @@ namespace Artsy.API.Controllers
             return Guid.NewGuid().ToString();
         }
 
-        private async Task SendTelegramMessage(string chatId, string text)
-        {
-            var client = _httpClientFactory.CreateClient();
-            var content = new StringContent(JsonSerializer.Serialize(new
-            {
-                chat_id = chatId,
-                text
-            }), Encoding.UTF8, "application/json");
-
-            var response = await client.PostAsync($"https://api.telegram.org/bot{ConnectionSettings.TelegramBotToken}/sendMessage", content);
-            response.EnsureSuccessStatusCode();
-        }
     }
 }

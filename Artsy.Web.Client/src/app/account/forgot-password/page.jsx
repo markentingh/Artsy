@@ -46,7 +46,7 @@ export default function ForgotPassword() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
         <div className="w-full max-w-md p-8 bg-white dark:bg-gray-800 rounded shadow text-center">
-          <h1 className="text-2xl font-bold mb-4">Check Your Email</h1>
+          <h1 className="text-2xl mb-4">Check Your Email</h1>
           <p className="text-gray-600 dark:text-gray-300 mb-6">
             If an account exists for this email address, a password reset link has been sent. Please check your inbox and spam folder.
           </p>
@@ -64,7 +64,7 @@ export default function ForgotPassword() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       <form onSubmit={handleSubmit} className="w-full max-w-md p-8 bg-white dark:bg-gray-800 rounded shadow">
-        <h1 className="text-2xl font-bold mb-2">Reset Password</h1>
+        <h1 className="text-2xl mb-2">Reset Password</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
           Enter your email address and we'll send you a link to reset your password.
         </p>

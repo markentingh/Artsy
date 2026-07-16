@@ -11,7 +11,18 @@ SELECT 'CREATE DATABASE artsy' WHERE NOT EXISTS (SELECT FROM pg_database WHERE d
 \i Tables/AppUsers.sql
 \i Tables/AppUserRoles.sql
 \i Tables/AppUserTokens.sql
-\i Tables/Projects.sql
+\i Tables/LLM_Models.sql
+\i Tables/Projects/ProjectCollections.sql
+\i Tables/Projects/Projects.sql
+\i Tables/Projects/ProjectItems.sql
+\i Tables/Projects/ProjectCollectionAnswers.sql
+\i Tables/Projects/ProjectCollectionArtwork.sql
+\i Tables/Projects/ProjectCollectionChatHistory.sql
+\i Tables/Projects/ProjectCollectionItems.sql
+\i Tables/Projects/ProjectItemArtwork.sql
+\i Tables/Projects/ProjectItemBlueprint.sql
+\i Tables/Projects/ProjectItemQuestions.sql
+\i Tables/Projects/ProjectQuestions.sql
 
 -- Sequences
 \i Sequences/SequenceAppRoles.sql

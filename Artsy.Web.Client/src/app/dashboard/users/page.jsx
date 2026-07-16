@@ -107,7 +107,7 @@ export default function DashboardUsers() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-4">Users</h1>
+      <h1 className="text-3xl mb-4">Users</h1>
       <div className="filters tool-bar mb-4">
         <div className="relative w-full max-w-sm">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500 dark:text-gray-400">

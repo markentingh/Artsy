@@ -7,6 +7,9 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"Noto Sans"', 'sans-serif'],
+      },
       colors: {
         primary: {
           50: '#eff6ff',

@@ -113,7 +113,7 @@ export default function SignUp() {
               <Icon name="mail" className="text-3xl" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold mb-4">Account Created</h1>
+          <h1 className="text-2xl mb-4">Account Created</h1>
           <p className="text-gray-600 dark:text-gray-300 mb-4">
             An activation email has been sent to your inbox. Please follow the instructions in the email to activate your account.
           </p>
@@ -134,7 +134,7 @@ export default function SignUp() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       <form onSubmit={handleSubmit} className="w-full max-w-md p-8 bg-white dark:bg-gray-800 rounded shadow">
-        <h1 className="text-2xl font-bold mb-2">Sign Up</h1>
+        <h1 className="text-2xl mb-2">Sign Up</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Create a new account</p>
 
         {errors.form && (

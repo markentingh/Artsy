@@ -105,14 +105,27 @@ function getSqlFiles(folder) {
   if (!fs.existsSync(fullPath)) {
     return [];
   }
-  const files = fs.readdirSync(fullPath)
-    .filter(file => file.toLowerCase().endsWith('.sql'))
-    .filter(file => file.toLowerCase() !== deployFile.toLowerCase());
+
+  const files = [];
+  function collect(dir) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        collect(entryPath);
+      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.sql') && entry.name.toLowerCase() !== deployFile.toLowerCase()) {
+        files.push(entryPath);
+      }
+    }
+  }
+  collect(fullPath);
+
+  const relativeFiles = files.map(file => path.relative(fullPath, file).replace(/\\/g, '/'));
 
   const order = folderOrder[folder];
   if (order) {
     const ordered = [];
-    const remaining = new Set(files);
+    const remaining = new Set(relativeFiles);
     for (const file of order) {
       if (remaining.has(file)) {
         ordered.push(file);
@@ -123,10 +136,10 @@ function getSqlFiles(folder) {
   }
 
   if (folder === 'Tables') {
-    return sortByDependencies(files, folder);
+    return sortByDependencies(relativeFiles, folder);
   }
 
-  return files.sort();
+  return relativeFiles.sort();
 }
 
 function generateDeployContent(args) {

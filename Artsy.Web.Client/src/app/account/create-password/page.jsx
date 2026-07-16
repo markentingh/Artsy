@@ -81,7 +81,7 @@ export default function CreatePassword() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
         <div className="w-full max-w-md p-8 bg-white dark:bg-gray-800 rounded shadow text-center">
-          <h1 className="text-2xl font-bold mb-4">Password Updated</h1>
+          <h1 className="text-2xl mb-4">Password Updated</h1>
           <p className="text-gray-600 dark:text-gray-300 mb-6">
             Your password has been reset successfully. You can now sign in with your new password.
           </p>
@@ -99,7 +99,7 @@ export default function CreatePassword() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       <form onSubmit={handleSubmit} className="w-full max-w-md p-8 bg-white dark:bg-gray-800 rounded shadow">
-        <h1 className="text-2xl font-bold mb-2">Create New Password</h1>
+        <h1 className="text-2xl mb-2">Create New Password</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
           Enter a new password below.
         </p>

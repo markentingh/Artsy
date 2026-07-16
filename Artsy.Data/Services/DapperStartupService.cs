@@ -1,5 +1,7 @@
+using Artsy.Data.Interfaces;
 using Artsy.Data.Interfaces.Auth;
 using Artsy.Data.Interfaces.Projects;
+using Artsy.Data.Repositories;
 using Artsy.Data.Repositories.Auth;
 using Artsy.Data.Repositories.Projects;
 using Microsoft.AspNetCore.Builder;
@@ -20,6 +22,12 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<IAppUserRolesRepository, AppUserRolesRepository>();
             builder.Services.AddTransient<IAppUserTokenRepository, AppUserTokenRepository>();
             builder.Services.AddTransient<IProjectRepository, ProjectRepository>();
+            builder.Services.AddTransient<IProjectCollectionRepository, ProjectCollectionRepository>();
+            builder.Services.AddTransient<IProjectItemRepository, ProjectItemRepository>();
+            builder.Services.AddTransient<IProjectItemBlueprintRepository, ProjectItemBlueprintRepository>();
+            builder.Services.AddTransient<IProjectQuestionRepository, ProjectQuestionRepository>();
+            builder.Services.AddTransient<IProjectCollectionArtworkRepository, ProjectCollectionArtworkRepository>();
+            builder.Services.AddTransient<ILLMModelsRepository, LLMModelsRepository>();
         }
     }
 }

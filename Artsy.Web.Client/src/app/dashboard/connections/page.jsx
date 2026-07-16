@@ -124,7 +124,7 @@ export default function DashboardConnections() {
         key={service.key}
         className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col items-center text-center"
       >
-        <div className={`w-16 h-16 rounded-full ${service.color} flex items-center justify-center text-white text-2xl font-bold mb-4`}>
+        <div className={`w-16 h-16 rounded-full ${service.color} flex items-center justify-center text-white text-2xl mb-4`}>
           {service.name[0]}
         </div>
         <h2 className="text-xl font-semibold mb-2">{service.name}</h2>
@@ -174,16 +174,17 @@ export default function DashboardConnections() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-4">Connections</h1>
+      <h1 className="text-3xl mb-4">Connections</h1>
       {message && (
         <Message type={message.type} onClose={() => setMessage(null)}>
           {message.text}
         </Message>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
-        {renderCard(services[0])}
-        {renderCard(services[1])}
-        {renderCard(services[2])}
+      <div
+        className="grid gap-6"
+        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(0, 20em))' }}
+      >
+        {services.map(service => renderCard(service))}
       </div>
     </div>
   );

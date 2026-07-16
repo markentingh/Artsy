@@ -58,7 +58,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       <form onSubmit={handleSubmit} className="w-full max-w-md p-8 bg-white dark:bg-gray-800 rounded shadow">
-        <h1 className="text-2xl font-bold mb-6">Sign In</h1>
+        <h1 className="text-2xl mb-6">Sign In</h1>
         {errors.form && (
           <Message type="error" onClose={() => setErrors({ ...errors, form: '' })}>
             {errors.form}

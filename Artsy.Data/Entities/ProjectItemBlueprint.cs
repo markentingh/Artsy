@@ -1,0 +1,12 @@
+namespace Artsy.Data.Entities.Projects
+{
+    public class ProjectItemBlueprint
+    {
+        public Guid Id { get; set; }
+        public Guid ItemId { get; set; }
+        public Guid ProjectId { get; set; }
+        public int BlueprintId { get; set; }
+        public string Name { get; set; } = "";
+        public string BlueprintJson { get; set; } = "";
+    }
+}

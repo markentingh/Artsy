@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using Artsy.API.Models;
@@ -163,7 +165,17 @@ namespace Artsy.API.Controllers
 
         private async Task<List<PrintifyShop>> GetAccountInfo(string? accessToken = null)
         {
-            var client = _httpClientFactory.CreateClient();
+            var handler = new SocketsHttpHandler
+            {
+                ConnectCallback = async (context, cancellationToken) =>
+                {
+                    var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                    await socket.ConnectAsync(context.DnsEndPoint, cancellationToken);
+                    return new NetworkStream(socket, ownsSocket: true);
+                }
+            };
+
+            using var client = new HttpClient(handler);
             var token = accessToken ?? ConnectionSettings.PrintifyApiToken;
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             var response = await client.GetAsync("https://api.printify.com/v1/shops.json");

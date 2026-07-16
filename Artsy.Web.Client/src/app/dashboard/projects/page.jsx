@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import Icon from '@/components/ui/icon';
+import ButtonOutline from '@/components/ui/button-outline';
 import Modal from '@/components/ui/modal';
 import Input from '@/components/forms/input';
 import TextArea from '@/components/forms/textarea';
@@ -10,7 +12,8 @@ import ColorPicker from '@/components/ui/ColorPicker';
 
 export default function DashboardProjects() {
   const session = useSession();
-  const { getAll, create } = Projects(session);
+  const navigate = useNavigate();
+  const { getAll, getCollectionArtworkUrl, create } = Projects(session);
 
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +43,17 @@ export default function DashboardProjects() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const buildImageUrls = (artworkRows) => {
+    const urls = [];
+    for (const row of artworkRows || []) {
+      for (let index = 1; index <= row.images && urls.length < 5; index++) {
+        urls.push(getCollectionArtworkUrl(row.collectionId, row.id, index));
+      }
+      if (urls.length >= 5) break;
+    }
+    return urls;
   };
 
   useEffect(() => {
@@ -81,7 +95,7 @@ export default function DashboardProjects() {
         color: form.color
       });
       if (response.data.success) {
-        setProjects((prev) => [response.data.data, ...prev]);
+        setProjects((prev) => [{ ...response.data.data, artwork: [] }, ...prev]);
         handleCloseModal();
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to create project' });
@@ -93,44 +107,75 @@ export default function DashboardProjects() {
     }
   };
 
+  const handleRowClick = (projectId) => {
+    navigate(`/dashboard/project/${projectId}`);
+  };
+
+  const renderCarousel = (project) => {
+    const urls = buildImageUrls(project.artwork);
+    if (urls.length === 0) {
+      return (
+        <div className="h-32 bg-gray-100 dark:bg-gray-700/50 rounded mb-4 flex items-center justify-center opacity-50">
+          <span className="text-sm text-gray-600 dark:text-gray-400">
+            No Collections to display just yet
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex gap-2 overflow-x-auto mb-4 pb-2">
+        {urls.map((url, index) => (
+          <img
+            key={`${project.id}-${index}`}
+            src={url}
+            alt={`Project artwork ${index + 1}`}
+            className="h-32 w-32 object-cover rounded shrink-0 bg-gray-100 dark:bg-gray-700"
+          />
+        ))}
+      </div>
+    );
+  };
+
   const renderRow = (project) => (
     <div
       key={project.id}
-      className="flex items-center gap-4 p-4 border-b border-gray-200 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+      className="border-b border-gray-200 dark:border-gray-700 last:border-b-0"
     >
+      {renderCarousel(project)}
       <div
-        className="w-8 h-12 rounded shrink-0"
-        style={{ backgroundColor: project.color, width: '2em' }}
-      />
-      <div className="flex-1 min-w-0">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
-          {project.title}
-        </h3>
-        {project.description && (
-          <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
-            {project.description}
+        className="flex items-center gap-4 p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+        onClick={() => handleRowClick(project.id)}
+      >
+        <div
+          className="w-8 h-12 rounded shrink-0"
+          style={{ backgroundColor: project.color, width: '2em' }}
+        />
+        <div className="flex-1 min-w-0">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
+            {project.title}
+          </h3>
+          {project.description && (
+            <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
+              {project.description}
+            </p>
+          )}
+          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+            Key: {project.key}
           </p>
-        )}
-        <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-          Key: {project.key}
-        </p>
+        </div>
       </div>
     </div>
   );
 
   return (
     <div>
-      <div className="tool-bar mb-6">
-        <h1 className="text-3xl font-bold">Projects</h1>
-        <div className="right-side">
-          <button
-            type="button"
-            onClick={handleOpenModal}
-          >
-            <Icon name="add" />
-            <span>New Project</span>
-          </button>
-        </div>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl">Projects</h1>
+        <ButtonOutline onClick={handleOpenModal}>
+          <Icon name="add" />
+          <span className="ml-2">New Project</span>
+        </ButtonOutline>
       </div>
 
       {message && (
@@ -208,11 +253,19 @@ export default function DashboardProjects() {
             )}
 
             <div className="buttons">
-              <button type="button" onClick={handleCloseModal} className="cancel">
-                Cancel
-              </button>
-              <button type="submit" disabled={saving}>
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 {saving ? 'Creating...' : 'Create Project'}
+              </button>
+              <button
+                type="button"
+                onClick={handleCloseModal}
+                className="cancel px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition"
+              >
+                Cancel
               </button>
             </div>
           </form>
