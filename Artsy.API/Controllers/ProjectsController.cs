@@ -10,32 +10,44 @@ namespace Artsy.API.Controllers
 {
     [Route("/api/projects")]
     [Authorize]
-    public class ProjectsController : ApiController
+    public partial class ProjectsController : ApiController
     {
         readonly IProjectRepository _projectRepository;
         readonly IProjectCollectionRepository _projectCollectionRepository;
         readonly IProjectItemRepository _projectItemRepository;
         readonly IProjectItemBlueprintRepository _projectItemBlueprintRepository;
+        readonly IProjectItemArtworkRepository _projectItemArtworkRepository;
+        readonly IProjectItemQuestionRepository _projectItemQuestionRepository;
         readonly IProjectQuestionRepository _projectQuestionRepository;
         readonly IProjectCollectionArtworkRepository _projectCollectionArtworkRepository;
+        readonly IProjectItemPreviewRepository _projectItemPreviewRepository;
         readonly IImageService _imageService;
+        readonly IImageGeneration _imageGeneration;
 
         public ProjectsController(
             IProjectRepository projectRepository,
             IProjectCollectionRepository projectCollectionRepository,
             IProjectItemRepository projectItemRepository,
             IProjectItemBlueprintRepository projectItemBlueprintRepository,
+            IProjectItemArtworkRepository projectItemArtworkRepository,
+            IProjectItemQuestionRepository projectItemQuestionRepository,
             IProjectQuestionRepository projectQuestionRepository,
             IProjectCollectionArtworkRepository projectCollectionArtworkRepository,
-            IImageService imageService)
+            IProjectItemPreviewRepository projectItemPreviewRepository,
+            IImageService imageService,
+            IImageGeneration imageGeneration)
         {
             _projectRepository = projectRepository;
             _projectCollectionRepository = projectCollectionRepository;
             _projectItemRepository = projectItemRepository;
             _projectItemBlueprintRepository = projectItemBlueprintRepository;
+            _projectItemArtworkRepository = projectItemArtworkRepository;
+            _projectItemQuestionRepository = projectItemQuestionRepository;
             _projectQuestionRepository = projectQuestionRepository;
             _projectCollectionArtworkRepository = projectCollectionArtworkRepository;
+            _projectItemPreviewRepository = projectItemPreviewRepository;
             _imageService = imageService;
+            _imageGeneration = imageGeneration;
         }
 
         [HttpGet("get-by-id")]
@@ -205,363 +217,6 @@ namespace Artsy.API.Controllers
             }
         }
 
-        [HttpGet("get-collections")]
-        public async Task<IActionResult> GetCollections([FromQuery] Guid projectId)
-        {
-            var userId = GetUserId();
-            if (userId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Could not find user" });
-
-            if (projectId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Project ID is required." });
-
-            try
-            {
-                var project = await _projectRepository.GetByIdAsync(projectId, userId);
-                if (project == null)
-                    return Json(new ApiResponse { success = false, message = "Project not found." });
-
-                var collections = await _projectCollectionRepository.GetByProjectIdAsync(projectId);
-                return Json(new ApiResponse { success = true, data = collections });
-            }
-            catch (Exception ex)
-            {
-                return Json(new ApiResponse { success = false, message = ex.Message });
-            }
-        }
-
-        [HttpGet("get-items")]
-        public async Task<IActionResult> GetItems([FromQuery] Guid projectId)
-        {
-            var userId = GetUserId();
-            if (userId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Could not find user" });
-
-            if (projectId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Project ID is required." });
-
-            try
-            {
-                var project = await _projectRepository.GetByIdAsync(projectId, userId);
-                if (project == null)
-                    return Json(new ApiResponse { success = false, message = "Project not found." });
-
-                var items = await _projectItemRepository.GetByProjectIdAsync(projectId);
-                var itemIds = items.Select(i => i.Id).ToList();
-                var blueprints = await _projectItemBlueprintRepository.GetByItemIdsAsync(itemIds);
-
-                var result = items.Select(i => new ProjectItemListItem
-                {
-                    Id = i.Id,
-                    ProjectId = i.ProjectId,
-                    Index = i.Index,
-                    BlueprintNames = blueprints.Where(b => b.ItemId == i.Id).Select(b => b.Name).ToList()
-                });
-
-                return Json(new ApiResponse { success = true, data = result });
-            }
-            catch (Exception ex)
-            {
-                return Json(new ApiResponse { success = false, message = ex.Message });
-            }
-        }
-
-        [HttpPost("create-item")]
-        public async Task<IActionResult> CreateItem([FromBody] CreateProjectItemRequest request)
-        {
-            var userId = GetUserId();
-            if (userId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Could not find user" });
-
-            if (request.ProjectId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Project ID is required." });
-
-            try
-            {
-                var project = await _projectRepository.GetByIdAsync(request.ProjectId, userId);
-                if (project == null)
-                    return Json(new ApiResponse { success = false, message = "Project not found." });
-
-                var existingItems = await _projectItemRepository.GetByProjectIdAsync(request.ProjectId);
-                var nextIndex = existingItems.Any() ? existingItems.Max(i => i.Index) + 1 : 1;
-
-                var item = new ProjectItem
-                {
-                    ProjectId = request.ProjectId,
-                    Index = nextIndex
-                };
-                var created = await _projectItemRepository.CreateAsync(item);
-
-                return Json(new ApiResponse
-                {
-                    success = true,
-                    data = new ProjectItemListItem
-                    {
-                        Id = created.Id,
-                        ProjectId = created.ProjectId,
-                        Index = created.Index,
-                        BlueprintNames = new List<string>()
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                return Json(new ApiResponse { success = false, message = ex.Message });
-            }
-        }
-
-        [HttpPost("delete-item")]
-        public async Task<IActionResult> DeleteItem([FromBody] DeleteProjectItemRequest request)
-        {
-            var userId = GetUserId();
-            if (userId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Could not find user" });
-
-            if (request.Id == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Item ID is required." });
-
-            try
-            {
-                var item = await _projectItemRepository.GetByIdAsync(request.Id);
-                if (item == null)
-                    return Json(new ApiResponse { success = false, message = "Item not found." });
-
-                var project = await _projectRepository.GetByIdAsync(item.ProjectId, userId);
-                if (project == null)
-                    return Json(new ApiResponse { success = false, message = "Project not found." });
-
-                var blueprints = await _projectItemBlueprintRepository.GetByItemIdAsync(request.Id);
-                foreach (var blueprint in blueprints)
-                    await _projectItemBlueprintRepository.DeleteAsync(blueprint.Id);
-
-                await _projectItemRepository.DeleteAsync(request.Id);
-                return Json(new ApiResponse { success = true });
-            }
-            catch (Exception ex)
-            {
-                return Json(new ApiResponse { success = false, message = ex.Message });
-            }
-        }
-
-        [HttpGet("get-item-blueprints")]
-        public async Task<IActionResult> GetItemBlueprints([FromQuery] Guid itemId)
-        {
-            var userId = GetUserId();
-            if (userId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Could not find user" });
-
-            if (itemId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Item ID is required." });
-
-            try
-            {
-                var item = await _projectItemRepository.GetByIdAsync(itemId);
-                if (item == null)
-                    return Json(new ApiResponse { success = false, message = "Item not found." });
-
-                var project = await _projectRepository.GetByIdAsync(item.ProjectId, userId);
-                if (project == null)
-                    return Json(new ApiResponse { success = false, message = "Project not found." });
-
-                var blueprints = await _projectItemBlueprintRepository.GetByItemIdAsync(itemId);
-                return Json(new ApiResponse { success = true, data = blueprints });
-            }
-            catch (Exception ex)
-            {
-                return Json(new ApiResponse { success = false, message = ex.Message });
-            }
-        }
-
-        [HttpPost("create-item-blueprint")]
-        public async Task<IActionResult> CreateItemBlueprint([FromBody] CreateProjectItemBlueprintRequest request)
-        {
-            var userId = GetUserId();
-            if (userId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Could not find user" });
-
-            if (request.ItemId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Item ID is required." });
-
-            if (string.IsNullOrWhiteSpace(request.Name))
-                return Json(new ApiResponse { success = false, message = "Name is required." });
-
-            try
-            {
-                var item = await _projectItemRepository.GetByIdAsync(request.ItemId);
-                if (item == null)
-                    return Json(new ApiResponse { success = false, message = "Item not found." });
-
-                var project = await _projectRepository.GetByIdAsync(item.ProjectId, userId);
-                if (project == null)
-                    return Json(new ApiResponse { success = false, message = "Project not found." });
-
-                var blueprint = new ProjectItemBlueprint
-                {
-                    ItemId = request.ItemId,
-                    ProjectId = item.ProjectId,
-                    BlueprintId = request.BlueprintId,
-                    Name = request.Name.Trim(),
-                    BlueprintJson = request.BlueprintJson ?? ""
-                };
-                var created = await _projectItemBlueprintRepository.CreateAsync(blueprint);
-                return Json(new ApiResponse { success = true, data = created });
-            }
-            catch (Exception ex)
-            {
-                return Json(new ApiResponse { success = false, message = ex.Message });
-            }
-        }
-
-        [HttpPost("delete-item-blueprint")]
-        public async Task<IActionResult> DeleteItemBlueprint([FromBody] DeleteProjectItemBlueprintRequest request)
-        {
-            var userId = GetUserId();
-            if (userId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Could not find user" });
-
-            if (request.Id == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Blueprint ID is required." });
-
-            try
-            {
-                var blueprint = await _projectItemBlueprintRepository.GetByIdAsync(request.Id);
-                if (blueprint == null)
-                    return Json(new ApiResponse { success = false, message = "Blueprint not found." });
-
-                var project = await _projectRepository.GetByIdAsync(blueprint.ProjectId, userId);
-                if (project == null)
-                    return Json(new ApiResponse { success = false, message = "Project not found." });
-
-                await _projectItemBlueprintRepository.DeleteAsync(request.Id);
-                return Json(new ApiResponse { success = true });
-            }
-            catch (Exception ex)
-            {
-                return Json(new ApiResponse { success = false, message = ex.Message });
-            }
-        }
-
-        [HttpGet("get-questions")]
-        public async Task<IActionResult> GetQuestions([FromQuery] Guid projectId)
-        {
-            var userId = GetUserId();
-            if (userId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Could not find user" });
-
-            if (projectId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Project ID is required." });
-
-            try
-            {
-                var project = await _projectRepository.GetByIdAsync(projectId, userId);
-                if (project == null)
-                    return Json(new ApiResponse { success = false, message = "Project not found." });
-
-                var questions = await _projectQuestionRepository.GetByProjectIdAsync(projectId);
-                return Json(new ApiResponse { success = true, data = questions });
-            }
-            catch (Exception ex)
-            {
-                return Json(new ApiResponse { success = false, message = ex.Message });
-            }
-        }
-
-        [HttpPost("create-question")]
-        public async Task<IActionResult> CreateQuestion([FromBody] CreateProjectQuestionRequest request)
-        {
-            var userId = GetUserId();
-            if (userId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Could not find user" });
-
-            if (request.ProjectId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Project ID is required." });
-
-            if (string.IsNullOrWhiteSpace(request.Question))
-                return Json(new ApiResponse { success = false, message = "Question is required." });
-
-            try
-            {
-                var project = await _projectRepository.GetByIdAsync(request.ProjectId, userId);
-                if (project == null)
-                    return Json(new ApiResponse { success = false, message = "Project not found." });
-
-                var question = new ProjectQuestion
-                {
-                    ProjectId = request.ProjectId,
-                    Question = request.Question.Trim(),
-                    Index = request.Index
-                };
-                var created = await _projectQuestionRepository.CreateAsync(question);
-                return Json(new ApiResponse { success = true, data = created });
-            }
-            catch (Exception ex)
-            {
-                return Json(new ApiResponse { success = false, message = ex.Message });
-            }
-        }
-
-        [HttpPost("update-question")]
-        public async Task<IActionResult> UpdateQuestion([FromBody] UpdateProjectQuestionRequest request)
-        {
-            var userId = GetUserId();
-            if (userId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Could not find user" });
-
-            if (request.Id == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Question ID is required." });
-
-            if (string.IsNullOrWhiteSpace(request.Question))
-                return Json(new ApiResponse { success = false, message = "Question is required." });
-
-            try
-            {
-                var question = await _projectQuestionRepository.GetByIdAsync(request.Id);
-                if (question == null)
-                    return Json(new ApiResponse { success = false, message = "Question not found." });
-
-                var project = await _projectRepository.GetByIdAsync(question.ProjectId, userId);
-                if (project == null)
-                    return Json(new ApiResponse { success = false, message = "Project not found." });
-
-                question.Question = request.Question.Trim();
-                await _projectQuestionRepository.UpdateAsync(question);
-                return Json(new ApiResponse { success = true, data = question });
-            }
-            catch (Exception ex)
-            {
-                return Json(new ApiResponse { success = false, message = ex.Message });
-            }
-        }
-
-        [HttpPost("delete-question")]
-        public async Task<IActionResult> DeleteQuestion([FromBody] DeleteProjectQuestionRequest request)
-        {
-            var userId = GetUserId();
-            if (userId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Could not find user" });
-
-            if (request.Id == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Question ID is required." });
-
-            try
-            {
-                var question = await _projectQuestionRepository.GetByIdAsync(request.Id);
-                if (question == null)
-                    return Json(new ApiResponse { success = false, message = "Question not found." });
-
-                var project = await _projectRepository.GetByIdAsync(question.ProjectId, userId);
-                if (project == null)
-                    return Json(new ApiResponse { success = false, message = "Project not found." });
-
-                await _projectQuestionRepository.DeleteAsync(request.Id);
-                return Json(new ApiResponse { success = true });
-            }
-            catch (Exception ex)
-            {
-                return Json(new ApiResponse { success = false, message = ex.Message });
-            }
-        }
-
         [HttpGet("get-artwork")]
         public async Task<IActionResult> GetArtwork([FromQuery] Guid projectId, [FromQuery] Guid? collectionId = null, [FromQuery] int start = 0, [FromQuery] int length = 5)
         {
@@ -618,6 +273,75 @@ namespace Artsy.API.Controllers
                     return NotFound();
 
                 return File(bytes, "image/jpeg");
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("get-checklist")]
+        public async Task<IActionResult> GetChecklist([FromQuery] Guid projectId)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (projectId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Project ID is required." });
+
+            try
+            {
+                var project = await _projectRepository.GetByIdAsync(projectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                var items = (await _projectItemRepository.GetByProjectIdAsync(projectId)).ToList();
+                var itemIds = items.Select(i => i.Id).ToList();
+                var artwork = await _projectItemArtworkRepository.GetByProjectIdAsync(projectId);
+                var blueprints = await _projectItemBlueprintRepository.GetByItemIdsAsync(itemIds);
+                var itemQuestions = await _projectItemQuestionRepository.GetByProjectIdAsync(projectId);
+                var questions = await _projectQuestionRepository.GetByProjectIdAsync(projectId);
+
+                var imageGenerationSetupCompleted = items.Count(item =>
+                {
+                    var itemArtwork = artwork.FirstOrDefault(a => a.ItemId == item.Id);
+                    return itemArtwork != null &&
+                           !string.IsNullOrWhiteSpace(itemArtwork.ImageModel) &&
+                           !string.IsNullOrWhiteSpace(itemArtwork.ImageModelJson) &&
+                           !string.IsNullOrWhiteSpace(itemArtwork.Prompt);
+                });
+                var imageGenerationSetup = items.Count > 0 && imageGenerationSetupCompleted == items.Count;
+
+                var productBlueprintsAddedCompleted = items.Count(item =>
+                    blueprints.Any(b => b.ItemId == item.Id && !string.IsNullOrWhiteSpace(b.BlueprintJson)));
+                var productBlueprintsAdded = items.Count > 0 && productBlueprintsAddedCompleted == items.Count;
+
+                var validItemQuestions = itemQuestions.Where(q => !string.IsNullOrWhiteSpace(q.Question)).ToList();
+                var itemQuestionsAddedCompleted = validItemQuestions.Count;
+                var itemQuestionsWithoutQuestion = items.Count(item => !validItemQuestions.Any(q => q.ItemId == item.Id));
+                var itemQuestionsAdded = items.Count > 0 && itemQuestionsWithoutQuestion == 0;
+
+                var questionCount = questions.Count(q => !string.IsNullOrWhiteSpace(q.Question));
+                var questionsAdded = questionCount > 0;
+
+                var result = new ProjectChecklistResponse
+                {
+                    ImageGenerationSetup = imageGenerationSetup,
+                    ImageGenerationSetupCompleted = imageGenerationSetupCompleted,
+                    ImageGenerationSetupTotal = Math.Max(1, items.Count),
+                    ItemQuestionsAdded = itemQuestionsAdded,
+                    ItemQuestionsAddedCompleted = itemQuestionsAddedCompleted,
+                    ItemQuestionsAddedTotal = Math.Max(1, itemQuestionsWithoutQuestion + itemQuestionsAddedCompleted),
+                    ProductBlueprintsAdded = productBlueprintsAdded,
+                    ProductBlueprintsAddedCompleted = productBlueprintsAddedCompleted,
+                    ProductBlueprintsAddedTotal = Math.Max(1, items.Count),
+                    QuestionsAdded = questionsAdded,
+                    QuestionsAddedCompleted = questionCount > 0 ? questionCount : 0,
+                    QuestionsAddedTotal = Math.Max(1, questionCount)
+                };
+
+                return Json(new ApiResponse { success = true, data = result });
             }
             catch (Exception ex)
             {

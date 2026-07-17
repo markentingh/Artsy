@@ -8,6 +8,7 @@ import Message from '@/components/ui/message';
 import EditableTitle from './components/EditableTitle';
 import EditableKey from './components/EditableKey';
 import CollectionsSection from './components/CollectionsSection';
+import ProjectChecklist from './components/ProjectChecklist';
 import ArtworksSection from './components/ArtworksSection';
 import QuestionsSection from './components/QuestionsSection';
 
@@ -15,14 +16,14 @@ export default function DashboardProject() {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const session = useSession();
-  const { getById } = Projects(session);
+  const { getById, getChecklist } = Projects(session);
 
   const [project, setProject] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [mount, setMount] = useState(false);
   const [message, setMessage] = useState(null);
+  const [checklist, setChecklist] = useState(null);
 
   const fetchProject = async () => {
-    setLoading(true);
     try {
       const response = await getById(projectId);
       if (response.data.success) {
@@ -32,20 +33,48 @@ export default function DashboardProject() {
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load project' });
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  const fetchChecklist = async () => {
+    try {
+      const response = await getChecklist(projectId);
+      if (response.data.success) {
+        setChecklist(response.data.data);
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load checklist' });
     }
   };
 
   useEffect(() => {
-    fetchProject();
+    const load = async () => {
+      try {
+        await fetchProject();
+      } catch (error) {
+        // error already handled
+      }
+      try {
+        await fetchChecklist();
+      } catch (error) {
+        // error already handled
+      }
+      setMount(true);
+    };
+    load();
   }, [projectId]);
 
   const handleBack = () => {
     navigate('/dashboard/projects');
   };
 
-  if (loading) {
+  const isComplete = checklist &&
+    checklist.imageGenerationSetup &&
+    checklist.itemQuestionsAdded &&
+    checklist.productBlueprintsAdded &&
+    checklist.questionsAdded;
+
+  if (!mount) {
     return (
       <div className="p-8 text-center">
         <Icon name="progress_activity" spin className="w-8 h-8 mx-auto mb-2" />
@@ -81,15 +110,22 @@ export default function DashboardProject() {
         </Message>
       )}
 
-      <CollectionsSection projectId={projectId} />
+      {!isComplete && <ProjectChecklist checklist={checklist} />}
+      <CollectionsSection projectId={projectId} showNewButton={!!isComplete} />
 
       <hr className="border-gray-200 dark:border-gray-700 mb-8" />
 
-      <ArtworksSection projectId={projectId} />
+      <ArtworksSection
+        projectId={projectId}
+        onArtworkChanged={fetchChecklist}
+      />
 
       <hr className="border-gray-200 dark:border-gray-700 mb-8" />
 
-      <QuestionsSection projectId={projectId} />
+      <QuestionsSection
+        projectId={projectId}
+        onChecklistChanged={fetchChecklist}
+      />
     </div>
   );
 }

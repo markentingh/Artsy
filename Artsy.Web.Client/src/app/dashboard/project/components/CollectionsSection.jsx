@@ -5,16 +5,15 @@ import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
 import Message from '@/components/ui/message';
 
-export default function CollectionsSection({ projectId }) {
+export default function CollectionsSection({ projectId, showNewButton = true }) {
   const session = useSession();
   const { getCollections } = Projects(session);
   const [collections, setCollections] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [mount, setMount] = useState(false);
   const [message, setMessage] = useState(null);
 
   useEffect(() => {
     const fetchCollections = async () => {
-      setLoading(true);
       try {
         const response = await getCollections(projectId);
         if (response.data.success) {
@@ -25,7 +24,7 @@ export default function CollectionsSection({ projectId }) {
       } catch (error) {
         setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load collections' });
       } finally {
-        setLoading(false);
+        setMount(true);
       }
     };
     fetchCollections();
@@ -36,6 +35,8 @@ export default function CollectionsSection({ projectId }) {
     // TODO: open new collection modal
   };
 
+  if (!showNewButton && mount && collections.length === 0) return null;
+
   return (
     <div className="mb-8">
       {message && (
@@ -45,12 +46,14 @@ export default function CollectionsSection({ projectId }) {
       )}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold">Collections</h2>
-        <ButtonOutline onClick={handleNewCollection}>
-          <Icon name="add" />
-          <span className="ml-2">New Collection</span>
-        </ButtonOutline>
+        {showNewButton && (
+          <ButtonOutline onClick={handleNewCollection}>
+            <Icon name="add" />
+            <span className="ml-2">New Collection</span>
+          </ButtonOutline>
+        )}
       </div>
-      {loading ? (
+      {!mount ? (
         <div className="p-8 text-center">
           <Icon name="progress_activity" spin className="w-6 h-6 mx-auto mb-2" />
           Loading collections...

@@ -2,6 +2,7 @@ using Artsy.Auth.Models;
 using Artsy.Auth.Services;
 using Artsy.Data.Interfaces.Auth;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -27,6 +28,27 @@ namespace Artsy.Auth.Controller
             _userRepo = userRepo;
         }
 
+        private void SetAuthTokenCookie(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return;
+
+            var options = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = Request.IsHttps,
+                SameSite = SameSiteMode.Lax,
+                Path = "/"
+            };
+
+            if (int.TryParse(_authSettings.JWT.ExpiryMins, out var expiryMinutes) && expiryMinutes > 0)
+            {
+                options.MaxAge = TimeSpan.FromMinutes(expiryMinutes);
+            }
+
+            Response.Cookies.Append("artsy_token", token, options);
+        }
+
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginCredentials loginUser)
         {
@@ -37,6 +59,7 @@ namespace Artsy.Auth.Controller
                 {
                     case AuthenticationResponseCode.LocalSuccess:
                         var refreshToken = await _authService.GenerateRefreshToken(IPAddress, result.UserId);
+                        SetAuthTokenCookie(result.JwtToken);
                         return Ok(new
                         {
                             success = true,
@@ -71,6 +94,7 @@ namespace Artsy.Auth.Controller
                 {
                     return Ok(new { success = false, message = "RefreshToken is invalid" });
                 }
+                SetAuthTokenCookie(result);
                 return Ok(new { success = true, data = new { token = result } });
             }
             catch (Exception ex)

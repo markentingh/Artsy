@@ -23,6 +23,9 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("ImageGeneration", c => c.Timeout = TimeSpan.FromMinutes(2));
+builder.Services.Configure<Artsy.API.Services.ImageGenerationOptions>(builder.Configuration.GetSection("ImageGeneration"));
+builder.Services.AddTransient<Artsy.API.Services.IImageGeneration, Artsy.API.Services.ImageGeneration>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHealthChecks();
 

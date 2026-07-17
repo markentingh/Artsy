@@ -7,11 +7,11 @@ import ButtonIcon from '@/components/ui/button-icon';
 import EditQuestionModal from './EditQuestionModal';
 import Message from '@/components/ui/message';
 
-export default function QuestionsSection({ projectId }) {
+export default function QuestionsSection({ projectId, onChecklistChanged }) {
   const session = useSession();
   const { getQuestions, createQuestion, updateQuestion, deleteQuestion } = Projects(session);
   const [questions, setQuestions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [mount, setMount] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingQuestionId, setEditingQuestionId] = useState(null);
   const [questionFormValue, setQuestionFormValue] = useState('');
@@ -19,7 +19,6 @@ export default function QuestionsSection({ projectId }) {
 
   useEffect(() => {
     const fetchQuestions = async () => {
-      setLoading(true);
       try {
         const response = await getQuestions(projectId);
         if (response.data.success) {
@@ -30,7 +29,7 @@ export default function QuestionsSection({ projectId }) {
       } catch (error) {
         setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load questions' });
       } finally {
-        setLoading(false);
+        setMount(true);
       }
     };
     fetchQuestions();
@@ -76,6 +75,7 @@ export default function QuestionsSection({ projectId }) {
         }
         handleCloseQuestionModal();
         setMessage(null);
+        if (onChecklistChanged) onChecklistChanged();
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to save question' });
       }
@@ -90,6 +90,7 @@ export default function QuestionsSection({ projectId }) {
       const response = await deleteQuestion({ id });
       if (response.data.success) {
         setQuestions((prev) => prev.filter((q) => q.id !== id));
+        if (onChecklistChanged) onChecklistChanged();
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to delete question' });
       }
@@ -112,7 +113,7 @@ export default function QuestionsSection({ projectId }) {
           <span className="ml-2">New Question</span>
         </ButtonOutline>
       </div>
-      {loading ? (
+      {!mount ? (
         <div className="p-8 text-center">
           <Icon name="progress_activity" spin className="w-6 h-6 mx-auto mb-2" />
           Loading questions...

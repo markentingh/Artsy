@@ -12,6 +12,7 @@ appsettings.*.json
 .config/
 RECOVER_*
 *.jfm
+Artsy.Web.Server/Content/
 
 
 # Build results

@@ -30,8 +30,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             item.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectItems"" (""Id"", ""ProjectId"", ""Index"")
-                VALUES (@Id, @ProjectId, @Index)
+                INSERT INTO public.""ProjectItems"" (""Id"", ""ProjectId"", ""Index"", ""Title"")
+                VALUES (@Id, @ProjectId, @Index, @Title)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectItem>(query, item);
         }
@@ -40,7 +40,7 @@ namespace Artsy.Data.Repositories.Projects
         {
             const string query = @"
                 UPDATE public.""ProjectItems""
-                SET ""Index"" = @Index
+                SET ""Index"" = @Index, ""Title"" = @Title
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, item);
         }
