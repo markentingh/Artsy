@@ -16,7 +16,7 @@ export default function Checkbox({
   const inputId = id || name;
 
   return (
-    <div className={`mb-4 ${className}`}>
+    <div className={`${className}`}>
       <label htmlFor={inputId} className="flex items-center gap-2 cursor-pointer">
         <input
           type="checkbox"

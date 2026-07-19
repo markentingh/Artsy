@@ -90,7 +90,7 @@ namespace Artsy.API.Controllers
 
         [HttpPost("/api/webhooks/telegram")]
         [AllowAnonymous]
-        public IActionResult Webhook([FromBody] Models.Telegram.TelegramUpdate update)
+        public async Task<IActionResult> Webhook([FromBody] Models.Telegram.TelegramUpdate update)
         {
             if (string.IsNullOrEmpty(ConnectionSettings.TelegramBotToken))
                 return Ok();
@@ -102,7 +102,7 @@ namespace Artsy.API.Controllers
             var text = message.Text ?? "";
             if (!string.IsNullOrEmpty(text))
             {
-                _ = _telegramService.Reply(message);
+                await _telegramService.Reply(message);
             }
 
             return Ok();

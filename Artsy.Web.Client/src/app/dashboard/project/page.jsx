@@ -70,9 +70,7 @@ export default function DashboardProject() {
 
   const isComplete = checklist &&
     checklist.imageGenerationSetup &&
-    checklist.itemQuestionsAdded &&
-    checklist.productBlueprintsAdded &&
-    checklist.questionsAdded;
+    checklist.productBlueprintsAdded;
 
   if (!mount) {
     return (

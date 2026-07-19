@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useSession } from '@/context/session';
 import { Telegram } from '@/api/admin/telegram';
+import { Printify } from '@/api/admin/printify';
 import Icon from '@/components/ui/icon';
+import Spinner from '@/components/ui/spinner';
 import Message from '@/components/ui/message';
 
 export default function DashboardServices() {
   const session = useSession();
   const { getWebhookInfo, setWebhook } = Telegram(session);
+  const { getCatalogCount, refreshCatalog, fetchPrintProviders, fetchVariants, fetchShipping, downloadCatalogImage } = Printify(session);
 
   const [webhookUrl, setWebhookUrl] = useState('');
   const [maxConnections, setMaxConnections] = useState(0);
@@ -15,6 +18,11 @@ export default function DashboardServices() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
+
+  const [catalogCount, setCatalogCount] = useState(0);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [progress, setProgress] = useState(null);
 
   const fetchWebhookInfo = async () => {
     try {
@@ -36,7 +44,113 @@ export default function DashboardServices() {
 
   useEffect(() => {
     fetchWebhookInfo();
+    fetchCatalogCount();
   }, []);
+
+  const fetchCatalogCount = async () => {
+    try {
+      const response = await getCatalogCount();
+      if (response.data.success) {
+        setCatalogCount(response.data.data.count);
+      }
+    } catch (error) {
+      // Ignore load errors
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const handleRefreshCatalog = async () => {
+    setRefreshing(true);
+    setMessage(null);
+    setProgress(null);
+    try {
+      const response = await refreshCatalog();
+      if (!response.data.success) {
+        setMessage({ type: 'error', text: response.data.message || 'Failed to refresh catalog' });
+        return;
+      }
+
+      const { count, blueprints: bpList, images: imgList } = response.data.data;
+      setCatalogCount(count);
+
+      const bps = bpList || [];
+      const imgs = imgList || [];
+      let providersDone = 0;
+      let variantsDone = 0;
+      let shippingDone = 0;
+      let imagesDownloaded = 0;
+      let imagesSkipped = 0;
+
+      const updateProgress = (phase, detail) => {
+        setProgress({
+          phase,
+          detail,
+          blueprints: { done: providersDone, total: bps.length },
+          variants: { done: variantsDone },
+          shipping: { done: shippingDone },
+          images: { downloaded: imagesDownloaded, skipped: imagesSkipped, total: imgs.length },
+        });
+      };
+
+      for (let i = 0; i < bps.length; i++) {
+        const blueprintId = bps[i];
+        updateProgress('providers', `Blueprint ${i + 1}/${bps.length}`);
+
+        let providers = [];
+        try {
+          const ppResp = await fetchPrintProviders(blueprintId);
+          if (ppResp.data.success) {
+            providers = ppResp.data.data.printProviders || [];
+            providersDone++;
+          }
+        } catch {}
+        await sleep(500);
+
+        for (let j = 0; j < providers.length; j++) {
+          const { printProviderId } = providers[j];
+          updateProgress('variants', `Blueprint ${i + 1}/${bps.length}, Provider ${j + 1}/${providers.length}`);
+          try {
+            await fetchVariants(blueprintId, printProviderId);
+            variantsDone++;
+          } catch {}
+          await sleep(500);
+
+          updateProgress('shipping', `Blueprint ${i + 1}/${bps.length}, Provider ${j + 1}/${providers.length}`);
+          try {
+            await fetchShipping(blueprintId, printProviderId);
+            shippingDone++;
+          } catch {}
+          await sleep(500);
+        }
+      }
+
+      for (let i = 0; i < imgs.length; i++) {
+        const img = imgs[i];
+        updateProgress('images', `Image ${i + 1}/${imgs.length}`);
+        try {
+          const dlResp = await downloadCatalogImage(img.blueprintId, img.index, img.url);
+          if (dlResp.data.success) {
+            if (dlResp.data.data.downloaded) imagesDownloaded++;
+            else imagesSkipped++;
+          }
+        } catch {}
+      }
+
+      updateProgress('done', 'Complete!');
+      setProgress((prev) => ({ ...prev, done: true }));
+      setMessage({
+        type: 'success',
+        text: `Catalog refreshed. ${count} blueprints, ${providersDone} provider sets, ${variantsDone} variant sets, ${shippingDone} shipping records, ${imagesDownloaded} images downloaded (${imagesSkipped} already existed).`,
+      });
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to refresh catalog' });
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleEdit = () => {
     setEditUrl(webhookUrl);
@@ -160,6 +274,79 @@ export default function DashboardServices() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">Printify</h2>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Cached Blueprints
+              </label>
+              {catalogLoading ? (
+                <Icon name="progress_activity" spin className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              ) : (
+                <span className="inline-block px-3 py-1 border border-gray-200 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm">
+                  {catalogCount}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleRefreshCatalog}
+              disabled={refreshing}
+              className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition disabled:opacity-50"
+            >
+              {refreshing ? (
+                <span className="inline-flex items-center gap-2">
+                  <Icon name="progress_activity" spin className="w-4 h-4" />
+                  Refreshing...
+                </span>
+              ) : (
+                'Refresh Catalog'
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+
+          {progress && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
+                <span>
+                  {progress.phase === 'providers' && `Fetching print providers... ${progress.detail}`}
+                  {progress.phase === 'variants' && `Fetching variants... ${progress.detail}`}
+                  {progress.phase === 'shipping' && `Fetching shipping... ${progress.detail}`}
+                  {progress.phase === 'images' && `Downloading images... ${progress.images.downloaded + progress.images.skipped}/${progress.images.total}`}
+                  {progress.phase === 'done' && 'Complete!'}
+                </span>
+              </div>
+              <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary-600 rounded-full transition-all duration-200"
+                  style={{
+                    width: `${
+                      progress.phase === 'done' ? 100 :
+                      progress.phase === 'images'
+                        ? Math.round(((progress.images.downloaded + progress.images.skipped) / Math.max(progress.images.total, 1)) * 100)
+                        : Math.round((progress.blueprints.done / Math.max(progress.blueprints.total, 1)) * 100)
+                    }%`,
+                  }}
+                />
+              </div>
+              {progress.done && (
+                <div className="text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+                  <div>Blueprints: {progress.blueprints.done}/{progress.blueprints.total}</div>
+                  <div>Variants: {progress.variants.done} sets</div>
+                  <div>Shipping: {progress.shipping.done} records</div>
+                  <div>Images: {progress.images.downloaded} downloaded, {progress.images.skipped} skipped</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

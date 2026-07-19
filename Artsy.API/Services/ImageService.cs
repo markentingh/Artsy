@@ -12,6 +12,8 @@ namespace Artsy.API.Services
         Task<byte[]> GetProjectCollectionArtworkAsync(Guid collectionId, Guid artworkId, int index);
         Task SaveProjectItemPreviewAsync(Guid projectId, Guid itemId, Guid previewId, byte[] imageData);
         Task<byte[]> GetProjectItemPreviewAsync(Guid projectId, Guid itemId, Guid previewId, bool thumb = false);
+        Task SavePrintifyCatalogImageAsync(int blueprintId, int imageIndex, byte[] imageData);
+        Task<byte[]> GetPrintifyCatalogImageAsync(int blueprintId, int imageIndex, bool thumb = false);
     }
 
     public class ImageService : IImageService
@@ -75,6 +77,44 @@ namespace Artsy.API.Services
             var fileBytes = await GetFromFileSystemAsync(relativePath);
             if (fileBytes.Length == 0 && thumb)
                 return await GetFromFileSystemAsync(Path.Combine("projects", projectId.ToString(), "previews", itemId.ToString(), $"{previewId}.jpg"));
+            return fileBytes;
+        }
+
+        public async Task SavePrintifyCatalogImageAsync(int blueprintId, int imageIndex, byte[] imageData)
+        {
+            var fileName = $"{imageIndex}.jpg";
+            var thumbFileName = $"{imageIndex}_thumb.jpg";
+            var relativePath = Path.Combine("Printify", "catalog", blueprintId.ToString(), fileName);
+            var thumbRelativePath = Path.Combine("Printify", "catalog", blueprintId.ToString(), thumbFileName);
+            var thumbImageData = await GenerateThumbnailAsync(imageData, 250);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+        }
+
+        public async Task<byte[]> GetPrintifyCatalogImageAsync(int blueprintId, int imageIndex, bool thumb = false)
+        {
+            var fileName = thumb ? $"{imageIndex}_thumb.jpg" : $"{imageIndex}.jpg";
+            var relativePath = Path.Combine("Printify", "catalog", blueprintId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+            {
+                var bytes = await GetFromAzureBlobAsync(relativePath);
+                if (bytes.Length == 0 && thumb)
+                    return await GetFromAzureBlobAsync(Path.Combine("Printify", "catalog", blueprintId.ToString(), $"{imageIndex}.jpg"));
+                return bytes;
+            }
+
+            var fileBytes = await GetFromFileSystemAsync(relativePath);
+            if (fileBytes.Length == 0 && thumb)
+                return await GetFromFileSystemAsync(Path.Combine("Printify", "catalog", blueprintId.ToString(), $"{imageIndex}.jpg"));
             return fileBytes;
         }
 

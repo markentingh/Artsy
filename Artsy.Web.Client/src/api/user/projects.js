@@ -12,6 +12,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     getItemBlueprints: (itemId) => api.get(`${apiPath}/get-item-blueprints?itemId=${itemId}`),
     createItemBlueprint: (request) => api.post(`${apiPath}/create-item-blueprint`, request),
     deleteItemBlueprint: (request) => api.post(`${apiPath}/delete-item-blueprint`, request),
+    updateItemBlueprint: (request) => api.post(`${apiPath}/update-item-blueprint`, request),
     updateItemTitle: (request) => api.post(`${apiPath}/update-item-title`, request),
     getItemArtwork: (itemId) => api.get(`${apiPath}/get-item-artwork?itemId=${itemId}`),
     updateItemPrompt: (request) => api.post(`${apiPath}/update-item-prompt`, request),

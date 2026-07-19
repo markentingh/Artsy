@@ -72,6 +72,7 @@ export default function Login() {
           onChange={handleChange}
           required={true}
           error={errors.email}
+          autoComplete="username"
         />
         <Input
           label="Password"
@@ -86,6 +87,7 @@ export default function Login() {
           onChange={handleChange}
           required={true}
           error={errors.password}
+          autoComplete="current-password"
         />
         <button
           type="submit"

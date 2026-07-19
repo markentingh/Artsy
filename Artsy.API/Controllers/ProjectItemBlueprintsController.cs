@@ -107,5 +107,40 @@ namespace Artsy.API.Controllers
                 return Json(new ApiResponse { success = false, message = ex.Message });
             }
         }
+
+        [HttpPost("update-item-blueprint")]
+        public async Task<IActionResult> UpdateItemBlueprint([FromBody] UpdateProjectItemBlueprintRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.Id == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Blueprint ID is required." });
+
+            if (string.IsNullOrWhiteSpace(request.Name))
+                return Json(new ApiResponse { success = false, message = "Name is required." });
+
+            try
+            {
+                var blueprint = await _projectItemBlueprintRepository.GetByIdAsync(request.Id);
+                if (blueprint == null)
+                    return Json(new ApiResponse { success = false, message = "Blueprint not found." });
+
+                var project = await _projectRepository.GetByIdAsync(blueprint.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                blueprint.BlueprintId = request.BlueprintId;
+                blueprint.Name = request.Name.Trim();
+                blueprint.BlueprintJson = request.BlueprintJson ?? "";
+                await _projectItemBlueprintRepository.UpdateAsync(blueprint);
+                return Json(new ApiResponse { success = true, data = blueprint });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
     }
 }

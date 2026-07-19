@@ -307,8 +307,6 @@ namespace Artsy.API.Controllers
                 {
                     var itemArtwork = artwork.FirstOrDefault(a => a.ItemId == item.Id);
                     return itemArtwork != null &&
-                           !string.IsNullOrWhiteSpace(itemArtwork.ImageModel) &&
-                           !string.IsNullOrWhiteSpace(itemArtwork.ImageModelJson) &&
                            !string.IsNullOrWhiteSpace(itemArtwork.Prompt);
                 });
                 var imageGenerationSetup = items.Count > 0 && imageGenerationSetupCompleted == items.Count;

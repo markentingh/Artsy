@@ -12,6 +12,11 @@ SELECT 'CREATE DATABASE artsy' WHERE NOT EXISTS (SELECT FROM pg_database WHERE d
 \i Tables/AppUserRoles.sql
 \i Tables/AppUserTokens.sql
 \i Tables/LLM_Models.sql
+\i Tables/PrintifyBlueprintPrintProviders.sql
+\i Tables/PrintifyBlueprintShipping.sql
+\i Tables/PrintifyBlueprintVariantPlaceholders.sql
+\i Tables/PrintifyBlueprintVariants.sql
+\i Tables/PrintifyBlueprints.sql
 \i Tables/Projects/ProjectCollections.sql
 \i Tables/Projects/Projects.sql
 \i Tables/Projects/ProjectItems.sql

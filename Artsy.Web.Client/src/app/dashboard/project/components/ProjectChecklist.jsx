@@ -10,22 +10,10 @@ export default function ProjectChecklist({ checklist }) {
       total: checklist?.imageGenerationSetupTotal ?? 0,
     },
     {
-      label: 'Add one or more Questions for your Artwork',
-      key: 'itemQuestionsAdded',
-      completed: checklist?.itemQuestionsAddedCompleted ?? 0,
-      total: checklist?.itemQuestionsAddedTotal ?? 0,
-    },
-    {
       label: 'Add one or more Product Blueprints to your Artworks',
       key: 'productBlueprintsAdded',
       completed: checklist?.productBlueprintsAddedCompleted ?? 0,
       total: checklist?.productBlueprintsAddedTotal ?? 0,
-    },
-    {
-      label: 'Add one or more Questions',
-      key: 'questionsAdded',
-      completed: checklist?.questionsAddedCompleted ?? 0,
-      total: checklist?.questionsAddedTotal ?? 0,
     },
   ];
 
