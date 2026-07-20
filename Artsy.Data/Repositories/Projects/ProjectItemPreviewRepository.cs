@@ -20,6 +20,18 @@ namespace Artsy.Data.Repositories.Projects
             return await _dbConnection.QueryAsync<ProjectItemPreview>(query, new { itemId });
         }
 
+        public async Task<IEnumerable<ProjectItemPreview>> GetByProjectIdAsync(Guid projectId)
+        {
+            const string query = @"SELECT * FROM public.""ProjectItemPreviews"" WHERE ""ProjectId"" = @projectId ORDER BY ""Created"" DESC";
+            return await _dbConnection.QueryAsync<ProjectItemPreview>(query, new { projectId });
+        }
+
+        public async Task<IEnumerable<ProjectItemThumbnailDto>> GetThumbnailsByProjectIdAsync(Guid projectId)
+        {
+            const string query = @"SELECT ""Id"", ""ItemId"" FROM public.""ProjectItemPreviews"" WHERE ""ProjectId"" = @projectId ORDER BY ""Created"" DESC";
+            return await _dbConnection.QueryAsync<ProjectItemThumbnailDto>(query, new { projectId });
+        }
+
         public async Task<ProjectItemPreview?> GetByIdAsync(Guid id)
         {
             const string query = @"SELECT * FROM public.""ProjectItemPreviews"" WHERE ""Id"" = @id";

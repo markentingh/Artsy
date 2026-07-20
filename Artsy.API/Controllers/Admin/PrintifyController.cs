@@ -18,6 +18,7 @@ namespace Artsy.API.Controllers.Admin
         readonly IPrintifyBlueprintVariantRepository _variantRepo;
         readonly IPrintifyBlueprintVariantPlaceholderRepository _placeholderRepo;
         readonly IPrintifyBlueprintShippingRepository _shippingRepo;
+        readonly IPrintifyBlueprintImageRepository _imageRepo;
         readonly IHttpClientFactory _httpClientFactory;
         readonly IImageService _imageService;
 
@@ -27,6 +28,7 @@ namespace Artsy.API.Controllers.Admin
             IPrintifyBlueprintVariantRepository variantRepo,
             IPrintifyBlueprintVariantPlaceholderRepository placeholderRepo,
             IPrintifyBlueprintShippingRepository shippingRepo,
+            IPrintifyBlueprintImageRepository imageRepo,
             IHttpClientFactory httpClientFactory,
             IImageService imageService)
         {
@@ -35,6 +37,7 @@ namespace Artsy.API.Controllers.Admin
             _variantRepo = variantRepo;
             _placeholderRepo = placeholderRepo;
             _shippingRepo = shippingRepo;
+            _imageRepo = imageRepo;
             _httpClientFactory = httpClientFactory;
             _imageService = imageService;
         }
@@ -63,10 +66,12 @@ namespace Artsy.API.Controllers.Admin
         }
 
         [HttpPost("refresh-catalog")]
-        public async Task<IActionResult> RefreshCatalog()
+        public async Task<IActionResult> RefreshCatalog([FromBody] JsonElement body)
         {
             try
             {
+                var allVariants = body.TryGetProperty("allVariants", out var av) && av.GetBoolean();
+
                 using var client = CreatePrintifyClient();
                 var response = await client.GetAsync("https://api.printify.com/v1/catalog/blueprints.json");
                 if (!response.IsSuccessStatusCode)
@@ -107,11 +112,24 @@ namespace Artsy.API.Controllers.Admin
 
                 await _printifyBlueprintRepo.UpsertBatchAsync(bpEntities);
 
-                var existingBlueprintIds = await _printifyBlueprintRepo.GetAllBlueprintIdsAsync();
-                var existingSet = new HashSet<int>(existingBlueprintIds);
-                var newBlueprints = blueprintIds.Where(id => !existingSet.Contains(id)).ToList();
+                var existingIds = await _printifyBlueprintRepo.GetAllBlueprintIdsAsync();
+                var existingSet = new HashSet<int>(existingIds);
 
-                return Json(new ApiResponse { success = true, data = new { count = bpEntities.Count, blueprints = newBlueprints, images = imagesToDownload } });
+                List<int> newBlueprints;
+                List<int> existingBlueprints;
+
+                if (allVariants)
+                {
+                    newBlueprints = blueprintIds.Where(id => !existingSet.Contains(id)).ToList();
+                    existingBlueprints = blueprintIds.Where(id => existingSet.Contains(id)).ToList();
+                }
+                else
+                {
+                    newBlueprints = blueprintIds.Where(id => !existingSet.Contains(id)).ToList();
+                    existingBlueprints = new List<int>();
+                }
+
+                return Json(new ApiResponse { success = true, data = new { count = bpEntities.Count, newBlueprints, existingBlueprints, images = imagesToDownload } });
             }
             catch (Exception ex)
             {
@@ -179,7 +197,7 @@ namespace Artsy.API.Controllers.Admin
                     return Json(new ApiResponse { success = false, message = "Missing blueprintId or printProviderId" });
 
                 using var client = CreatePrintifyClient();
-                var response = await client.GetAsync($"https://api.printify.com/v1/catalog/blueprints/{blueprintId}/print_providers/{printProviderId}/variants.json");
+                var response = await client.GetAsync($"https://api.printify.com/v1/catalog/blueprints/{blueprintId}/print_providers/{printProviderId}/variants.json?show-out-of-stock=1");
                 if (!response.IsSuccessStatusCode)
                     return Json(new ApiResponse { success = false, message = $"Printify API error: {response.StatusCode}" });
 
@@ -335,7 +353,8 @@ namespace Artsy.API.Controllers.Admin
                             brand = bp.Brand,
                             model = bp.Model,
                             description = bp.Description,
-                            imageCount = bp.ImageCount
+                            imageCount = bp.ImageCount,
+                            published = bp.Published
                         }),
                         total,
                         hasMore = (start + length) < total
@@ -407,7 +426,8 @@ namespace Artsy.API.Controllers.Admin
                             brand = cached.Brand,
                             model = cached.Model,
                             description = cached.Description,
-                            imageCount = cached.ImageCount
+                            imageCount = cached.ImageCount,
+                            published = cached.Published
                         },
                         printProviders
                     }
@@ -453,6 +473,76 @@ namespace Artsy.API.Controllers.Admin
                 }).ToList();
 
                 return Json(new ApiResponse { success = true, data = new { variants } });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+        [HttpGet("blueprints/{blueprintId}/images")]
+        public async Task<IActionResult> GetBlueprintImages(int blueprintId)
+        {
+            try
+            {
+                var images = await _imageRepo.GetByBlueprintIdAsync(blueprintId);
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = images.Select(img => new
+                    {
+                        id = img.Id,
+                        blueprintId = img.BlueprintId,
+                        imageIndex = img.ImageIndex,
+                        variants = JsonSerializer.Deserialize<int[]>(img.Variants) ?? Array.Empty<int>(),
+                        type = img.Type,
+                        position = img.Position
+                    })
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("blueprints/{blueprintId}/images")]
+        public async Task<IActionResult> SaveBlueprintImages(int blueprintId, [FromBody] JsonElement body)
+        {
+            try
+            {
+                if (body.TryGetProperty("images", out var imagesArr))
+                {
+                    foreach (var img in imagesArr.EnumerateArray())
+                    {
+                        var imageIndex = img.TryGetProperty("imageIndex", out var idx) ? idx.GetInt32() : 0;
+                        var type = img.TryGetProperty("type", out var tp) ? tp.GetInt32() : 0;
+                        var position = img.TryGetProperty("position", out var pos) ? pos.GetInt32() : 0;
+
+                        var variants = new List<int>();
+                        if (img.TryGetProperty("variants", out var vArr) && vArr.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var v in vArr.EnumerateArray())
+                                variants.Add(v.GetInt32());
+                        }
+
+                        await _imageRepo.UpsertAsync(new PrintifyBlueprintImage
+                        {
+                            BlueprintId = blueprintId,
+                            ImageIndex = imageIndex,
+                            Variants = JsonSerializer.Serialize(variants),
+                            Type = type,
+                            Position = position
+                        });
+                    }
+                }
+
+                if (body.TryGetProperty("published", out var pubEl))
+                {
+                    var published = pubEl.GetBoolean();
+                    await _printifyBlueprintRepo.UpdatePublishedAsync(blueprintId, published);
+                }
+
+                return Json(new ApiResponse { success = true });
             }
             catch (Exception ex)
             {

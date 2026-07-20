@@ -4,7 +4,9 @@ using Artsy.API.Models;
 using Artsy.API.Models.Projects;
 using Artsy.API.Services;
 using Artsy.Data.Entities.Projects;
+using Artsy.Data.Entities;
 using Artsy.Data.Interfaces.Projects;
+using Artsy.Data.Interfaces;
 
 namespace Artsy.API.Controllers
 {
@@ -15,12 +17,15 @@ namespace Artsy.API.Controllers
         readonly IProjectRepository _projectRepository;
         readonly IProjectCollectionRepository _projectCollectionRepository;
         readonly IProjectItemRepository _projectItemRepository;
-        readonly IProjectItemBlueprintRepository _projectItemBlueprintRepository;
+        readonly IProjectBlueprintsRepository _projectBlueprintRepository;
         readonly IProjectItemArtworkRepository _projectItemArtworkRepository;
         readonly IProjectItemQuestionRepository _projectItemQuestionRepository;
         readonly IProjectQuestionRepository _projectQuestionRepository;
         readonly IProjectCollectionArtworkRepository _projectCollectionArtworkRepository;
         readonly IProjectItemPreviewRepository _projectItemPreviewRepository;
+        readonly IProjectItemReferenceRepository _projectItemReferenceRepository;
+        readonly IPrintifyBlueprintVariantRepository _variantRepository;
+        readonly IPrintifyBlueprintVariantPlaceholderRepository _placeholderRepository;
         readonly IImageService _imageService;
         readonly IImageGeneration _imageGeneration;
 
@@ -28,24 +33,30 @@ namespace Artsy.API.Controllers
             IProjectRepository projectRepository,
             IProjectCollectionRepository projectCollectionRepository,
             IProjectItemRepository projectItemRepository,
-            IProjectItemBlueprintRepository projectItemBlueprintRepository,
+            IProjectBlueprintsRepository projectBlueprintRepository,
             IProjectItemArtworkRepository projectItemArtworkRepository,
             IProjectItemQuestionRepository projectItemQuestionRepository,
             IProjectQuestionRepository projectQuestionRepository,
             IProjectCollectionArtworkRepository projectCollectionArtworkRepository,
             IProjectItemPreviewRepository projectItemPreviewRepository,
+            IProjectItemReferenceRepository projectItemReferenceRepository,
+            IPrintifyBlueprintVariantRepository variantRepository,
+            IPrintifyBlueprintVariantPlaceholderRepository placeholderRepository,
             IImageService imageService,
             IImageGeneration imageGeneration)
         {
             _projectRepository = projectRepository;
             _projectCollectionRepository = projectCollectionRepository;
             _projectItemRepository = projectItemRepository;
-            _projectItemBlueprintRepository = projectItemBlueprintRepository;
+            _projectBlueprintRepository = projectBlueprintRepository;
             _projectItemArtworkRepository = projectItemArtworkRepository;
             _projectItemQuestionRepository = projectItemQuestionRepository;
             _projectQuestionRepository = projectQuestionRepository;
             _projectCollectionArtworkRepository = projectCollectionArtworkRepository;
             _projectItemPreviewRepository = projectItemPreviewRepository;
+            _projectItemReferenceRepository = projectItemReferenceRepository;
+            _variantRepository = variantRepository;
+            _placeholderRepository = placeholderRepository;
             _imageService = imageService;
             _imageGeneration = imageGeneration;
         }
@@ -299,7 +310,7 @@ namespace Artsy.API.Controllers
                 var items = (await _projectItemRepository.GetByProjectIdAsync(projectId)).ToList();
                 var itemIds = items.Select(i => i.Id).ToList();
                 var artwork = await _projectItemArtworkRepository.GetByProjectIdAsync(projectId);
-                var blueprints = await _projectItemBlueprintRepository.GetByItemIdsAsync(itemIds);
+                var blueprints = await _projectBlueprintRepository.GetByProjectIdAsync(projectId);
                 var itemQuestions = await _projectItemQuestionRepository.GetByProjectIdAsync(projectId);
                 var questions = await _projectQuestionRepository.GetByProjectIdAsync(projectId);
 
@@ -311,9 +322,8 @@ namespace Artsy.API.Controllers
                 });
                 var imageGenerationSetup = items.Count > 0 && imageGenerationSetupCompleted == items.Count;
 
-                var productBlueprintsAddedCompleted = items.Count(item =>
-                    blueprints.Any(b => b.ItemId == item.Id && !string.IsNullOrWhiteSpace(b.BlueprintJson)));
-                var productBlueprintsAdded = items.Count > 0 && productBlueprintsAddedCompleted == items.Count;
+                var productBlueprintsAddedCompleted = blueprints.Count(b => !string.IsNullOrWhiteSpace(b.BlueprintJson));
+                var productBlueprintsAdded = productBlueprintsAddedCompleted > 0;
 
                 var validItemQuestions = itemQuestions.Where(q => !string.IsNullOrWhiteSpace(q.Question)).ToList();
                 var itemQuestionsAddedCompleted = validItemQuestions.Count;

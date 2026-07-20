@@ -109,6 +109,25 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Prompt is required to generate a preview." });
 
                 modelRequest.Prompt = finalPrompt;
+
+                var references = await _projectItemReferenceRepository.GetByItemIdAsync(request.ItemId);
+                if (references != null && references.Any())
+                {
+                    modelRequest.Images = new List<OpenAIImageReference>();
+                    foreach (var reference in references)
+                    {
+                        var imageBytes = await _imageService.GetProjectItemReferenceAsync(reference.ProjectId, reference.Id, reference.Extension);
+                        if (imageBytes != null && imageBytes.Length > 0)
+                        {
+                            modelRequest.Images.Add(new OpenAIImageReference
+                            {
+                                Image = Convert.ToBase64String(imageBytes),
+                                Detail = "auto"
+                            });
+                        }
+                    }
+                }
+
                 imageModelJson = JsonSerializer.Serialize(modelRequest, jsonOptions);
 
                 var preview = new ProjectItemPreview

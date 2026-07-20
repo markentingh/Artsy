@@ -1,6 +1,6 @@
 namespace Artsy.API.Models.Projects
 {
-    public class DeleteProjectItemBlueprintRequest
+    public class DeleteProjectBlueprintRequest
     {
         public Guid Id { get; set; }
     }

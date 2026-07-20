@@ -28,6 +28,7 @@ builder.Services.Configure<Artsy.API.Services.ImageGenerationOptions>(builder.Co
 builder.Services.AddTransient<Artsy.API.Services.IImageGeneration, Artsy.API.Services.ImageGeneration>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHealthChecks();
+builder.Services.AddSignalR();
 
 builder.Services.AddControllers()
     .AddApplicationPart(Assembly.Load("Artsy.API"))
@@ -44,6 +45,7 @@ builder.Services.Configure<Artsy.API.Models.EmailSettings>(builder.Configuration
 builder.Services.AddScoped<Artsy.API.Services.IEmailService, Artsy.API.Services.EmailService>();
 builder.Services.AddScoped<Artsy.API.Services.ITelegramService, Artsy.API.Services.TelegramService>();
 builder.Services.AddScoped<Artsy.API.Services.IImageService, Artsy.API.Services.ImageService>();
+builder.Services.AddScoped<Artsy.API.Services.ITrendResearchService, Artsy.API.Services.TrendResearchService>();
 
 builder.Services.AddSwaggerGen(e =>
 {
@@ -148,6 +150,7 @@ app.UseStaticFiles(new StaticFileOptions
 });
 
 app.MapControllers();
+app.MapHub<Artsy.API.Hubs.TrendResearchHub>("/hubs/trend-research");
 app.MapFallbackToFile("index.html");
 
 Console.WriteLine(

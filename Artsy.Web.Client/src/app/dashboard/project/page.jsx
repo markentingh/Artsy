@@ -11,6 +11,7 @@ import CollectionsSection from './components/CollectionsSection';
 import ProjectChecklist from './components/ProjectChecklist';
 import ArtworksSection from './components/ArtworksSection';
 import QuestionsSection from './components/QuestionsSection';
+import ProductsSection from './components/ProductsSection';
 
 export default function DashboardProject() {
   const { projectId } = useParams();
@@ -116,6 +117,13 @@ export default function DashboardProject() {
       <ArtworksSection
         projectId={projectId}
         onArtworkChanged={fetchChecklist}
+      />
+
+      <hr className="border-gray-200 dark:border-gray-700 mb-8" />
+
+      <ProductsSection
+        projectId={projectId}
+        onProductsChanged={fetchChecklist}
       />
 
       <hr className="border-gray-200 dark:border-gray-700 mb-8" />

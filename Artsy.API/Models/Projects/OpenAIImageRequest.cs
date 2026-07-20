@@ -18,5 +18,17 @@ namespace Artsy.API.Models.Projects
 
         [JsonPropertyName("quality")]
         public string? Quality { get; set; }
+
+        [JsonPropertyName("images")]
+        public List<OpenAIImageReference>? Images { get; set; }
+    }
+
+    public class OpenAIImageReference
+    {
+        [JsonPropertyName("image")]
+        public string? Image { get; set; }
+
+        [JsonPropertyName("detail")]
+        public string? Detail { get; set; }
     }
 }

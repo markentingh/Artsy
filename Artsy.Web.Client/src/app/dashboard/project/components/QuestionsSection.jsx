@@ -130,7 +130,7 @@ export default function QuestionsSection({ projectId, onChecklistChanged }) {
               className="relative bg-white dark:bg-gray-800 rounded-lg shadow p-4 pr-14"
             >
               <p className="pr-2">{question.question}</p>
-              <div className="absolute top-2 right-2 flex flex-col gap-1">
+              <div className="absolute top-2 right-2 flex gap-1">
                 <ButtonIcon name="edit" onClick={() => handleOpenEditQuestion(question.id, question.question)} title="Edit question" />
                 <ButtonIcon name="delete" onClick={() => handleDeleteQuestion(question.id)} title="Delete question" />
               </div>

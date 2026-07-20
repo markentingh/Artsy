@@ -1,10 +1,11 @@
 namespace Artsy.API.Models.Projects
 {
-    public class CreateProjectItemBlueprintRequest
+    public class CreateProjectBlueprintRequest
     {
-        public Guid ItemId { get; set; }
+        public Guid ProjectId { get; set; }
         public int BlueprintId { get; set; }
         public string Name { get; set; } = "";
         public string BlueprintJson { get; set; } = "";
+        public string PlacementJson { get; set; } = "";
     }
 }

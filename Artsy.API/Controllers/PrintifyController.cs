@@ -260,7 +260,7 @@ namespace Artsy.API.Controllers
             try
             {
                 var cached = await _printifyBlueprintRepo.GetByBlueprintIdAsync(blueprintId);
-                if (cached == null)
+                if (cached == null || !cached.Published)
                     return Json(new ApiResponse { success = false, message = "Blueprint not found in catalog" });
 
                 var providers = await _printProviderRepo.GetByBlueprintIdAsync(blueprintId);
@@ -330,6 +330,38 @@ namespace Artsy.API.Controllers
                 }).ToList();
 
                 return Json(new ApiResponse { success = true, data = new { variants } });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("blueprints/{blueprintId}/print-providers/{printProviderId}/variant-availability")]
+        [Authorize]
+        public async Task<IActionResult> GetVariantAvailability(int blueprintId, int printProviderId)
+        {
+            try
+            {
+                using var client = CreatePrintifyClient();
+                var response = await client.GetAsync($"https://api.printify.com/v1/catalog/blueprints/{blueprintId}/print_providers/{printProviderId}/variants.json?show-out-of-stock=0");
+                if (!response.IsSuccessStatusCode)
+                    return Json(new ApiResponse { success = false, message = $"Printify API error: {response.StatusCode}" });
+
+                var json = await response.Content.ReadAsStringAsync();
+                var doc = JsonSerializer.Deserialize<JsonElement>(json);
+
+                var inStockIds = new List<int>();
+                if (doc.TryGetProperty("variants", out var vArr))
+                {
+                    foreach (var v in vArr.EnumerateArray())
+                    {
+                        var variantId = v.TryGetProperty("id", out var vid) ? vid.GetInt32() : 0;
+                        inStockIds.Add(variantId);
+                    }
+                }
+
+                return Json(new ApiResponse { success = true, data = new { inStockVariantIds = inStockIds } });
             }
             catch (Exception ex)
             {

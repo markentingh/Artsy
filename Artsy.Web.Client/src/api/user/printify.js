@@ -15,6 +15,8 @@ const Printify = (args) => Api({ ...args }).endpoints(({ api }) => {
     getBlueprintDetail: (blueprintId) => api.get(`${apiPath}/blueprints/${blueprintId}`),
     getBlueprintVariants: (blueprintId, printProviderId) =>
       api.get(`${apiPath}/blueprints/${blueprintId}/print-providers/${printProviderId}/variants`),
+    getVariantAvailability: (blueprintId, printProviderId) =>
+      api.get(`${apiPath}/blueprints/${blueprintId}/print-providers/${printProviderId}/variant-availability`),
     getBlueprintImageUrl: (blueprintId, index = 0, thumb = false) =>
       `${apiPath}/blueprint-image?blueprintId=${blueprintId}&index=${index}${thumb ? '&thumb=true' : ''}`,
   };

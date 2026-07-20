@@ -23,6 +23,8 @@ export default function DashboardServices() {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [progress, setProgress] = useState(null);
+  const [allVariants, setAllVariants] = useState(false);
+  const [productImages, setProductImages] = useState(false);
 
   const fetchWebhookInfo = async () => {
     try {
@@ -67,16 +69,18 @@ export default function DashboardServices() {
     setMessage(null);
     setProgress(null);
     try {
-      const response = await refreshCatalog();
+      const response = await refreshCatalog(allVariants);
       if (!response.data.success) {
         setMessage({ type: 'error', text: response.data.message || 'Failed to refresh catalog' });
         return;
       }
 
-      const { count, blueprints: bpList, images: imgList } = response.data.data;
+      const { count, newBlueprints: newBps, existingBlueprints: existingBps, images: imgList } = response.data.data;
       setCatalogCount(count);
 
-      const bps = bpList || [];
+      const newBpList = newBps || [];
+      const existingBpList = existingBps || [];
+      const allBps = [...newBpList, ...existingBpList];
       const imgs = imgList || [];
       let providersDone = 0;
       let variantsDone = 0;
@@ -88,16 +92,15 @@ export default function DashboardServices() {
         setProgress({
           phase,
           detail,
-          blueprints: { done: providersDone, total: bps.length },
+          blueprints: { done: providersDone, total: allBps.length },
           variants: { done: variantsDone },
           shipping: { done: shippingDone },
           images: { downloaded: imagesDownloaded, skipped: imagesSkipped, total: imgs.length },
         });
       };
 
-      for (let i = 0; i < bps.length; i++) {
-        const blueprintId = bps[i];
-        updateProgress('providers', `Blueprint ${i + 1}/${bps.length}`);
+      const processFullBlueprint = async (blueprintId, index, total) => {
+        updateProgress('providers', `Blueprint ${index + 1}/${total}`);
 
         let providers = [];
         try {
@@ -111,32 +114,66 @@ export default function DashboardServices() {
 
         for (let j = 0; j < providers.length; j++) {
           const { printProviderId } = providers[j];
-          updateProgress('variants', `Blueprint ${i + 1}/${bps.length}, Provider ${j + 1}/${providers.length}`);
+          updateProgress('variants', `Blueprint ${index + 1}/${total}, Provider ${j + 1}/${providers.length}`);
           try {
             await fetchVariants(blueprintId, printProviderId);
             variantsDone++;
           } catch {}
           await sleep(500);
 
-          updateProgress('shipping', `Blueprint ${i + 1}/${bps.length}, Provider ${j + 1}/${providers.length}`);
+          updateProgress('shipping', `Blueprint ${index + 1}/${total}, Provider ${j + 1}/${providers.length}`);
           try {
             await fetchShipping(blueprintId, printProviderId);
             shippingDone++;
           } catch {}
           await sleep(500);
         }
-      }
+      };
 
-      for (let i = 0; i < imgs.length; i++) {
-        const img = imgs[i];
-        updateProgress('images', `Image ${i + 1}/${imgs.length}`);
+      const processVariantsOnly = async (blueprintId, index, total) => {
+        updateProgress('providers', `Blueprint ${index + 1}/${total} (variants only)`);
+
+        let providers = [];
         try {
-          const dlResp = await downloadCatalogImage(img.blueprintId, img.index, img.url);
-          if (dlResp.data.success) {
-            if (dlResp.data.data.downloaded) imagesDownloaded++;
-            else imagesSkipped++;
+          const ppResp = await fetchPrintProviders(blueprintId);
+          if (ppResp.data.success) {
+            providers = ppResp.data.data.printProviders || [];
+            providersDone++;
           }
         } catch {}
+        await sleep(500);
+
+        for (let j = 0; j < providers.length; j++) {
+          const { printProviderId } = providers[j];
+          updateProgress('variants', `Blueprint ${index + 1}/${total}, Provider ${j + 1}/${providers.length}`);
+          try {
+            await fetchVariants(blueprintId, printProviderId);
+            variantsDone++;
+          } catch {}
+          await sleep(500);
+        }
+      };
+
+      for (let i = 0; i < newBpList.length; i++) {
+        await processFullBlueprint(newBpList[i], i, allBps.length);
+      }
+
+      for (let i = 0; i < existingBpList.length; i++) {
+        await processVariantsOnly(existingBpList[i], newBpList.length + i, allBps.length);
+      }
+
+      if (productImages) {
+        for (let i = 0; i < imgs.length; i++) {
+          const img = imgs[i];
+          updateProgress('images', `Image ${i + 1}/${imgs.length}`);
+          try {
+            const dlResp = await downloadCatalogImage(img.blueprintId, img.index, img.url);
+            if (dlResp.data.success) {
+              if (dlResp.data.data.downloaded) imagesDownloaded++;
+              else imagesSkipped++;
+            }
+          } catch {}
+        }
       }
 
       updateProgress('done', 'Complete!');
@@ -292,6 +329,26 @@ export default function DashboardServices() {
                 </span>
               )}
             </div>
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allVariants}
+                onChange={(e) => setAllVariants(e.target.checked)}
+                disabled={refreshing}
+                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+              />
+              All Product Variants
+            </label>
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={productImages}
+                onChange={(e) => setProductImages(e.target.checked)}
+                disabled={refreshing}
+                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+              />
+              Product Images
+            </label>
             <button
               type="button"
               onClick={handleRefreshCatalog}

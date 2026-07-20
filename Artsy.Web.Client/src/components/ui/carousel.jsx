@@ -1,7 +1,7 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import ButtonIcon from '@/components/ui/button-icon';
 
-export default function Carousel({ images = [], alt = '', onImageClick, singleImage = false, defaultIndex = 0, infiniteScroll = false }) {
+export default function Carousel({ images = [], alt = '', onImageClick, singleImage = false, defaultIndex = 0, infiniteScroll = false, placeholder = '', imageClassName = '' }) {
   const scrollRef = useRef(null);
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
@@ -22,28 +22,43 @@ export default function Carousel({ images = [], alt = '', onImageClick, singleIm
     return () => window.removeEventListener('resize', updateScrollState);
   }, [images, updateScrollState]);
 
-  if (images.length === 0) return null;
+  if (images.length === 0) {
+    if (placeholder) {
+      return (
+        <div className={`flex items-center justify-center rounded-lg ${imageClassName}`}>
+          <span className="text-sm text-gray-500 dark:text-gray-400">{placeholder}</span>
+        </div>
+      );
+    }
+    return null;
+  }
 
   if (singleImage) {
     const showNav = images.length > 1;
-    const handleSinglePrev = () => setSingleIndex((prev) => {
-      if (prev === 0) return infiniteScroll ? images.length - 1 : 0;
-      return prev - 1;
-    });
-    const handleSingleNext = () => setSingleIndex((prev) => {
-      if (prev === images.length - 1) return infiniteScroll ? 0 : images.length - 1;
-      return prev + 1;
-    });
+    const handleSinglePrev = (e) => {
+      e.stopPropagation();
+      setSingleIndex((prev) => {
+        if (prev === 0) return infiniteScroll ? images.length - 1 : 0;
+        return prev - 1;
+      });
+    };
+    const handleSingleNext = (e) => {
+      e.stopPropagation();
+      setSingleIndex((prev) => {
+        if (prev === images.length - 1) return infiniteScroll ? 0 : images.length - 1;
+        return prev + 1;
+      });
+    };
     const singleAtStart = !infiniteScroll && singleIndex === 0;
     const singleAtEnd = !infiniteScroll && singleIndex === images.length - 1;
 
     return (
-      <div className="relative w-full rounded-lg">
-        <div className="flex items-center justify-center">
+      <div className="relative w-full rounded-lg overflow-hidden">
+        <div className="flex items-center justify-center w-full h-full">
           <img
             src={images[singleIndex]}
             alt={`${alt} ${singleIndex + 1}`}
-            className="max-w-full max-h-[70vh] object-contain rounded-lg"
+            className={`max-w-full max-h-[70vh] object-contain rounded-lg ${imageClassName}`}
           />
         </div>
         {showNav && (
@@ -70,7 +85,8 @@ export default function Carousel({ images = [], alt = '', onImageClick, singleIm
     );
   }
 
-  const handlePrev = () => {
+  const handlePrev = (e) => {
+    e.stopPropagation();
     const el = scrollRef.current;
     if (!el) return;
     if (infiniteScroll && el.scrollLeft <= 1) {
@@ -80,7 +96,8 @@ export default function Carousel({ images = [], alt = '', onImageClick, singleIm
     }
   };
 
-  const handleNext = () => {
+  const handleNext = (e) => {
+    e.stopPropagation();
     const el = scrollRef.current;
     if (!el) return;
     if (infiniteScroll && el.scrollLeft + el.clientWidth >= el.scrollWidth - 1) {
@@ -109,6 +126,7 @@ export default function Carousel({ images = [], alt = '', onImageClick, singleIm
               alt={`${alt} ${i + 1}`}
               className="max-h-48 object-contain cursor-pointer"
               style={{ width: '8rem', flexShrink: 0 }}
+              onLoad={updateScrollState}
               onClick={() => onImageClick?.(src, i)}
             />
           ))}

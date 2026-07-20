@@ -12,6 +12,9 @@ namespace Artsy.API.Services
         public static string TelegramBotToken { get; private set; } = "";
         public static string TelegramBotUsername { get; private set; } = "";
         public static string OpenAiApiKey { get; private set; } = "";
+        public static string EtsyKeystring { get; private set; } = "";
+        public static string EtsySharedSecret { get; private set; } = "";
+        public static string SerpApiKey { get; private set; } = "";
 
         public static void Initialize(IConfiguration configuration)
         {
@@ -23,6 +26,9 @@ namespace Artsy.API.Services
             TelegramBotToken = configuration["Telegram:BotToken"] ?? "";
             TelegramBotUsername = configuration["Telegram:BotUsername"] ?? "";
             OpenAiApiKey = configuration["OpenAI:ApiKey"] ?? "";
+            EtsyKeystring = configuration["Etsy:Keystring"] ?? "";
+            EtsySharedSecret = configuration["Etsy:SharedSecret"] ?? "";
+            SerpApiKey = configuration["SerpApi:ApiKey"] ?? "";
         }
     }
 }

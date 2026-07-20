@@ -1,34 +1,35 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
-import { Printify } from '@/api/user/printify';
 import Modal from '@/components/ui/modal';
 import Tabs from '@/components/ui/tabs';
 import Input from '@/components/forms/input';
 import TextArea from '@/components/forms/textarea';
 import Select from '@/components/forms/select';
+import Checkbox from '@/components/forms/checkbox';
 import ButtonOutline from '@/components/ui/button-outline';
 import ButtonIcon from '@/components/ui/button-icon';
 import Icon from '@/components/ui/icon';
 import Spinner from '@/components/ui/spinner';
 import Message from '@/components/ui/message';
+import Carousel from '@/components/ui/carousel';
 import EditQuestionModal from './EditQuestionModal';
 import QuestionsAnswersModal from './QuestionsAnswersModal';
-import ConfigureProductBlueprint from './ConfigureProductBlueprint';
 
 export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const session = useSession();
   const {
-    updateItemTitle,
+    updateItemTitle, updateItemSocialMedia,
     getItemArtwork, updateItemPrompt, updateItemImageModel,
     getQuestions, getItemQuestions, createItemQuestion, updateItemQuestion, deleteItemQuestion,
     getItemPreviews, generateItemPreview, getItemPreviewUrl,
-    getItemBlueprints, createItemBlueprint, deleteItemBlueprint, updateItemBlueprint
+    getItemReferences, uploadItemReference, deleteItemReference, getItemReferenceUrl
   } = Projects(session);
-  const { getBlueprints, getBrands, getBlueprintImageUrl } = Printify(session);
 
   const [title, setTitle] = useState('');
   const [initialTitle, setInitialTitle] = useState('');
+  const [socialMedia, setSocialMedia] = useState(false);
+  const [initialSocialMedia, setInitialSocialMedia] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [initialPrompt, setInitialPrompt] = useState('');
   const [imageModel, setImageModel] = useState('');
@@ -48,23 +49,18 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
 
   const [message, setMessage] = useState(null);
 
-  const [blueprints, setBlueprints] = useState([]);
-  const [blueprintSearch, setBlueprintSearch] = useState('');
-  const [blueprintBrand, setBlueprintBrand] = useState('all');
-  const [blueprintBrands, setBlueprintBrands] = useState([]);
-  const [printifyResults, setPrintifyResults] = useState([]);
-  const [searchingBlueprints, setSearchingBlueprints] = useState(false);
-  const [loadingMoreBlueprints, setLoadingMoreBlueprints] = useState(false);
-  const [hasMoreBlueprints, setHasMoreBlueprints] = useState(false);
-  const [configBlueprint, setConfigBlueprint] = useState(null);
-  const [editingBlueprint, setEditingBlueprint] = useState(null);
-  const [debounceTimer, setDebounceTimer] = useState(null);
-  const [blueprintSearchInitiated, setBlueprintSearchInitiated] = useState(false);
+  const [references, setReferences] = useState([]);
+  const [uploadingReference, setUploadingReference] = useState(false);
+  const [deleteReferenceTarget, setDeleteReferenceTarget] = useState(null);
+  const fileInputRef = useRef(null);
 
   const reset = () => {
     const itemTitle = item?.title || '';
     setTitle(itemTitle);
     setInitialTitle(itemTitle);
+    const itemSocialMedia = item?.socialMedia || false;
+    setSocialMedia(itemSocialMedia);
+    setInitialSocialMedia(itemSocialMedia);
     setPrompt('');
     setInitialPrompt('');
     setImageModel('');
@@ -81,17 +77,9 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setEditingQuestionId(null);
     setQuestionFormValue('');
     setMessage(null);
-    setBlueprints([]);
-    setBlueprintSearch('');
-    setBlueprintBrand('all');
-    setBlueprintBrands([]);
-    setPrintifyResults([]);
-    setSearchingBlueprints(false);
-    setLoadingMoreBlueprints(false);
-    setHasMoreBlueprints(false);
-    setConfigBlueprint(null);
-    setEditingBlueprint(null);
-    setBlueprintSearchInitiated(false);
+    setReferences([]);
+    setUploadingReference(false);
+    setDeleteReferenceTarget(null);
   };
 
   useEffect(() => {
@@ -151,14 +139,14 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       }
     };
 
-    const fetchBlueprints = async () => {
+    const fetchReferences = async () => {
       try {
-        const response = await getItemBlueprints(item.id);
+        const response = await getItemReferences(item.id);
         if (response.data.success) {
-          setBlueprints(response.data.data || []);
+          setReferences(response.data.data || []);
         }
       } catch (error) {
-        // Ignore load errors for optional blueprints
+        // Ignore load errors for optional references
       }
     };
 
@@ -166,15 +154,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     fetchQuestions();
     fetchProjectQuestions();
     fetchPreviews();
-    fetchBlueprints();
-    handleSearchBlueprints('', 'all');
-    getBrands()
-      .then((resp) => {
-        if (resp.data.success) {
-          setBlueprintBrands(resp.data.data.brands || []);
-        }
-      })
-      .catch(() => {});
+    fetchReferences();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show, item]);
 
@@ -191,6 +171,26 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save title' });
+    }
+  };
+
+  const handleSocialMediaChange = async (e) => {
+    const checked = e.target.checked;
+    setSocialMedia(checked);
+    if (!item) return;
+    try {
+      const response = await updateItemSocialMedia({ id: item.id, socialMedia: checked });
+      if (response.data.success) {
+        setMessage(null);
+        setInitialSocialMedia(checked);
+        if (onChanged) onChanged(item.id);
+      } else {
+        setSocialMedia(!checked);
+        setMessage({ type: 'error', text: response.data.message || 'Failed to update social media setting' });
+      }
+    } catch (error) {
+      setSocialMedia(!checked);
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to update social media setting' });
     }
   };
 
@@ -226,6 +226,44 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save prompt' });
+    }
+  };
+
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setUploadingReference(true);
+    setMessage(null);
+    try {
+      for (const file of files) {
+        const response = await uploadItemReference(item.id, file);
+        if (response.data.success) {
+          setReferences((prev) => [...prev, response.data.data]);
+        } else {
+          setMessage({ type: 'error', text: response.data.message || 'Failed to upload reference' });
+        }
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to upload reference' });
+    } finally {
+      setUploadingReference(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteReference = async () => {
+    if (!deleteReferenceTarget) return;
+    try {
+      const response = await deleteItemReference({ id: deleteReferenceTarget.id });
+      if (response.data.success) {
+        setReferences((prev) => prev.filter((r) => r.id !== deleteReferenceTarget.id));
+      } else {
+        setMessage({ type: 'error', text: response.data.message || 'Failed to delete reference' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to delete reference' });
+    } finally {
+      setDeleteReferenceTarget(null);
     }
   };
 
@@ -302,132 +340,6 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setEditingQuestionId(null);
     setQuestionFormValue('');
     setShowQuestionModal(true);
-  };
-
-  const handleSearchBlueprints = (keyword, brand, append = false) => {
-    if (!append) {
-      setSearchingBlueprints(true);
-      setBlueprintSearchInitiated(true);
-    } else {
-      setLoadingMoreBlueprints(true);
-    }
-    setMessage(null);
-    const start = append ? printifyResults.length : 0;
-    getBlueprints(keyword, brand, start, 20)
-      .then((resp) => {
-        if (resp.data.success) {
-          const newResults = resp.data.data.blueprints || [];
-          if (append) {
-            setPrintifyResults((prev) => [...prev, ...newResults]);
-          } else {
-            setPrintifyResults(newResults);
-          }
-          setHasMoreBlueprints(resp.data.data.hasMore || false);
-        } else {
-          setMessage({ type: 'error', text: resp.data.message || 'Failed to search blueprints' });
-        }
-      })
-      .catch((error) => {
-        setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to search blueprints' });
-      })
-      .finally(() => {
-        setSearchingBlueprints(false);
-        setLoadingMoreBlueprints(false);
-      });
-  };
-
-  const handleBlueprintScroll = (e) => {
-    const el = e.target;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 50 && hasMoreBlueprints && !loadingMoreBlueprints) {
-      handleSearchBlueprints(blueprintSearch, blueprintBrand, true);
-    }
-  };
-
-  const handleBlueprintSearchInput = (e) => {
-    const value = e.target.value;
-    setBlueprintSearch(value);
-    if (debounceTimer) clearTimeout(debounceTimer);
-    const timer = setTimeout(() => {
-      handleSearchBlueprints(value, blueprintBrand);
-    }, 400);
-    setDebounceTimer(timer);
-  };
-
-  const handleBlueprintBrandChange = (e) => {
-    const value = e.target.value;
-    setBlueprintBrand(value);
-    handleSearchBlueprints(blueprintSearch, value);
-  };
-
-  const handleBlueprintResultClick = (bp) => {
-    setConfigBlueprint(bp);
-    setEditingBlueprint(null);
-  };
-
-  const handleEditBlueprint = (bp) => {
-    setEditingBlueprint(bp);
-    setConfigBlueprint({ id: bp.blueprintId, title: bp.name });
-  };
-
-  const handleDeleteBlueprint = async (bp) => {
-    try {
-      const resp = await deleteItemBlueprint({ id: bp.id });
-      if (resp.data.success) {
-        const updated = await getItemBlueprints(item.id);
-        if (updated.data.success) {
-          setBlueprints(updated.data.data || []);
-        }
-      } else {
-        setMessage({ type: 'error', text: resp.data.message || 'Failed to delete blueprint' });
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to delete blueprint' });
-    }
-  };
-
-  const handleSaveBlueprintConfig = async (config) => {
-    if (editingBlueprint) {
-      try {
-        const resp = await updateItemBlueprint({
-          id: editingBlueprint.id,
-          blueprintId: config.blueprintId,
-          name: config.name,
-          blueprintJson: config.blueprintJson,
-        });
-        if (resp.data.success) {
-          const updated = await getItemBlueprints(item.id);
-          if (updated.data.success) {
-            setBlueprints(updated.data.data || []);
-          }
-          setConfigBlueprint(null);
-          setEditingBlueprint(null);
-        } else {
-          setMessage({ type: 'error', text: resp.data.message || 'Failed to update blueprint' });
-        }
-      } catch (error) {
-        setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to update blueprint' });
-      }
-    } else {
-      try {
-        const resp = await createItemBlueprint({
-          itemId: item.id,
-          blueprintId: config.blueprintId,
-          name: config.name,
-          blueprintJson: config.blueprintJson,
-        });
-        if (resp.data.success) {
-          const updated = await getItemBlueprints(item.id);
-          if (updated.data.success) {
-            setBlueprints(updated.data.data || []);
-          }
-          setConfigBlueprint(null);
-        } else {
-          setMessage({ type: 'error', text: resp.data.message || 'Failed to save blueprint' });
-        }
-      } catch (error) {
-        setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save blueprint' });
-      }
-    }
   };
 
   const handleOpenEditQuestion = (question) => {
@@ -521,6 +433,14 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
             </ButtonOutline>
           )}
         </div>
+      </div>
+      <div className="mt-4">
+        <Checkbox
+          name="socialMedia"
+          label="Publish to Social Media"
+          checked={socialMedia}
+          onChange={handleSocialMediaChange}
+        />
       </div>
     </div>
   );
@@ -623,111 +543,63 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         </div>
       ),
     },
-    { id: 'questions', label: 'Questions', content: questionTabContent },
-    { id: 'preview', label: 'Preview', content: previewTabContent },
-    { id: 'products', label: 'Products', content: (
-      <div className="space-y-4">
-        {blueprints.length > 0 && (
-          <div>
-            <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Saved Blueprints</h3>
-            <div className="space-y-1">
-              {blueprints.map((bp) => (
+    {
+      id: 'references',
+      label: 'References',
+      content: (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300">Reference Images</h3>
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              <ButtonOutline onClick={() => fileInputRef.current?.click()}>
+                {uploadingReference ? (
+                  <Icon name="progress_activity" spin className="mr-2" />
+                ) : (
+                  <Icon name="add" className="mr-2" />
+                )}
+                <span>Upload Images</span>
+              </ButtonOutline>
+            </div>
+          </div>
+          {references.length > 0 ? (
+            <div className="grid grid-cols-[repeat(auto-fill,150px)] gap-2">
+              {references.map((ref) => (
                 <div
-                  key={bp.id}
-                  className="flex items-center justify-between px-3 py-2 rounded border border-gray-300 dark:border-gray-600 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
-                  onClick={() => handleEditBlueprint(bp)}
+                  key={ref.id}
+                  className="relative group rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600"
                 >
-                  <span className="text-sm">{bp.name}</span>
-                  <ButtonIcon
-                    name="delete"
-                    title="Remove blueprint"
-                    onClick={(e) => { e.stopPropagation(); handleDeleteBlueprint(bp); }}
+                  <img
+                    src={getItemReferenceUrl(item.id, ref.id, true)}
+                    alt={ref.fileName}
+                    className="w-[150px] h-[150px] object-cover"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setDeleteReferenceTarget(ref)}
+                    className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center bg-black/60 text-white rounded opacity-0 group-hover:opacity-100 transition"
+                    title="Remove reference"
+                  >
+                    <Icon name="close" />
+                  </button>
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        <div className="filters tool-bar">
-          <div className="flex items-center gap-2 flex-1">
-            <Icon name="search" className="text-gray-400" />
-            <Input
-              name="blueprintSearch"
-              value={blueprintSearch}
-              onChange={handleBlueprintSearchInput}
-              placeholder="Search Printify blueprints..."
-              className="flex-1 mb-0"
-            />
-          </div>
-          <div className="right-side">
-            <Select
-              name="blueprintBrand"
-              placeholder="All brands"
-              options={blueprintBrands.map((b) => ({ value: b, label: b }))}
-              value={blueprintBrand === 'all' ? '' : blueprintBrand}
-              onChange={handleBlueprintBrandChange}
-              className="mb-0 min-w-[10em]"
-            />
-          </div>
-        </div>
-
-        <div className="max-h-[50vh] overflow-y-auto" onScroll={handleBlueprintScroll}>
-          {searchingBlueprints ? (
-            <div className="flex items-center justify-center py-12">
-              <Spinner className="text-4xl" />
-            </div>
-          ) : printifyResults.length > 0 ? (
-            <>
-              <div className="grid grid-cols-4 gap-2">
-                {printifyResults.map((bp) => (
-                  <div
-                    key={bp.id}
-                    className="cursor-pointer rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 hover:border-primary-500"
-                    onClick={() => handleBlueprintResultClick(bp)}
-                  >
-                    {bp.imageCount > 0 ? (
-                      <img
-                        src={getBlueprintImageUrl(bp.id, 0, true)}
-                        alt={bp.title}
-                        className="w-full aspect-square object-cover"
-                      />
-                    ) : (
-                      <div className="w-full aspect-square flex items-center justify-center bg-gray-100 dark:bg-gray-700">
-                        <span className="text-xs text-gray-400">No image</span>
-                      </div>
-                    )}
-                    <div className="p-2">
-                      <p className="text-xs font-medium truncate">{bp.title}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{bp.brand}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {loadingMoreBlueprints && (
-                <div className="flex items-center justify-center py-4">
-                  <Spinner className="text-2xl" />
-                </div>
-              )}
-            </>
-          ) : blueprintSearchInitiated ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No blueprints found.</p>
           ) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400">Search for product blueprints from Printify.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">No reference images uploaded.</p>
           )}
         </div>
-
-        {configBlueprint && (
-          <ConfigureProductBlueprint
-            show={!!configBlueprint}
-            blueprint={configBlueprint}
-            existingConfig={editingBlueprint}
-            onSave={handleSaveBlueprintConfig}
-            onClose={() => { setConfigBlueprint(null); setEditingBlueprint(null); }}
-          />
-        )}
-      </div>
-    ) },
+      ),
+    },
+    { id: 'questions', label: 'Questions', content: questionTabContent },
+    { id: 'preview', label: 'Preview', content: previewTabContent },
   ];
 
   return (
@@ -767,6 +639,23 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
               alt="Preview"
               className="w-full rounded-lg"
             />
+          </div>
+        </Modal>
+      )}
+
+      {deleteReferenceTarget && (
+        <Modal
+          title="Delete Reference Image"
+          onClose={() => setDeleteReferenceTarget(null)}
+        >
+          <p className="text-sm">Do you really want to delete this reference image? This cannot be undone.</p>
+          <div className="buttons mt-4 flex justify-end gap-2">
+            <ButtonOutline className="cancel" onClick={() => setDeleteReferenceTarget(null)}>
+              Cancel
+            </ButtonOutline>
+            <ButtonOutline onClick={handleDeleteReference}>
+              Delete
+            </ButtonOutline>
           </div>
         </Modal>
       )}

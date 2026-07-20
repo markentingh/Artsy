@@ -14,6 +14,9 @@ namespace Artsy.API.Services
         Task<byte[]> GetProjectItemPreviewAsync(Guid projectId, Guid itemId, Guid previewId, bool thumb = false);
         Task SavePrintifyCatalogImageAsync(int blueprintId, int imageIndex, byte[] imageData);
         Task<byte[]> GetPrintifyCatalogImageAsync(int blueprintId, int imageIndex, bool thumb = false);
+        Task SaveProjectItemReferenceAsync(Guid projectId, Guid referenceId, string extension, byte[] imageData);
+        Task<byte[]> GetProjectItemReferenceAsync(Guid projectId, Guid referenceId, string extension, bool thumb = false);
+        Task DeleteProjectItemReferenceAsync(Guid projectId, Guid referenceId, string extension);
     }
 
     public class ImageService : IImageService
@@ -128,6 +131,71 @@ namespace Artsy.API.Services
             return stream.ToArray();
         }
 
+        public async Task SaveProjectItemReferenceAsync(Guid projectId, Guid referenceId, string extension, byte[] imageData)
+        {
+            var fileName = $"{referenceId}{extension}";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "references", fileName);
+            var thumbFileName = $"{referenceId}_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "references", thumbFileName);
+            var thumbImageData = await GenerateThumbnailAsync(imageData, 250);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+        }
+
+        public async Task<byte[]> GetProjectItemReferenceAsync(Guid projectId, Guid referenceId, string extension, bool thumb = false)
+        {
+            if (thumb)
+            {
+                var thumbFileName = $"{referenceId}_thumb.jpg";
+                var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "references", thumbFileName);
+
+                if (_activeStorage == "azure")
+                {
+                    var thumbBytes = await GetFromAzureBlobAsync(thumbRelativePath);
+                    if (thumbBytes.Length > 0) return thumbBytes;
+                }
+                else
+                {
+                    var thumbBytes = await GetFromFileSystemAsync(thumbRelativePath);
+                    if (thumbBytes.Length > 0) return thumbBytes;
+                }
+            }
+
+            var fileName = $"{referenceId}{extension}";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "references", fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task DeleteProjectItemReferenceAsync(Guid projectId, Guid referenceId, string extension)
+        {
+            var fileName = $"{referenceId}{extension}";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "references", fileName);
+            var thumbFileName = $"{referenceId}_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "references", thumbFileName);
+
+            if (_activeStorage == "azure")
+            {
+                await DeleteFromAzureBlobAsync(relativePath);
+                await DeleteFromAzureBlobAsync(thumbRelativePath);
+                return;
+            }
+
+            await DeleteFromFileSystemAsync(relativePath);
+            await DeleteFromFileSystemAsync(thumbRelativePath);
+        }
+
         async Task SaveToFileSystemAsync(string relativePath, byte[] imageData)
         {
             var filePath = Path.Combine(_environment.ContentRootPath, "Content", relativePath);
@@ -192,6 +260,30 @@ namespace Artsy.API.Services
             using var memoryStream = new MemoryStream();
             await response.Value.Content.CopyToAsync(memoryStream);
             return memoryStream.ToArray();
+        }
+
+        async Task DeleteFromFileSystemAsync(string relativePath)
+        {
+            var filePath = Path.Combine(_environment.ContentRootPath, "Content", relativePath);
+            if (File.Exists(filePath))
+            {
+                await Task.Run(() => File.Delete(filePath));
+            }
+        }
+
+        async Task DeleteFromAzureBlobAsync(string relativePath)
+        {
+            var connectionString = _configuration["Storage:AzureBlob:ConnectionString"];
+            var containerName = _configuration["Storage:AzureBlob:ContainerName"];
+
+            if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(containerName))
+                return;
+
+            var blobServiceClient = new BlobServiceClient(connectionString);
+            var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
+            var blobClient = containerClient.GetBlobClient(relativePath);
+
+            await blobClient.DeleteIfExistsAsync();
         }
     }
 }

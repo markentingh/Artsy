@@ -24,18 +24,21 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<IProjectRepository, ProjectRepository>();
             builder.Services.AddTransient<IProjectCollectionRepository, ProjectCollectionRepository>();
             builder.Services.AddTransient<IProjectItemRepository, ProjectItemRepository>();
-            builder.Services.AddTransient<IProjectItemBlueprintRepository, ProjectItemBlueprintRepository>();
+            builder.Services.AddTransient<IProjectBlueprintsRepository, ProjectBlueprintsRepository>();
             builder.Services.AddTransient<IProjectItemArtworkRepository, ProjectItemArtworkRepository>();
             builder.Services.AddTransient<IProjectItemQuestionRepository, ProjectItemQuestionRepository>();
             builder.Services.AddTransient<IProjectQuestionRepository, ProjectQuestionRepository>();
             builder.Services.AddTransient<IProjectCollectionArtworkRepository, ProjectCollectionArtworkRepository>();
             builder.Services.AddTransient<IProjectItemPreviewRepository, ProjectItemPreviewRepository>();
+            builder.Services.AddTransient<IProjectItemReferenceRepository, ProjectItemReferenceRepository>();
             builder.Services.AddTransient<ILLMModelsRepository, LLMModelsRepository>();
             builder.Services.AddTransient<IPrintifyBlueprintRepository, PrintifyBlueprintRepository>();
             builder.Services.AddTransient<IPrintifyBlueprintPrintProviderRepository, PrintifyBlueprintPrintProviderRepository>();
             builder.Services.AddTransient<IPrintifyBlueprintVariantRepository, PrintifyBlueprintVariantRepository>();
             builder.Services.AddTransient<IPrintifyBlueprintVariantPlaceholderRepository, PrintifyBlueprintVariantPlaceholderRepository>();
             builder.Services.AddTransient<IPrintifyBlueprintShippingRepository, PrintifyBlueprintShippingRepository>();
+            builder.Services.AddTransient<IPrintifyBlueprintImageRepository, PrintifyBlueprintImageRepository>();
+            builder.Services.AddTransient<ITrendRepository, TrendRepository>();
         }
     }
 }

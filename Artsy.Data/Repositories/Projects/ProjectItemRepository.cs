@@ -20,6 +20,18 @@ namespace Artsy.Data.Repositories.Projects
             return await _dbConnection.QueryAsync<ProjectItem>(query, new { projectId });
         }
 
+        public async Task<IEnumerable<ProjectItemListDto>> GetListByProjectIdAsync(Guid projectId)
+        {
+            const string query = @"
+                SELECT i.""Id"", i.""ProjectId"", i.""Index"", i.""Title"", i.""SocialMedia"",
+                    0 AS ""ProductCount"",
+                    (SELECT COUNT(*) FROM public.""ProjectItemQuestions"" q WHERE q.""ItemId"" = i.""Id"") AS ""QuestionCount""
+                FROM public.""ProjectItems"" i
+                WHERE i.""ProjectId"" = @projectId
+                ORDER BY i.""Index""";
+            return await _dbConnection.QueryAsync<ProjectItemListDto>(query, new { projectId });
+        }
+
         public async Task<ProjectItem?> GetByIdAsync(Guid id)
         {
             const string query = @"SELECT * FROM public.""ProjectItems"" WHERE ""Id"" = @id";
@@ -40,9 +52,17 @@ namespace Artsy.Data.Repositories.Projects
         {
             const string query = @"
                 UPDATE public.""ProjectItems""
-                SET ""Index"" = @Index, ""Title"" = @Title
+                SET ""Index"" = @Index, ""Title"" = @Title, ""SocialMedia"" = @SocialMedia
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, item);
+        }
+
+        public async Task ReorderAsync(IEnumerable<Guid> itemIds)
+        {
+            var idList = itemIds.ToList();
+            var query = @"UPDATE public.""ProjectItems"" SET ""Index"" = @Index WHERE ""Id"" = @Id";
+            var parameters = idList.Select((id, index) => new { Id = id, Index = index + 1 });
+            await _dbConnection.ExecuteAsync(query, parameters);
         }
 
         public async Task DeleteAsync(Guid id)

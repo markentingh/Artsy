@@ -24,7 +24,7 @@ namespace Artsy.Data.Repositories
         {
             var kw = keyword?.Trim().ToLowerInvariant() ?? "";
             var br = brand?.Trim().ToLowerInvariant() ?? "";
-            var sql = @"SELECT COUNT(*) FROM public.""PrintifyBlueprints"" WHERE 1=1";
+            var sql = @"SELECT COUNT(*) FROM public.""PrintifyBlueprints"" WHERE ""Published"" = true";
             if (!string.IsNullOrWhiteSpace(kw))
                 sql += @" AND LOWER(""Title"") LIKE @kw";
             if (!string.IsNullOrWhiteSpace(br) && br != "all")
@@ -36,7 +36,7 @@ namespace Artsy.Data.Repositories
         {
             var kw = keyword?.Trim().ToLowerInvariant() ?? "";
             var br = brand?.Trim().ToLowerInvariant() ?? "";
-            var sql = @"SELECT * FROM public.""PrintifyBlueprints"" WHERE 1=1";
+            var sql = @"SELECT * FROM public.""PrintifyBlueprints"" WHERE ""Published"" = true";
             if (!string.IsNullOrWhiteSpace(kw))
                 sql += @" AND LOWER(""Title"") LIKE @kw";
             if (!string.IsNullOrWhiteSpace(br) && br != "all")
@@ -85,7 +85,7 @@ namespace Artsy.Data.Repositories
 
         public async Task<IEnumerable<string>> GetBrandsAsync()
         {
-            const string query = @"SELECT DISTINCT ""Brand"" FROM public.""PrintifyBlueprints"" WHERE ""Brand"" != '' ORDER BY ""Brand""";
+            const string query = @"SELECT DISTINCT ""Brand"" FROM public.""PrintifyBlueprints"" WHERE ""Brand"" != '' AND ""Published"" = true ORDER BY ""Brand""";
             return await _dbConnection.QueryAsync<string>(query);
         }
 
@@ -99,6 +99,12 @@ namespace Artsy.Data.Repositories
         {
             const string query = @"DELETE FROM public.""PrintifyBlueprints""";
             await _dbConnection.ExecuteAsync(query);
+        }
+
+        public async Task UpdatePublishedAsync(int blueprintId, bool published)
+        {
+            const string query = @"UPDATE public.""PrintifyBlueprints"" SET ""Published"" = @published, ""DateUpdated"" = CURRENT_TIMESTAMP WHERE ""BlueprintId"" = @blueprintId";
+            await _dbConnection.ExecuteAsync(query, new { blueprintId, published });
         }
     }
 }

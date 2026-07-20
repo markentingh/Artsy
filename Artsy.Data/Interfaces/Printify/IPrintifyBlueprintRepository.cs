@@ -13,5 +13,6 @@ namespace Artsy.Data.Interfaces
         Task<IEnumerable<string>> GetBrandsAsync();
         Task<IEnumerable<int>> GetAllBlueprintIdsAsync();
         Task DeleteAllAsync();
+        Task UpdatePublishedAsync(int blueprintId, bool published);
     }
 }
