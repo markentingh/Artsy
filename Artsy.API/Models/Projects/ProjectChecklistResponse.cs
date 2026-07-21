@@ -17,5 +17,9 @@ namespace Artsy.API.Models.Projects
         public bool QuestionsAdded { get; set; }
         public int QuestionsAddedCompleted { get; set; }
         public int QuestionsAddedTotal { get; set; }
+
+        public bool CollectionsAdded { get; set; }
+        public int CollectionsAddedCompleted { get; set; }
+        public int CollectionsAddedTotal { get; set; }
     }
 }

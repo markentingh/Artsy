@@ -228,6 +228,32 @@ namespace Artsy.API.Controllers
             }
         }
 
+        [HttpPost("update-publish-to-printify")]
+        public async Task<IActionResult> UpdatePublishToPrintify([FromBody] UpdateProjectPublishToPrintifyRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.Id == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Project ID is required." });
+
+            try
+            {
+                var project = await _projectRepository.GetByIdAsync(request.Id, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                project.PublishToPrintify = request.PublishToPrintify;
+                await _projectRepository.UpdateAsync(project);
+                return Json(new ApiResponse { success = true, data = project });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
         [HttpGet("get-artwork")]
         public async Task<IActionResult> GetArtwork([FromQuery] Guid projectId, [FromQuery] Guid? collectionId = null, [FromQuery] int start = 0, [FromQuery] int length = 5)
         {
@@ -313,22 +339,27 @@ namespace Artsy.API.Controllers
                 var blueprints = await _projectBlueprintRepository.GetByProjectIdAsync(projectId);
                 var itemQuestions = await _projectItemQuestionRepository.GetByProjectIdAsync(projectId);
                 var questions = await _projectQuestionRepository.GetByProjectIdAsync(projectId);
+                var collections = (await _projectCollectionRepository.GetByProjectIdAsync(projectId)).ToList();
 
-                var imageGenerationSetupCompleted = items.Count(item =>
+                var artworkList = artwork.ToList();
+                var customItemIds = artworkList.Where(a => a.ArtworkType == "custom").Select(a => a.ItemId).ToHashSet();
+                var aiItems = items.Where(i => !customItemIds.Contains(i.Id)).ToList();
+
+                var imageGenerationSetupCompleted = aiItems.Count(item =>
                 {
-                    var itemArtwork = artwork.FirstOrDefault(a => a.ItemId == item.Id);
+                    var itemArtwork = artworkList.FirstOrDefault(a => a.ItemId == item.Id);
                     return itemArtwork != null &&
                            !string.IsNullOrWhiteSpace(itemArtwork.Prompt);
                 });
-                var imageGenerationSetup = items.Count > 0 && imageGenerationSetupCompleted == items.Count;
+                var imageGenerationSetup = aiItems.Count > 0 && imageGenerationSetupCompleted == aiItems.Count;
 
                 var productBlueprintsAddedCompleted = blueprints.Count(b => !string.IsNullOrWhiteSpace(b.BlueprintJson));
                 var productBlueprintsAdded = productBlueprintsAddedCompleted > 0;
 
                 var validItemQuestions = itemQuestions.Where(q => !string.IsNullOrWhiteSpace(q.Question)).ToList();
                 var itemQuestionsAddedCompleted = validItemQuestions.Count;
-                var itemQuestionsWithoutQuestion = items.Count(item => !validItemQuestions.Any(q => q.ItemId == item.Id));
-                var itemQuestionsAdded = items.Count > 0 && itemQuestionsWithoutQuestion == 0;
+                var itemQuestionsWithoutQuestion = aiItems.Count(item => !validItemQuestions.Any(q => q.ItemId == item.Id));
+                var itemQuestionsAdded = aiItems.Count > 0 && itemQuestionsWithoutQuestion == 0;
 
                 var questionCount = questions.Count(q => !string.IsNullOrWhiteSpace(q.Question));
                 var questionsAdded = questionCount > 0;
@@ -337,7 +368,7 @@ namespace Artsy.API.Controllers
                 {
                     ImageGenerationSetup = imageGenerationSetup,
                     ImageGenerationSetupCompleted = imageGenerationSetupCompleted,
-                    ImageGenerationSetupTotal = Math.Max(1, items.Count),
+                    ImageGenerationSetupTotal = Math.Max(1, aiItems.Count),
                     ItemQuestionsAdded = itemQuestionsAdded,
                     ItemQuestionsAddedCompleted = itemQuestionsAddedCompleted,
                     ItemQuestionsAddedTotal = Math.Max(1, itemQuestionsWithoutQuestion + itemQuestionsAddedCompleted),
@@ -346,7 +377,10 @@ namespace Artsy.API.Controllers
                     ProductBlueprintsAddedTotal = Math.Max(1, items.Count),
                     QuestionsAdded = questionsAdded,
                     QuestionsAddedCompleted = questionCount > 0 ? questionCount : 0,
-                    QuestionsAddedTotal = Math.Max(1, questionCount)
+                    QuestionsAddedTotal = Math.Max(1, questionCount),
+                    CollectionsAdded = collections.Count > 0,
+                    CollectionsAddedCompleted = collections.Count,
+                    CollectionsAddedTotal = Math.Max(1, collections.Count)
                 };
 
                 return Json(new ApiResponse { success = true, data = result });

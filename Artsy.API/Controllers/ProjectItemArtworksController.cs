@@ -137,5 +137,52 @@ namespace Artsy.API.Controllers
                 return Json(new ApiResponse { success = false, message = ex.Message });
             }
         }
+        [HttpPost("update-item-artwork-type")]
+        public async Task<IActionResult> UpdateItemArtworkType([FromBody] UpdateProjectItemArtworkTypeRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.ItemId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Item ID is required." });
+
+            try
+            {
+                var item = await _projectItemRepository.GetByIdAsync(request.ItemId);
+                if (item == null)
+                    return Json(new ApiResponse { success = false, message = "Item not found." });
+
+                var project = await _projectRepository.GetByIdAsync(item.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                var artworkList = await _projectItemArtworkRepository.GetByItemIdAsync(request.ItemId);
+                var artwork = artworkList.FirstOrDefault();
+                if (artwork == null)
+                {
+                    artwork = new ProjectItemArtwork
+                    {
+                        ItemId = request.ItemId,
+                        ProjectId = item.ProjectId,
+                        ArtworkType = request.ArtworkType,
+                        CustomImageId = request.CustomImageId
+                    };
+                    var created = await _projectItemArtworkRepository.CreateAsync(artwork);
+                    return Json(new ApiResponse { success = true, data = created });
+                }
+                else
+                {
+                    artwork.ArtworkType = request.ArtworkType;
+                    artwork.CustomImageId = request.CustomImageId;
+                    await _projectItemArtworkRepository.UpdateAsync(artwork);
+                    return Json(new ApiResponse { success = true, data = artwork });
+                }
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
     }
 }

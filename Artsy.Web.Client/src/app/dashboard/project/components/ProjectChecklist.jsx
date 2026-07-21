@@ -16,6 +16,26 @@ export default function ProjectChecklist({ checklist }) {
       total: 1,
       isChecked: (checklist?.productBlueprintsAddedCompleted ?? 0) > 0,
     },
+    {
+      label: 'Add one or more Questions to the Project',
+      key: 'questionsAdded',
+      completed: checklist?.questionsAddedCompleted ?? 0,
+      total: checklist?.questionsAddedTotal ?? 1,
+      isChecked: (checklist?.questionsAddedCompleted ?? 0) > 0,
+    },
+    {
+      label: 'Artwork Questions',
+      key: 'itemQuestionsAdded',
+      completed: checklist?.itemQuestionsAddedCompleted ?? 0,
+      total: checklist?.itemQuestionsAddedTotal ?? 1,
+    },
+    {
+      label: 'Publish at least one Collection',
+      key: 'collectionsAdded',
+      completed: (checklist?.collectionsAddedCompleted ?? 0) > 0 ? 1 : 0,
+      total: 1,
+      isChecked: (checklist?.collectionsAddedCompleted ?? 0) > 0,
+    },
   ];
 
   const allChecked = checklist && items.every((item) => item.isChecked ?? checklist?.[item.key]);

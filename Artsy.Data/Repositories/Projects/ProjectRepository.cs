@@ -35,8 +35,8 @@ namespace Artsy.Data.Repositories.Projects
         public async Task<Project> CreateAsync(Project project)
         {
             const string query = @"
-                INSERT INTO public.""Projects"" (""Id"", ""AppUserId"", ""Title"", ""Description"", ""Key"", ""Color"", ""Status"", ""Created"")
-                VALUES (@Id, @AppUserId, @Title, @Description, @Key, @Color, @Status, @Created)
+                INSERT INTO public.""Projects"" (""Id"", ""AppUserId"", ""Title"", ""Description"", ""Key"", ""Color"", ""Status"", ""PublishToPrintify"", ""Created"")
+                VALUES (@Id, @AppUserId, @Title, @Description, @Key, @Color, @Status, @PublishToPrintify, @Created)
                 RETURNING *";
 
             project.Id = Guid.NewGuid();
@@ -53,7 +53,8 @@ namespace Artsy.Data.Repositories.Projects
                     ""Description"" = @Description,
                     ""Key"" = @Key,
                     ""Color"" = @Color,
-                    ""Status"" = @Status
+                    ""Status"" = @Status,
+                    ""PublishToPrintify"" = @PublishToPrintify
                 WHERE ""Id"" = @Id AND ""AppUserId"" = @AppUserId";
 
             await _dbConnection.ExecuteAsync(query, project);

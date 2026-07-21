@@ -15,12 +15,13 @@ import Message from '@/components/ui/message';
 import Carousel from '@/components/ui/carousel';
 import EditQuestionModal from './EditQuestionModal';
 import QuestionsAnswersModal from './QuestionsAnswersModal';
+import CustomImageSelector from './CustomImageSelector';
 
 export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const session = useSession();
   const {
     updateItemTitle, updateItemSocialMedia,
-    getItemArtwork, updateItemPrompt, updateItemImageModel,
+    getItemArtwork, updateItemPrompt, updateItemImageModel, updateItemArtworkType,
     getQuestions, getItemQuestions, createItemQuestion, updateItemQuestion, deleteItemQuestion,
     getItemPreviews, generateItemPreview, getItemPreviewUrl,
     getItemReferences, uploadItemReference, deleteItemReference, getItemReferenceUrl
@@ -36,6 +37,11 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const [initialImageModel, setInitialImageModel] = useState('');
   const [imageModelJson, setImageModelJson] = useState('');
   const [initialImageModelJson, setInitialImageModelJson] = useState('');
+  const [artworkType, setArtworkType] = useState('ai');
+  const [initialArtworkType, setInitialArtworkType] = useState('ai');
+  const [customImageId, setCustomImageId] = useState(null);
+  const [initialCustomImageId, setInitialCustomImageId] = useState(null);
+  const [showCustomImageSelector, setShowCustomImageSelector] = useState(false);
 
   const [questions, setQuestions] = useState([]);
   const [projectQuestions, setProjectQuestions] = useState([]);
@@ -67,6 +73,11 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setInitialImageModel('');
     setImageModelJson('');
     setInitialImageModelJson('');
+    setArtworkType('ai');
+    setInitialArtworkType('ai');
+    setCustomImageId(null);
+    setInitialCustomImageId(null);
+    setShowCustomImageSelector(false);
     setQuestions([]);
     setProjectQuestions([]);
     setPreviews([]);
@@ -97,6 +108,10 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
           setInitialImageModel(response.data.data?.imageModel || '');
           setImageModelJson(response.data.data?.imageModelJson || '');
           setInitialImageModelJson(response.data.data?.imageModelJson || '');
+          setArtworkType(response.data.data?.artworkType || 'ai');
+          setInitialArtworkType(response.data.data?.artworkType || 'ai');
+          setCustomImageId(response.data.data?.customImageId || null);
+          setInitialCustomImageId(response.data.data?.customImageId || null);
         }
       } catch (error) {
         // Ignore load errors for optional prompt
@@ -211,6 +226,44 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save image model' });
+    }
+  };
+
+  const handleArtworkTypeChange = async (value) => {
+    setArtworkType(value);
+    if (!item) return;
+    try {
+      const response = await updateItemArtworkType({ itemId: item.id, artworkType: value, customImageId: value === 'custom' ? customImageId : null });
+      if (response.data.success) {
+        setMessage(null);
+        setInitialArtworkType(value);
+        if (value !== 'custom') {
+          setCustomImageId(null);
+          setInitialCustomImageId(null);
+        }
+      } else {
+        setMessage({ type: 'error', text: response.data.message || 'Failed to save artwork type' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save artwork type' });
+    }
+  };
+
+  const handleSelectCustomImage = async (img) => {
+    setCustomImageId(img.id);
+    setShowCustomImageSelector(false);
+    if (!item) return;
+    try {
+      const response = await updateItemArtworkType({ itemId: item.id, artworkType: 'custom', customImageId: img.id });
+      if (response.data.success) {
+        setMessage(null);
+        setInitialArtworkType('custom');
+        setInitialCustomImageId(img.id);
+      } else {
+        setMessage({ type: 'error', text: response.data.message || 'Failed to save custom image' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save custom image' });
     }
   };
 
@@ -421,27 +474,50 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         </div>
         <div className="w-1/3">
           <Select
-            name="imageModel"
-            label="Image Model"
-            options={[{ value: 'openai', label: 'OpenAI' }]}
-            value={imageModel}
-            onChange={(e) => handleImageModelChange(e.target.value)}
+            name="artworkType"
+            label="Artwork Type"
+            options={[
+              { value: 'ai', label: 'AI Artwork' },
+              { value: 'custom', label: 'Custom Image' }
+            ]}
+            value={artworkType}
+            onChange={(e) => handleArtworkTypeChange(e.target.value)}
           />
-          {imageModelDirty && (
-            <ButtonOutline onClick={handleSaveImageModel}>
-              Save Changes
-            </ButtonOutline>
-          )}
         </div>
       </div>
-      <div className="mt-4">
-        <Checkbox
-          name="socialMedia"
-          label="Publish to Social Media"
-          checked={socialMedia}
-          onChange={handleSocialMediaChange}
-        />
-      </div>
+      {artworkType === 'custom' && (
+        <div className="mt-4 flex items-center justify-between">
+          <Checkbox
+            name="socialMedia"
+            label="Publish to Social Media"
+            checked={socialMedia}
+            onChange={handleSocialMediaChange}
+          />
+          <ButtonOutline onClick={() => setShowCustomImageSelector(true)}>
+            <Icon name="image" className="mr-2" />
+            <span>Select Image</span>
+          </ButtonOutline>
+        </div>
+      )}
+      {artworkType === 'custom' && customImageId && (
+        <div className="mt-4">
+          <img
+            src={getItemReferenceUrl(item.id, customImageId, true)}
+            alt="Custom image"
+            className="w-full rounded-lg object-cover border border-gray-300 dark:border-gray-600"
+          />
+        </div>
+      )}
+      {artworkType !== 'custom' && (
+        <div className="mt-4">
+          <Checkbox
+            name="socialMedia"
+            label="Publish to Social Media"
+            checked={socialMedia}
+            onChange={handleSocialMediaChange}
+          />
+        </div>
+      )}
     </div>
   );
 
@@ -520,13 +596,29 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     </div>
   );
 
+  const isAI = artworkType === 'ai';
+
   const tabs = [
     { id: 'info', label: 'Info', content: infoTabContent },
-    {
+    ...(isAI ? [{
       id: 'prompt',
       label: 'Prompt',
       content: (
         <div>
+          <div className="mb-4">
+            <Select
+              name="imageModel"
+              label="Image Model"
+              options={[{ value: 'openai', label: 'OpenAI' }]}
+              value={imageModel}
+              onChange={(e) => handleImageModelChange(e.target.value)}
+            />
+            {imageModelDirty && (
+              <ButtonOutline onClick={handleSaveImageModel}>
+                Save Changes
+              </ButtonOutline>
+            )}
+          </div>
           <TextArea
             name="prompt"
             label="Image Prompt"
@@ -542,8 +634,8 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
           )}
         </div>
       ),
-    },
-    {
+    }] : []),
+    ...(isAI ? [{
       id: 'references',
       label: 'References',
       content: (
@@ -597,9 +689,11 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
           )}
         </div>
       ),
-    },
-    { id: 'questions', label: 'Questions', content: questionTabContent },
-    { id: 'preview', label: 'Preview', content: previewTabContent },
+    }] : []),
+    ...(isAI ? [
+      { id: 'questions', label: 'Questions', content: questionTabContent },
+      { id: 'preview', label: 'Preview', content: previewTabContent },
+    ] : []),
   ];
 
   return (
@@ -641,6 +735,17 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
             />
           </div>
         </Modal>
+      )}
+
+      {showCustomImageSelector && (
+        <CustomImageSelector
+          show={showCustomImageSelector}
+          itemId={item.id}
+          projectId={item.projectId}
+          selectedImageId={customImageId}
+          onSelect={handleSelectCustomImage}
+          onClose={() => setShowCustomImageSelector(false)}
+        />
       )}
 
       {deleteReferenceTarget && (

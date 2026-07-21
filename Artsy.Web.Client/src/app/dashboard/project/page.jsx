@@ -11,6 +11,7 @@ import CollectionsSection from './components/CollectionsSection';
 import ProjectChecklist from './components/ProjectChecklist';
 import ArtworksSection from './components/ArtworksSection';
 import QuestionsSection from './components/QuestionsSection';
+import PublishingSection from './components/PublishingSection';
 import ProductsSection from './components/ProductsSection';
 
 export default function DashboardProject() {
@@ -109,7 +110,7 @@ export default function DashboardProject() {
         </Message>
       )}
 
-      {!isComplete && <ProjectChecklist checklist={checklist} />}
+      <ProjectChecklist checklist={checklist} />
       <CollectionsSection projectId={projectId} showNewButton={!!isComplete} />
 
       <hr className="border-gray-200 dark:border-gray-700 mb-8" />
@@ -131,6 +132,14 @@ export default function DashboardProject() {
       <QuestionsSection
         projectId={projectId}
         onChecklistChanged={fetchChecklist}
+      />
+
+      <hr className="border-gray-200 dark:border-gray-700 mb-8" />
+
+      <PublishingSection
+        projectId={projectId}
+        project={project}
+        onProjectUpdated={(updated) => setProject(updated)}
       />
     </div>
   );

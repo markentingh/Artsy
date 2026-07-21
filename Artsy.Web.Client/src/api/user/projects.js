@@ -21,6 +21,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     getItemArtwork: (itemId) => api.get(`${apiPath}/get-item-artwork?itemId=${itemId}`),
     updateItemPrompt: (request) => api.post(`${apiPath}/update-item-prompt`, request),
     updateItemImageModel: (request) => api.post(`${apiPath}/update-item-image-model`, request),
+    updateItemArtworkType: (request) => api.post(`${apiPath}/update-item-artwork-type`, request),
     getItemPreviews: (itemId) => api.get(`${apiPath}/get-item-previews?itemId=${itemId}`),
     generateItemPreview: (request) => api.post(`${apiPath}/generate-item-preview`, request),
     getItemPreviewUrl: (itemId, previewId, thumb = false) => `${apiPath}/item/${itemId}/preview/${previewId}${thumb ? '?thumb=true' : ''}`,
@@ -52,7 +53,8 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     getCollectionArtworkUrl: (collectionId, artworkId, index) => `${apiPath}/collection/${collectionId}/artwork/${artworkId}/${index}`,
     create: (project) => api.post(`${apiPath}/create`, project),
     updateTitle: (request) => api.post(`${apiPath}/update-title`, request),
-    updateKey: (request) => api.post(`${apiPath}/update-key`, request)
+    updateKey: (request) => api.post(`${apiPath}/update-key`, request),
+    updatePublishToPrintify: (request) => api.post(`${apiPath}/update-publish-to-printify`, request)
   };
 });
 

@@ -7,3 +7,6 @@ CREATE TABLE IF NOT EXISTS public."ProjectItemArtwork"
     "ImageModelJson" TEXT NOT NULL DEFAULT '',
     "Prompt" TEXT NOT NULL DEFAULT ''
 );
+
+ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "ArtworkType" VARCHAR(16) NOT NULL DEFAULT 'ai';
+ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "CustomImageId" UUID NULL;

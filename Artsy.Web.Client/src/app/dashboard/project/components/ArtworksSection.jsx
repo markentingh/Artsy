@@ -192,6 +192,9 @@ export default function ArtworksSection({ projectId, onArtworkChanged }) {
                   <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                     {item.productCount > 0 && <span>{item.productCount} {item.productCount === 1 ? 'Product' : 'Products'}</span>}
                     {item.questionCount > 0 && <span>{item.questionCount} {item.questionCount === 1 ? 'Question' : 'Questions'}</span>}
+                    {item.socialMedia && (
+                      <Icon name="share" className="text-green-500" title="Social Media enabled" />
+                    )}
                   </div>
                   <button
                     type="button"

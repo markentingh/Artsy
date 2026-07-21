@@ -8,5 +8,7 @@ namespace Artsy.Data.Entities.Projects
         public string ImageModel { get; set; } = "";
         public string ImageModelJson { get; set; } = "";
         public string Prompt { get; set; } = "";
+        public string ArtworkType { get; set; } = "ai";
+        public Guid? CustomImageId { get; set; }
     }
 }

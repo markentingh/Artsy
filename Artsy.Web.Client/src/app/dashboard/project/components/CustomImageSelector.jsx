@@ -45,13 +45,18 @@ export default function CustomImageSelector({ show, itemId, projectId, selectedI
     setUploading(true);
     setMessage(null);
     try {
+      let lastUploaded = null;
       for (const file of files) {
         const response = await uploadItemReference(itemId, file);
         if (response.data.success) {
+          lastUploaded = response.data.data;
           setImages((prev) => [...prev, response.data.data]);
         } else {
           setMessage({ type: 'error', text: response.data.message || 'Failed to upload image' });
         }
+      }
+      if (lastUploaded && onSelect) {
+        onSelect(lastUploaded);
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to upload image' });

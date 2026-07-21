@@ -9,6 +9,7 @@ namespace Artsy.Data.Entities.Projects
         public string Key { get; set; } = "";
         public string Color { get; set; } = "";
         public int Status { get; set; }
+        public bool PublishToPrintify { get; set; } = true;
         public DateTime Created { get; set; }
     }
 }
