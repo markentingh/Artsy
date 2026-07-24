@@ -8,6 +8,7 @@ import Message from '@/components/ui/message';
 import Icon from '@/components/ui/icon';
 import Input from '@/components/forms/input';
 import ButtonOutline from '@/components/ui/button-outline';
+import Button from '@/components/ui/button';
 import Spinner from '@/components/ui/spinner';
 import ThemeToggle from '@/components/ui/theme-toggle';
 
@@ -200,12 +201,9 @@ export default function SignUp() {
             <Spinner />
           </div>
         ) : (
-          <button
-            type="submit"
-            className="w-full py-2 px-4 bg-primary-600 text-white rounded hover:bg-primary-700 transition"
-          >
+          <Button type="submit" className="w-full">
             Create Account
-          </button>
+          </Button>
         )}
 
         <div className="mt-6 flex items-center">

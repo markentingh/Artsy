@@ -23,9 +23,13 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddHttpClient();
-builder.Services.AddHttpClient("ImageGeneration", c => c.Timeout = TimeSpan.FromMinutes(2));
+builder.Services.AddHttpClient("ImageGeneration", c => c.Timeout = TimeSpan.FromMinutes(5));
+builder.Services.AddHttpClient("Upscaler", c => c.Timeout = TimeSpan.FromMinutes(5));
 builder.Services.Configure<Artsy.API.Services.ImageGenerationOptions>(builder.Configuration.GetSection("ImageGeneration"));
-builder.Services.AddTransient<Artsy.API.Services.IImageGeneration, Artsy.API.Services.ImageGeneration>();
+builder.Services.Configure<Artsy.API.Services.UpscalerOptions>(builder.Configuration.GetSection("Upscaler"));
+builder.Services.AddTransient<Artsy.API.Services.IImageGeneration, Artsy.API.Services.ImageGenerationForOpenAI>();
+builder.Services.AddTransient<Artsy.API.Services.IImageUpscaler, Artsy.API.Services.ImageUpscaler>();
+builder.Services.AddTransient<Artsy.API.Services.IImageTokens>(sp => new Artsy.API.Services.ImageTokensForOpenAI(0m, 0m, 0m));
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHealthChecks();
 builder.Services.AddSignalR();

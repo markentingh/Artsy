@@ -16,18 +16,18 @@ namespace Artsy.Data.Repositories.Projects
 
         public async Task<IEnumerable<ProjectBlueprints>> GetByProjectIdAsync(Guid projectId)
         {
-            const string query = @"SELECT * FROM public.""ProjectBlueprints"" WHERE ""ProjectId"" = @projectId ORDER BY ""Name""";
+            const string query = @"SELECT * FROM public.""ProjectBlueprints"" WHERE ""ProjectId"" = @projectId AND ""Status"" = 1 ORDER BY ""Name""";
             return await _dbConnection.QueryAsync<ProjectBlueprints>(query, new { projectId });
         }
 
         public async Task<IEnumerable<ProjectBlueprintListDto>> GetListByProjectIdAsync(Guid projectId)
         {
             const string query = @"
-                SELECT b.""Id"", b.""BlueprintId"", b.""Name"", b.""BlueprintJson"", b.""PlacementJson"",
+                SELECT b.""Id"", b.""BlueprintId"", b.""Name"", b.""BlueprintJson"", b.""PlacementJson"", b.""Prompt"",
                     COALESCE(p.""ImageCount"", 0) AS ""ImageCount""
                 FROM public.""ProjectBlueprints"" b
                 LEFT JOIN public.""PrintifyBlueprints"" p ON p.""BlueprintId"" = b.""BlueprintId""
-                WHERE b.""ProjectId"" = @projectId
+                WHERE b.""ProjectId"" = @projectId AND b.""Status"" = 1
                 ORDER BY b.""Name""";
             return await _dbConnection.QueryAsync<ProjectBlueprintListDto>(query, new { projectId });
         }
@@ -42,8 +42,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             blueprint.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectBlueprints"" (""Id"", ""ProjectId"", ""BlueprintId"", ""Name"", ""BlueprintJson"", ""PlacementJson"")
-                VALUES (@Id, @ProjectId, @BlueprintId, @Name, @BlueprintJson, @PlacementJson)
+                INSERT INTO public.""ProjectBlueprints"" (""Id"", ""ProjectId"", ""BlueprintId"", ""Name"", ""BlueprintJson"", ""PlacementJson"", ""Prompt"")
+                VALUES (@Id, @ProjectId, @BlueprintId, @Name, @BlueprintJson, @PlacementJson, @Prompt)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectBlueprints>(query, blueprint);
         }
@@ -52,7 +52,7 @@ namespace Artsy.Data.Repositories.Projects
         {
             const string query = @"
                 UPDATE public.""ProjectBlueprints""
-                SET ""BlueprintId"" = @BlueprintId, ""Name"" = @Name, ""BlueprintJson"" = @BlueprintJson, ""PlacementJson"" = @PlacementJson
+                SET ""BlueprintId"" = @BlueprintId, ""Name"" = @Name, ""BlueprintJson"" = @BlueprintJson, ""PlacementJson"" = @PlacementJson, ""Prompt"" = @Prompt
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, blueprint);
         }
@@ -65,8 +65,9 @@ namespace Artsy.Data.Repositories.Projects
 
         public async Task DeleteAsync(Guid id)
         {
-            const string query = @"DELETE FROM public.""ProjectBlueprints"" WHERE ""Id"" = @id";
+            const string query = @"UPDATE public.""ProjectBlueprints"" SET ""Status"" = 0 WHERE ""Id"" = @id";
             await _dbConnection.ExecuteAsync(query, new { id });
         }
     }
 }
+

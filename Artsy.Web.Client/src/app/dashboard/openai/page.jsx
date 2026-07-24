@@ -2,11 +2,16 @@ import React, { useState, useEffect } from 'react';
 import Modal from '@/components/ui/modal';
 import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
+import Button from '@/components/ui/button';
+import ButtonIcon from '@/components/ui/button-icon';
 import Input from '@/components/forms/input';
 import Select from '@/components/forms/select';
 import TextArea from '@/components/forms/textarea';
 import Checkbox from '@/components/forms/checkbox';
 import Message from '@/components/ui/message';
+import Tabs from '@/components/ui/tabs';
+import Checked from '@/components/ui/checked';
+import ImageGenerationModal from './ImageGenerationModal';
 import { useSession } from '@/context/session';
 import { OpenAI } from '@/api/admin/openai';
 
@@ -17,7 +22,7 @@ const LLM_TYPES = [
 
 export default function AdminOpenAI() {
     const session = useSession();
-    const { getAll, add, update, setEnabled, setPreferred, delete: deleteModel } = OpenAI(session);
+    const { getAll, add, update, setEnabled, setPreferred, delete: deleteModel, getImageModels, saveImageModel, toggleImageModelActive, deleteImageModel } = OpenAI(session);
 
     const getEmptyForm = () => ({
         modelId: 0,
@@ -38,8 +43,14 @@ export default function AdminOpenAI() {
     const [error, setError] = useState(null);
     const [message, setMessage] = useState(null);
 
+    const [imageModels, setImageModels] = useState([]);
+    const [showImageModal, setShowImageModal] = useState(false);
+    const [editingImageModel, setEditingImageModel] = useState(null);
+    const [imageError, setImageError] = useState(null);
+
     useEffect(() => {
         fetchModels();
+        fetchImageModels();
     }, []);
 
     const fetchModels = () => {
@@ -140,8 +151,66 @@ export default function AdminOpenAI() {
         setForm(prev => ({ ...prev, [field]: value }));
     };
 
-    return (
-        <div className="admin-openai">
+    const fetchImageModels = () => {
+        getImageModels().then(response => {
+            if (response.data.success) {
+                setImageModels(response.data.data || []);
+            }
+        }).catch(error => {
+            console.error('Error fetching image generation models:', error);
+            setMessage({ type: 'error', text: 'Failed to fetch image generation models' });
+        });
+    };
+
+    const handleImageModelClick = (model) => {
+        setEditingImageModel(model);
+        setImageError(null);
+        setShowImageModal(true);
+    };
+
+    const handleAddImageModel = () => {
+        setEditingImageModel(null);
+        setImageError(null);
+        setShowImageModal(true);
+    };
+
+    const handleImageModelSave = (payload) => {
+        saveImageModel(payload).then(response => {
+            if (response.data.success) {
+                fetchImageModels();
+                setShowImageModal(false);
+            } else {
+                setImageError(response.data.message || 'Failed to save image model');
+            }
+        }).catch(error => {
+            console.error('Error saving image model:', error);
+            setImageError('Failed to save image model');
+        });
+    };
+
+    const handleImageModelDelete = (model) => {
+        if (!confirm(`Are you sure you want to delete the model "${model.name}"?`)) return;
+        deleteImageModel(model.id).then(response => {
+            if (response.data.success) {
+                fetchImageModels();
+            }
+        }).catch(error => {
+            console.error('Error deleting image model:', error);
+        });
+    };
+
+    const handleToggleImageModelActive = (model) => {
+        toggleImageModelActive(model.id, !model.active).then(response => {
+            if (response.data.success) {
+                fetchImageModels();
+            }
+        }).catch(error => {
+            console.error('Error toggling image model active:', error);
+        });
+    };
+
+    const llmEndpointsContent = (
+        <div>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl">OpenAI Endpoints</h1>
                 <ButtonOutline onClick={handleAdd}>
@@ -210,9 +279,9 @@ export default function AdminOpenAI() {
                         checked={form.preferred}
                         onChange={(e) => handleFormChange('preferred', e.target.checked)}
                     />
-                    <div className="buttons">
-                        <button type="button" onClick={handleSave}>Save</button>
-                        <button type="button" onClick={() => setShowModal(false)} className="cancel">Cancel</button>
+                    <div className="buttons flex gap-3">
+                        <Button onClick={handleSave}>Save</Button>
+                        <Button color="gray" className="cancel" onClick={() => setShowModal(false)}>Cancel</Button>
                     </div>
                 </Modal>
             )}
@@ -258,22 +327,8 @@ export default function AdminOpenAI() {
                                     >
                                         <Icon name={model.preferred ? 'star_shine' : 'star'} />
                                     </button>
-                                    <button
-                                        type="button"
-                                        className="icon"
-                                        onClick={() => handleEdit(model)}
-                                        title="Edit model"
-                                    >
-                                        <Icon name="edit" />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="icon"
-                                        onClick={() => handleDelete(model)}
-                                        title="Delete model"
-                                    >
-                                        <Icon name="delete" />
-                                    </button>
+                                    <ButtonIcon name="edit" onClick={() => handleEdit(model)} title="Edit model" />
+                                    <ButtonIcon name="delete" color="red" onClick={() => handleDelete(model)} title="Delete model" />
                                 </td>
                             </tr>
                         ))}
@@ -287,6 +342,95 @@ export default function AdminOpenAI() {
                     </tbody>
                 </table>
             </div>
+        </div>
+    );
+
+    const imageGenerationContent = (
+        <div>
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl">Image Generation</h1>
+                <ButtonOutline onClick={handleAddImageModel}>
+                    <Icon name="add" />
+                    <span className="ml-2">Add Model</span>
+                </ButtonOutline>
+            </div>
+
+            {message && (
+                <Message type={message.type} onClose={() => setMessage(null)}>
+                    {message.text}
+                </Message>
+            )}
+
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                    <thead className="bg-gray-100 dark:bg-gray-700">
+                        <tr>
+                            <th className="px-4 py-3 w-12"></th>
+                            <th className="px-4 py-3">Name</th>
+                            <th className="px-4 py-3">Model</th>
+                            <th className="px-4 py-3">CPM Text Input</th>
+                            <th className="px-4 py-3">CPM Image Input</th>
+                            <th className="px-4 py-3">CPM Output</th>
+                            <th className="px-4 py-3">Token Conversion</th>
+                            <th className="px-4 py-3 w-24"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {imageModels.map(model => (
+                            <tr
+                                key={model.modelKey}
+                                onClick={() => handleImageModelClick(model)}
+                                className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                            >
+                                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                    <div className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleToggleImageModelActive(model); }}>
+                                        <Checked checked={model.active !== false} />
+                                    </div>
+                                </td>
+                                <td className="px-4 py-3">{model.name || '(not configured)'}</td>
+                                <td className="px-4 py-3">{model.model || '-'}</td>
+                                <td className="px-4 py-3">${model.cpmitTokens}</td>
+                                <td className="px-4 py-3">${model.cpmiiTokens}</td>
+                                <td className="px-4 py-3">${model.cpmoTokens}</td>
+                                <td className="px-4 py-3">1000 * {model.tokenConversion || 0} = {(1000 * (model.tokenConversion || 0)).toLocaleString()}</td>
+                                <td className="px-4 py-3 space-x-2" onClick={(e) => e.stopPropagation()}>
+                                    <ButtonIcon name="edit" onClick={() => handleImageModelClick(model)} title="Edit model" />
+                                    {model.id && (
+                                        <ButtonIcon name="delete" color="red" onClick={() => handleImageModelDelete(model)} title="Delete model" />
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                        {imageModels.length === 0 && (
+                            <tr>
+                                <td colSpan="8" className="text-center py-8 text-gray-600 dark:text-gray-400">
+                                    No image generation models configured.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {showImageModal && (
+                <ImageGenerationModal
+                    show={showImageModal}
+                    model={editingImageModel}
+                    onClose={() => setShowImageModal(false)}
+                    onSave={handleImageModelSave}
+                />
+            )}
+        </div>
+    );
+
+    const tabs = [
+        { id: 'endpoints', label: 'LLM Endpoints', content: llmEndpointsContent },
+        { id: 'image-gen', label: 'Image Generation', content: imageGenerationContent },
+    ];
+
+    return (
+        <div className="admin-openai">
+            <Tabs tabs={tabs} defaultTab="endpoints" />
         </div>
     );
 }

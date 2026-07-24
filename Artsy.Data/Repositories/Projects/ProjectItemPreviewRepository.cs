@@ -16,20 +16,45 @@ namespace Artsy.Data.Repositories.Projects
 
         public async Task<IEnumerable<ProjectItemPreview>> GetByItemIdAsync(Guid itemId)
         {
-            const string query = @"SELECT * FROM public.""ProjectItemPreviews"" WHERE ""ItemId"" = @itemId ORDER BY ""Created"" DESC";
+            const string query = @"
+                SELECT p.* FROM public.""ProjectItemPreviews"" p
+                INNER JOIN public.""ProjectItems"" i ON i.""Id"" = p.""ItemId""
+                WHERE p.""ItemId"" = @itemId AND i.""Status"" = 1
+                ORDER BY p.""Created"" DESC";
             return await _dbConnection.QueryAsync<ProjectItemPreview>(query, new { itemId });
         }
 
         public async Task<IEnumerable<ProjectItemPreview>> GetByProjectIdAsync(Guid projectId)
         {
-            const string query = @"SELECT * FROM public.""ProjectItemPreviews"" WHERE ""ProjectId"" = @projectId ORDER BY ""Created"" DESC";
+            const string query = @"
+                SELECT p.* FROM public.""ProjectItemPreviews"" p
+                INNER JOIN public.""ProjectItems"" i ON i.""Id"" = p.""ItemId""
+                WHERE p.""ProjectId"" = @projectId AND i.""Status"" = 1
+                ORDER BY p.""Created"" DESC";
             return await _dbConnection.QueryAsync<ProjectItemPreview>(query, new { projectId });
         }
 
         public async Task<IEnumerable<ProjectItemThumbnailDto>> GetThumbnailsByProjectIdAsync(Guid projectId)
         {
-            const string query = @"SELECT ""Id"", ""ItemId"" FROM public.""ProjectItemPreviews"" WHERE ""ProjectId"" = @projectId ORDER BY ""Created"" DESC";
+            const string query = @"
+                SELECT p.""Id"", p.""ItemId"" FROM public.""ProjectItemPreviews"" p
+                INNER JOIN public.""ProjectItems"" i ON i.""Id"" = p.""ItemId""
+                WHERE p.""ProjectId"" = @projectId AND i.""Status"" = 1
+                ORDER BY p.""Created"" DESC";
             return await _dbConnection.QueryAsync<ProjectItemThumbnailDto>(query, new { projectId });
+        }
+
+        public async Task<IEnumerable<ProjectItemThumbnailDto>> GetThumbnailsByProjectIdsAsync(Guid[] projectIds, int length = 5)
+        {
+            const string query = @"
+                WITH ranked AS (
+                    SELECT p.""Id"", p.""ItemId"", p.""ProjectId"", ROW_NUMBER() OVER (PARTITION BY p.""ProjectId"" ORDER BY p.""Created"" DESC) AS rn
+                    FROM public.""ProjectItemPreviews"" p
+                    INNER JOIN public.""ProjectItems"" i ON i.""Id"" = p.""ItemId""
+                    WHERE p.""ProjectId"" = ANY(@projectIds) AND i.""Status"" = 1
+                )
+                SELECT ""Id"", ""ItemId"", ""ProjectId"" FROM ranked WHERE rn <= @length";
+            return await _dbConnection.QueryAsync<ProjectItemThumbnailDto>(query, new { projectIds, length });
         }
 
         public async Task<ProjectItemPreview?> GetByIdAsync(Guid id)

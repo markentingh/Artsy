@@ -6,6 +6,20 @@ const instance = axios.create({
   }
 });
 
+instance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/account/login')) {
+        window.location.href = '/account/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export function UseAxios(session) {
   const { token } = session || {};
 

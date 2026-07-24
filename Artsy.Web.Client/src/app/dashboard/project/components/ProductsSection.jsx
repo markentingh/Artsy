@@ -4,28 +4,46 @@ import { Projects } from '@/api/user/projects';
 import { Printify } from '@/api/user/printify';
 import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
+import ButtonIcon from '@/components/ui/button-icon';
 import Carousel from '@/components/ui/carousel';
+import Tooltip from '@/components/ui/tooltip';
 import Message from '@/components/ui/message';
+import Checked from '@/components/ui/checked';
+import ConfirmModal from '@/components/ui/confirm-modal';
 import FindPrintifyBlueprintModal from './FindPrintifyBlueprintModal';
 import ConfigureProductBlueprint from './ConfigureProductBlueprint';
 
 export default function ProductsSection({ projectId, onProductsChanged }) {
   const session = useSession();
   const { getBlueprints, createBlueprint, deleteBlueprint, updateBlueprint, getItems, getItemPreviews, getItemPreviewUrl } = Projects(session);
-  const { getBlueprintImageUrl } = Printify(session);
+  const { getBlueprintImageUrl, getBlueprintImages } = Printify(session);
 
   const [blueprints, setBlueprints] = useState([]);
+  const [blueprintImageMap, setBlueprintImageMap] = useState({});
   const [mount, setMount] = useState(false);
   const [showFindBlueprint, setShowFindBlueprint] = useState(false);
   const [configBlueprint, setConfigBlueprint] = useState(null);
   const [editingBlueprint, setEditingBlueprint] = useState(null);
   const [message, setMessage] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const fetchBlueprints = async () => {
     try {
       const response = await getBlueprints(projectId);
       if (response.data.success) {
-        setBlueprints(response.data.data || []);
+        const bps = response.data.data || [];
+        setBlueprints(bps);
+
+        const imgMap = {};
+        for (const bp of bps) {
+          try {
+            const imgResp = await getBlueprintImages(bp.blueprintId);
+            if (imgResp.data.success) {
+              imgMap[bp.blueprintId] = imgResp.data.data || [];
+            }
+          } catch { /* ignore */ }
+        }
+        setBlueprintImageMap(imgMap);
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to load products' });
       }
@@ -51,9 +69,15 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
     setConfigBlueprint({ id: bp.blueprintId, title: bp.name });
   };
 
-  const handleDeleteBlueprint = async (bp) => {
+  const handleDeleteBlueprint = (bp, e) => {
+    e.stopPropagation();
+    setDeleteTarget(bp);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      const resp = await deleteBlueprint({ id: bp.id });
+      const resp = await deleteBlueprint({ id: deleteTarget.id });
       if (resp.data.success) {
         await fetchBlueprints();
         if (onProductsChanged) onProductsChanged();
@@ -62,6 +86,8 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to delete product' });
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
@@ -108,6 +134,20 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
     }
   };
 
+  const isProductComplete = (bp) => {
+    if (!bp.placementJson) return false;
+    try {
+      const placements = JSON.parse(bp.placementJson);
+      if (!placements || Object.keys(placements).length === 0) return false;
+      return Object.values(placements).some(p => {
+        if (!p.source) return false;
+        if (p.source === 'item' && p.itemId) return true;
+        if (p.source === 'custom' && p.customImageId) return true;
+        return false;
+      });
+    } catch { return false; }
+  };
+
   if (!mount) {
     return (
       <div className="p-8 text-center">
@@ -125,7 +165,10 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
         </Message>
       )}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">Products</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="text-xl font-semibold">Products</h2>
+          <Tooltip text="Products are the physical items you'll sell, sourced from print-on-demand providers. Find a product blueprint, configure its variants and placements, and assign artworks to each print area." />
+        </div>
         <ButtonOutline onClick={() => setShowFindBlueprint(true)}>
           <Icon name="search" />
           <span className="ml-2">Find Product</span>
@@ -143,30 +186,37 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
               onClick={() => handleEditBlueprint(bp)}
               className="rounded-lg bg-white dark:bg-gray-800 shadow hover:shadow-md cursor-pointer overflow-hidden transition"
             >
-              <div className="aspect-square w-full">
+              <div className="aspect-square w-full relative">
                 <Carousel
-                  images={bp.imageCount > 0
-                    ? Array.from({ length: bp.imageCount }, (_, i) => getBlueprintImageUrl(bp.blueprintId, i, true))
-                    : []}
+                  images={(() => {
+                    const cfg = (() => {
+                      try { return JSON.parse(bp.blueprintJson || '{}'); } catch { return {}; }
+                    })();
+                    const selectedVariantIds = new Set((cfg.variantIds || []).map(String));
+                    const imgData = blueprintImageMap[bp.blueprintId] || [];
+                    const matchingIndices = imgData
+                      .filter(img => (img.variants || []).some(vId => selectedVariantIds.has(String(vId))))
+                      .map(img => img.imageIndex);
+                    const indices = matchingIndices.length > 0
+                      ? matchingIndices
+                      : Array.from({ length: bp.imageCount }, (_, i) => i);
+                    return indices.map(i => getBlueprintImageUrl(bp.blueprintId, i, true));
+                  })()}
                   alt={bp.name}
                   singleImage
                   infiniteScroll
                   placeholder="No Image"
                   imageClassName="!max-h-none w-full h-full object-cover"
                 />
+                <div className="absolute bottom-2 right-2">
+                  <Checked checked={isProductComplete(bp)} />
+                </div>
               </div>
               <div className="p-3">
                 <p className="text-sm font-medium truncate">{bp.name}</p>
                 <div className="flex items-center justify-between mt-1">
                   <span className="text-xs text-gray-500 dark:text-gray-400">Blueprint #{bp.blueprintId}</span>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); handleDeleteBlueprint(bp); }}
-                    className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                    title="Remove product"
-                  >
-                    <Icon name="delete" />
-                  </button>
+                  <ButtonIcon name="delete" color="red" onClick={(e) => handleDeleteBlueprint(bp, e)} title="Remove product" />
                 </div>
               </div>
             </div>
@@ -190,6 +240,14 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
           onClose={() => { setConfigBlueprint(null); setEditingBlueprint(null); }}
         />
       )}
+
+      <ConfirmModal
+        show={!!deleteTarget}
+        title="Delete Product"
+        message={`Do you really want to delete this product${deleteTarget ? ` (${deleteTarget.name})` : ''}? This cannot be undone.`}
+        onConfirm={handleConfirmDelete}
+        onClose={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

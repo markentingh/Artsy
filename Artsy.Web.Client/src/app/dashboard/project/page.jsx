@@ -5,6 +5,7 @@ import { Projects } from '@/api/user/projects';
 import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
 import Message from '@/components/ui/message';
+import ConfirmModal from '@/components/ui/confirm-modal';
 import EditableTitle from './components/EditableTitle';
 import EditableKey from './components/EditableKey';
 import CollectionsSection from './components/CollectionsSection';
@@ -18,12 +19,13 @@ export default function DashboardProject() {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const session = useSession();
-  const { getById, getChecklist } = Projects(session);
+  const { getById, getChecklist, archiveProject, unarchiveProject } = Projects(session);
 
   const [project, setProject] = useState(null);
   const [mount, setMount] = useState(false);
   const [message, setMessage] = useState(null);
   const [checklist, setChecklist] = useState(null);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
 
   const fetchProject = async () => {
     try {
@@ -74,6 +76,35 @@ export default function DashboardProject() {
     checklist.imageGenerationSetup &&
     checklist.productBlueprintsAdded;
 
+  const isArchived = project?.status === 0;
+
+  const handleArchive = async () => {
+    try {
+      const resp = await archiveProject({ projectId });
+      if (resp.data.success) {
+        setProject((prev) => prev ? { ...prev, status: 0 } : prev);
+        setShowArchiveModal(false);
+      } else {
+        setMessage({ type: 'error', text: resp.data.message || 'Failed to archive project' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to archive project' });
+    }
+  };
+
+  const handleUnarchive = async () => {
+    try {
+      const resp = await unarchiveProject({ projectId });
+      if (resp.data.success) {
+        setProject((prev) => prev ? { ...prev, status: 1 } : prev);
+      } else {
+        setMessage({ type: 'error', text: resp.data.message || 'Failed to unarchive project' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to unarchive project' });
+    }
+  };
+
   if (!mount) {
     return (
       <div className="p-8 text-center">
@@ -111,7 +142,7 @@ export default function DashboardProject() {
       )}
 
       <ProjectChecklist checklist={checklist} />
-      <CollectionsSection projectId={projectId} showNewButton={!!isComplete} />
+      <CollectionsSection projectId={projectId} project={project} showNewButton={!!isComplete} />
 
       <hr className="border-gray-200 dark:border-gray-700 mb-8" />
 
@@ -140,6 +171,34 @@ export default function DashboardProject() {
         projectId={projectId}
         project={project}
         onProjectUpdated={(updated) => setProject(updated)}
+      />
+
+      <hr className="border-gray-200 dark:border-gray-700 mb-8" />
+
+      <div className="flex justify-center mb-8">
+        {isArchived ? (
+          <ButtonOutline onClick={handleUnarchive}>
+            <Icon name="unarchive" />
+            <span className="ml-2">Unarchive</span>
+          </ButtonOutline>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowArchiveModal(true)}
+            className="px-4 py-2 border-2 border-red-500 text-red-500 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+          >
+            Archive Project
+          </button>
+        )}
+      </div>
+
+      <ConfirmModal
+        show={showArchiveModal}
+        title="Archive Project"
+        message="Do you really want to Archive this project? You can unarchive it later."
+        confirmLabel="Archive"
+        onConfirm={handleArchive}
+        onClose={() => setShowArchiveModal(false)}
       />
     </div>
   );

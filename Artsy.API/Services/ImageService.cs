@@ -17,6 +17,13 @@ namespace Artsy.API.Services
         Task SaveProjectItemReferenceAsync(Guid projectId, Guid referenceId, string extension, byte[] imageData);
         Task<byte[]> GetProjectItemReferenceAsync(Guid projectId, Guid referenceId, string extension, bool thumb = false);
         Task DeleteProjectItemReferenceAsync(Guid projectId, Guid referenceId, string extension);
+        Task SaveProjectCollectionArtworkAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkImageAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
+        Task SaveProjectCollectionArtworkFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
+        Task SaveProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId, byte[] imageData);
+        Task<byte[]> GetProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId);
+        Task<byte[]> GetImageGenerationAsync(Guid projectId, Guid? itemId, Guid? collectionId, Guid? blueprintId, string filename);
     }
 
     public class ImageService : IImageService
@@ -284,6 +291,108 @@ namespace Artsy.API.Services
             var blobClient = containerClient.GetBlobClient(relativePath);
 
             await blobClient.DeleteIfExistsAsync();
+        }
+
+        public async Task SaveProjectCollectionArtworkAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData)
+        {
+            var fileName = $"{artworkId}.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkImageAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId)
+        {
+            var fileName = $"{artworkId}.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveProjectCollectionArtworkFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData)
+        {
+            var fileName = $"{artworkId}_fullsize.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId)
+        {
+            var fileName = $"{artworkId}_fullsize.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId, byte[] imageData)
+        {
+            var fileName = $"{productImageId}.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "product-images", fileName);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId)
+        {
+            var fileName = $"{productImageId}.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "product-images", fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task<byte[]> GetImageGenerationAsync(Guid projectId, Guid? itemId, Guid? collectionId, Guid? blueprintId, string filename)
+        {
+            string relativePath;
+
+            if (collectionId.HasValue && itemId.HasValue)
+            {
+                relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.Value.ToString(), itemId.Value.ToString(), filename);
+            }
+            else if (itemId.HasValue)
+            {
+                relativePath = Path.Combine("projects", projectId.ToString(), "previews", itemId.Value.ToString(), filename);
+            }
+            else if (blueprintId.HasValue)
+            {
+                relativePath = Path.Combine("Printify", "catalog", blueprintId.Value.ToString(), filename);
+            }
+            else
+            {
+                relativePath = Path.Combine("projects", projectId.ToString(), filename);
+            }
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
         }
     }
 }

@@ -3,6 +3,7 @@ import { useSession } from '@/context/session';
 import { Trends, createTrendHubConnection } from '@/api/user/trends';
 import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
+import ButtonIcon from '@/components/ui/button-icon';
 import Input from '@/components/forms/input';
 import Message from '@/components/ui/message';
 import Sparkline from '@/components/ui/sparkline';
@@ -158,14 +159,7 @@ export default function DashboardTrends() {
 
         {!isResult && (
           <div className="flex justify-end mt-3">
-            <button
-              type="button"
-              onClick={(e) => handleDeleteTrend(e, trend.id)}
-              className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-              title="Delete trend"
-            >
-              <Icon name="delete" />
-            </button>
+            <ButtonIcon name="delete" color="red" onClick={(e) => handleDeleteTrend(e, trend.id)} title="Delete trend" />
           </div>
         )}
       </div>

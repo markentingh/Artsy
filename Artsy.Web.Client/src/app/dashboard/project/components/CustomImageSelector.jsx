@@ -6,6 +6,8 @@ import ButtonOutline from '@/components/ui/button-outline';
 import Icon from '@/components/ui/icon';
 import Spinner from '@/components/ui/spinner';
 import Message from '@/components/ui/message';
+import ConfirmModal from '@/components/ui/confirm-modal';
+import Button from '@/components/ui/button';
 
 export default function CustomImageSelector({ show, itemId, projectId, selectedImageId, onSelect, onClose }) {
   const session = useSession();
@@ -15,6 +17,7 @@ export default function CustomImageSelector({ show, itemId, projectId, selectedI
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -72,14 +75,22 @@ export default function CustomImageSelector({ show, itemId, projectId, selectedI
     }
   };
 
-  const handleDeleteImage = async (img) => {
+  const handleDeleteImage = (img, e) => {
+    e.stopPropagation();
+    setDeleteTarget(img);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      const resp = await deleteItemReference({ id: img.id });
+      const resp = await deleteItemReference({ id: deleteTarget.id });
       if (resp.data.success) {
-        setImages((prev) => prev.filter((i) => i.id !== img.id));
+        setImages((prev) => prev.filter((i) => i.id !== deleteTarget.id));
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to delete image' });
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
@@ -143,7 +154,7 @@ export default function CustomImageSelector({ show, itemId, projectId, selectedI
               />
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); handleDeleteImage(img); }}
+                onClick={(e) => handleDeleteImage(img, e)}
                 className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center bg-black/60 text-white rounded opacity-0 group-hover:opacity-100 transition"
                 title="Delete image"
               >
@@ -157,10 +168,18 @@ export default function CustomImageSelector({ show, itemId, projectId, selectedI
       )}
 
       <div className="buttons flex justify-end gap-2 mt-4">
-        <button className="cancel" onClick={onClose}>
+        <Button color="gray" className="cancel" onClick={onClose}>
           Cancel
-        </button>
+        </Button>
       </div>
+
+      <ConfirmModal
+        show={!!deleteTarget}
+        title="Delete Image"
+        message="Do you really want to delete this image? This cannot be undone."
+        onConfirm={handleConfirmDelete}
+        onClose={() => setDeleteTarget(null)}
+      />
     </Modal>
   );
 }

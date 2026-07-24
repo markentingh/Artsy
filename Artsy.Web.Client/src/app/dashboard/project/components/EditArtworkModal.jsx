@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
+import { ImageGeneration } from '@/api/user/imageGeneration';
 import Modal from '@/components/ui/modal';
 import Tabs from '@/components/ui/tabs';
 import Input from '@/components/forms/input';
@@ -12,10 +13,10 @@ import ButtonIcon from '@/components/ui/button-icon';
 import Icon from '@/components/ui/icon';
 import Spinner from '@/components/ui/spinner';
 import Message from '@/components/ui/message';
-import Carousel from '@/components/ui/carousel';
 import EditQuestionModal from './EditQuestionModal';
 import QuestionsAnswersModal from './QuestionsAnswersModal';
 import CustomImageSelector from './CustomImageSelector';
+import ConfirmModal from '@/components/ui/confirm-modal';
 
 export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const session = useSession();
@@ -24,23 +25,19 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     getItemArtwork, updateItemPrompt, updateItemImageModel, updateItemArtworkType,
     getQuestions, getItemQuestions, createItemQuestion, updateItemQuestion, deleteItemQuestion,
     getItemPreviews, generateItemPreview, getItemPreviewUrl,
-    getItemReferences, uploadItemReference, deleteItemReference, getItemReferenceUrl
+    getItemReferences, uploadItemReference, deleteItemReference, getItemReferenceUrl,
+    estimateItemTokens
   } = Projects(session);
 
   const [title, setTitle] = useState('');
   const [initialTitle, setInitialTitle] = useState('');
   const [socialMedia, setSocialMedia] = useState(false);
-  const [initialSocialMedia, setInitialSocialMedia] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [initialPrompt, setInitialPrompt] = useState('');
   const [imageModel, setImageModel] = useState('');
   const [initialImageModel, setInitialImageModel] = useState('');
-  const [imageModelJson, setImageModelJson] = useState('');
-  const [initialImageModelJson, setInitialImageModelJson] = useState('');
   const [artworkType, setArtworkType] = useState('ai');
-  const [initialArtworkType, setInitialArtworkType] = useState('ai');
   const [customImageId, setCustomImageId] = useState(null);
-  const [initialCustomImageId, setInitialCustomImageId] = useState(null);
   const [showCustomImageSelector, setShowCustomImageSelector] = useState(false);
 
   const [questions, setQuestions] = useState([]);
@@ -55,9 +52,16 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
 
   const [message, setMessage] = useState(null);
 
+  const [imageModels, setImageModels] = useState([]);
+  const [estimatedCost, setEstimatedCost] = useState(null);
+  const [estimating, setEstimating] = useState(false);
+  const estimateTimerRef = useRef(null);
+  const [previewEstimatedCost, setPreviewEstimatedCost] = useState(null);
+
   const [references, setReferences] = useState([]);
   const [uploadingReference, setUploadingReference] = useState(false);
   const [deleteReferenceTarget, setDeleteReferenceTarget] = useState(null);
+  const [deleteQuestionTargetId, setDeleteQuestionTargetId] = useState(null);
   const fileInputRef = useRef(null);
 
   const reset = () => {
@@ -66,17 +70,12 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setInitialTitle(itemTitle);
     const itemSocialMedia = item?.socialMedia || false;
     setSocialMedia(itemSocialMedia);
-    setInitialSocialMedia(itemSocialMedia);
     setPrompt('');
     setInitialPrompt('');
     setImageModel('');
     setInitialImageModel('');
-    setImageModelJson('');
-    setInitialImageModelJson('');
     setArtworkType('ai');
-    setInitialArtworkType('ai');
     setCustomImageId(null);
-    setInitialCustomImageId(null);
     setShowCustomImageSelector(false);
     setQuestions([]);
     setProjectQuestions([]);
@@ -106,12 +105,8 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
           setInitialPrompt(artworkPrompt);
           setImageModel(response.data.data?.imageModel || '');
           setInitialImageModel(response.data.data?.imageModel || '');
-          setImageModelJson(response.data.data?.imageModelJson || '');
-          setInitialImageModelJson(response.data.data?.imageModelJson || '');
           setArtworkType(response.data.data?.artworkType || 'ai');
-          setInitialArtworkType(response.data.data?.artworkType || 'ai');
           setCustomImageId(response.data.data?.customImageId || null);
-          setInitialCustomImageId(response.data.data?.customImageId || null);
         }
       } catch (error) {
         // Ignore load errors for optional prompt
@@ -165,11 +160,24 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       }
     };
 
+    const fetchImageModels = async () => {
+      try {
+        const { getActiveModels } = ImageGeneration(session);
+        const response = await getActiveModels();
+        if (response.data.success) {
+          setImageModels(response.data.data || []);
+        }
+      } catch (error) {
+        // Ignore load errors for optional image models
+      }
+    };
+
     fetchArtwork();
     fetchQuestions();
     fetchProjectQuestions();
     fetchPreviews();
     fetchReferences();
+    fetchImageModels();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show, item]);
 
@@ -197,7 +205,6 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       const response = await updateItemSocialMedia({ id: item.id, socialMedia: checked });
       if (response.data.success) {
         setMessage(null);
-        setInitialSocialMedia(checked);
         if (onChanged) onChanged(item.id);
       } else {
         setSocialMedia(!checked);
@@ -213,14 +220,62 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setImageModel(value);
   };
 
+  const estimateTokens = () => {
+    if (!imageModel || !item || artworkType !== 'ai') {
+      setEstimatedCost(null);
+      return;
+    }
+    setEstimating(true);
+    estimateItemTokens(item.id, 3840, 3840).then(response => {
+      if (response.data.success) {
+        setEstimatedCost(response.data.data);
+      } else {
+        setEstimatedCost(null);
+      }
+    }).catch(() => {
+      setEstimatedCost(null);
+    }).finally(() => {
+      setEstimating(false);
+    });
+  };
+
+  useEffect(() => {
+    if (!imageModel || artworkType !== 'ai') {
+      setEstimatedCost(null);
+      return;
+    }
+    if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current);
+    estimateTimerRef.current = setTimeout(() => {
+      estimateTokens();
+    }, 500);
+    return () => { if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageModel, prompt, references, artworkType]);
+
+  useEffect(() => {
+    if (!imageModel || !item || artworkType !== 'ai') {
+      setPreviewEstimatedCost(null);
+      return;
+    }
+    estimateItemTokens(item.id, 512, 512).then(response => {
+      if (response.data.success) {
+        setPreviewEstimatedCost(response.data.data);
+      } else {
+        setPreviewEstimatedCost(null);
+      }
+    }).catch(() => {
+      setPreviewEstimatedCost(null);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageModel, prompt, references, artworkType]);
+
   const handleSaveImageModel = async () => {
     if (!item) return;
     try {
-      const response = await updateItemImageModel({ itemId: item.id, imageModel, imageModelJson });
+      const response = await updateItemImageModel({ itemId: item.id, imageModel });
       if (response.data.success) {
         setMessage(null);
         setInitialImageModel(imageModel);
-        setInitialImageModelJson(imageModelJson);
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to save image model' });
       }
@@ -236,10 +291,8 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       const response = await updateItemArtworkType({ itemId: item.id, artworkType: value, customImageId: value === 'custom' ? customImageId : null });
       if (response.data.success) {
         setMessage(null);
-        setInitialArtworkType(value);
         if (value !== 'custom') {
           setCustomImageId(null);
-          setInitialCustomImageId(null);
         }
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to save artwork type' });
@@ -257,8 +310,6 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       const response = await updateItemArtworkType({ itemId: item.id, artworkType: 'custom', customImageId: img.id });
       if (response.data.success) {
         setMessage(null);
-        setInitialArtworkType('custom');
-        setInitialCustomImageId(img.id);
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to save custom image' });
       }
@@ -332,25 +383,12 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setShowAnswersModal(false);
     setMessage(null);
     try {
-      let modelRequest = {};
-      try {
-        modelRequest = JSON.parse(imageModelJson || '{}');
-      } catch {
-        modelRequest = {};
-      }
-      modelRequest.prompt = prompt;
-      modelRequest.size = '1024x1024';
-      modelRequest.quality = 'medium';
-
       const answerList = Object.entries(answers || {})
         .filter(([_, value]) => value && value.trim())
         .map(([questionId, answer]) => ({ questionId, answer }));
 
       const response = await generateItemPreview({
-        projectId: item.projectId,
         itemId: item.id,
-        imageModel,
-        imageModelJson: JSON.stringify(modelRequest),
         answers: answerList,
       });
       if (response.data.success) {
@@ -436,17 +474,23 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     }
   };
 
-  const handleDeleteQuestion = async (id) => {
-    if (!window.confirm('Delete this question?')) return;
+  const handleDeleteQuestion = (id) => {
+    setDeleteQuestionTargetId(id);
+  };
+
+  const handleConfirmDeleteQuestion = async () => {
+    if (!deleteQuestionTargetId) return;
     try {
-      const response = await deleteItemQuestion({ id });
+      const response = await deleteItemQuestion({ id: deleteQuestionTargetId });
       if (response.data.success) {
-        setQuestions((prev) => prev.filter((q) => q.id !== id));
+        setQuestions((prev) => prev.filter((q) => q.id !== deleteQuestionTargetId));
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to delete question' });
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to delete question' });
+    } finally {
+      setDeleteQuestionTargetId(null);
     }
   };
 
@@ -509,13 +553,18 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         </div>
       )}
       {artworkType !== 'custom' && (
-        <div className="mt-4">
+        <div className="mt-4 flex items-center justify-between">
           <Checkbox
             name="socialMedia"
             label="Publish to Social Media"
             checked={socialMedia}
             onChange={handleSocialMediaChange}
           />
+          {estimatedCost && (
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              {estimating ? 'Estimating...' : `Estimated Cost: ${estimatedCost.textInputTokens + estimatedCost.imageInputTokens + estimatedCost.imageOutputTokens} tokens`}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -541,7 +590,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
               <span>{question.question}</span>
               <div className="absolute top-1 right-1 flex gap-1">
                 <ButtonIcon name="edit" onClick={() => handleOpenEditQuestion(question)} title="Edit question" />
-                <ButtonIcon name="delete" onClick={() => handleDeleteQuestion(question.id)} title="Delete question" />
+                <ButtonIcon name="delete" color="red" onClick={() => handleDeleteQuestion(question.id)} title="Delete question" />
               </div>
             </div>
           ))}
@@ -563,7 +612,14 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const previewTabContent = (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300">Preview</h3>
+        <div className="flex items-center gap-4">
+          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300">Preview</h3>
+          {previewEstimatedCost && (
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              Estimated Cost: {previewEstimatedCost.textInputTokens + previewEstimatedCost.imageInputTokens + previewEstimatedCost.imageOutputTokens} tokens
+            </span>
+          )}
+        </div>
         <ButtonOutline onClick={handleGeneratePreview}>
           {isGenerating ? (
             <Icon name="progress_activity" spin className="mr-2" />
@@ -606,13 +662,16 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       content: (
         <div>
           <div className="mb-4">
-            <Select
-              name="imageModel"
-              label="Image Model"
-              options={[{ value: 'openai', label: 'OpenAI' }]}
-              value={imageModel}
-              onChange={(e) => handleImageModelChange(e.target.value)}
-            />
+            <div className="flex items-end gap-4">
+              <Select
+                name="imageModel"
+                label="Image Model"
+                options={imageModels.map(m => ({ value: m.modelKey, label: m.name }))}
+                value={imageModel}
+                onChange={(e) => handleImageModelChange(e.target.value)}
+                className="flex-1"
+              />
+            </div>
             {imageModelDirty && (
               <ButtonOutline onClick={handleSaveImageModel}>
                 Save Changes
@@ -764,6 +823,14 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
           </div>
         </Modal>
       )}
+
+      <ConfirmModal
+        show={!!deleteQuestionTargetId}
+        title="Delete Question"
+        message="Do you really want to delete this question? This cannot be undone."
+        onConfirm={handleConfirmDeleteQuestion}
+        onClose={() => setDeleteQuestionTargetId(null)}
+      />
     </Modal>
   );
 }

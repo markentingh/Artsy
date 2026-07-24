@@ -16,19 +16,31 @@ namespace Artsy.Data.Repositories.Projects
 
         public async Task<IEnumerable<ProjectItemReference>> GetByItemIdAsync(Guid itemId)
         {
-            const string query = @"SELECT * FROM public.""ProjectItemReferences"" WHERE ""ItemId"" = @itemId ORDER BY ""Created""";
+            const string query = @"
+                SELECT r.* FROM public.""ProjectItemReferences"" r
+                INNER JOIN public.""ProjectItems"" i ON i.""Id"" = r.""ItemId""
+                WHERE r.""ItemId"" = @itemId AND i.""Status"" = 1
+                ORDER BY r.""Created""";
             return await _dbConnection.QueryAsync<ProjectItemReference>(query, new { itemId });
         }
 
         public async Task<IEnumerable<ProjectItemReference>> GetByProjectIdAsync(Guid projectId)
         {
-            const string query = @"SELECT * FROM public.""ProjectItemReferences"" WHERE ""ProjectId"" = @projectId ORDER BY ""Created""";
+            const string query = @"
+                SELECT r.* FROM public.""ProjectItemReferences"" r
+                INNER JOIN public.""ProjectItems"" i ON i.""Id"" = r.""ItemId""
+                WHERE r.""ProjectId"" = @projectId AND i.""Status"" = 1
+                ORDER BY r.""Created""";
             return await _dbConnection.QueryAsync<ProjectItemReference>(query, new { projectId });
         }
 
         public async Task<IEnumerable<ProjectItemThumbnailDto>> GetThumbnailsByProjectIdAsync(Guid projectId)
         {
-            const string query = @"SELECT ""Id"", ""ItemId"" FROM public.""ProjectItemReferences"" WHERE ""ProjectId"" = @projectId ORDER BY ""Created""";
+            const string query = @"
+                SELECT r.""Id"", r.""ItemId"" FROM public.""ProjectItemReferences"" r
+                INNER JOIN public.""ProjectItems"" i ON i.""Id"" = r.""ItemId""
+                WHERE r.""ProjectId"" = @projectId AND i.""Status"" = 1
+                ORDER BY r.""Created""";
             return await _dbConnection.QueryAsync<ProjectItemThumbnailDto>(query, new { projectId });
         }
 

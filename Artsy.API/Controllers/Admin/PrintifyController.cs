@@ -338,8 +338,8 @@ namespace Artsy.API.Controllers.Admin
             {
                 var kw = keyword ?? "";
                 var br = brand ?? "all";
-                var results = await _printifyBlueprintRepo.SearchAsync(kw, br, start, length);
-                var total = await _printifyBlueprintRepo.GetCountAsync(kw, br);
+                var results = await _printifyBlueprintRepo.SearchAsync(kw, br, start, length, null);
+                var total = await _printifyBlueprintRepo.GetCountAsync(kw, br, null);
 
                 return Json(new ApiResponse
                 {
@@ -427,7 +427,8 @@ namespace Artsy.API.Controllers.Admin
                             model = cached.Model,
                             description = cached.Description,
                             imageCount = cached.ImageCount,
-                            published = cached.Published
+                            published = cached.Published,
+                            imagePrompt = cached.ImagePrompt ?? ""
                         },
                         printProviders
                     }
@@ -540,6 +541,12 @@ namespace Artsy.API.Controllers.Admin
                 {
                     var published = pubEl.GetBoolean();
                     await _printifyBlueprintRepo.UpdatePublishedAsync(blueprintId, published);
+                }
+
+                if (body.TryGetProperty("imagePrompt", out var promptEl))
+                {
+                    var imagePrompt = promptEl.GetString() ?? "";
+                    await _printifyBlueprintRepo.UpdateImagePromptAsync(blueprintId, imagePrompt);
                 }
 
                 return Json(new ApiResponse { success = true });

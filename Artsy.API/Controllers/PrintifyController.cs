@@ -26,6 +26,7 @@ namespace Artsy.API.Controllers
         readonly IPrintifyBlueprintPrintProviderRepository _printProviderRepo;
         readonly IPrintifyBlueprintVariantRepository _variantRepo;
         readonly IPrintifyBlueprintVariantPlaceholderRepository _placeholderRepo;
+        readonly IPrintifyBlueprintImageRepository _imageRepo;
         readonly IImageService _imageService;
 
         public PrintifyController(
@@ -36,6 +37,7 @@ namespace Artsy.API.Controllers
             IPrintifyBlueprintPrintProviderRepository printProviderRepo,
             IPrintifyBlueprintVariantRepository variantRepo,
             IPrintifyBlueprintVariantPlaceholderRepository placeholderRepo,
+            IPrintifyBlueprintImageRepository imageRepo,
             IImageService imageService)
         {
             _userRepository = userRepository;
@@ -45,6 +47,7 @@ namespace Artsy.API.Controllers
             _printProviderRepo = printProviderRepo;
             _variantRepo = variantRepo;
             _placeholderRepo = placeholderRepo;
+            _imageRepo = imageRepo;
             _imageService = imageService;
         }
 
@@ -217,8 +220,8 @@ namespace Artsy.API.Controllers
             {
                 var kw = keyword ?? "";
                 var br = brand ?? "all";
-                var results = await _printifyBlueprintRepo.SearchAsync(kw, br, start, length);
-                var total = await _printifyBlueprintRepo.GetCountAsync(kw, br);
+                var results = await _printifyBlueprintRepo.SearchAsync(kw, br, start, length, true);
+                var total = await _printifyBlueprintRepo.GetCountAsync(kw, br, true);
 
                 var blueprints = results.Select(bp => new
                 {
@@ -379,6 +382,33 @@ namespace Artsy.API.Controllers
                 if (bytes.Length == 0)
                     return NotFound();
                 return File(bytes, "image/jpeg");
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("blueprints/{blueprintId}/images")]
+        [Authorize]
+        public async Task<IActionResult> GetBlueprintImages(int blueprintId)
+        {
+            try
+            {
+                var images = await _imageRepo.GetByBlueprintIdAsync(blueprintId);
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = images.Select(img => new
+                    {
+                        id = img.Id,
+                        blueprintId = img.BlueprintId,
+                        imageIndex = img.ImageIndex,
+                        variants = JsonSerializer.Deserialize<int[]>(img.Variants) ?? Array.Empty<int>(),
+                        type = img.Type,
+                        position = img.Position
+                    })
+                });
             }
             catch (Exception ex)
             {

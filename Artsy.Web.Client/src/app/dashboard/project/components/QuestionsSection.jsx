@@ -4,8 +4,10 @@ import { Projects } from '@/api/user/projects';
 import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
 import ButtonIcon from '@/components/ui/button-icon';
+import Tooltip from '@/components/ui/tooltip';
 import EditQuestionModal from './EditQuestionModal';
 import Message from '@/components/ui/message';
+import ConfirmModal from '@/components/ui/confirm-modal';
 
 export default function QuestionsSection({ projectId, onChecklistChanged }) {
   const session = useSession();
@@ -16,6 +18,7 @@ export default function QuestionsSection({ projectId, onChecklistChanged }) {
   const [editingQuestionId, setEditingQuestionId] = useState(null);
   const [questionFormValue, setQuestionFormValue] = useState('');
   const [message, setMessage] = useState(null);
+  const [deleteTargetId, setDeleteTargetId] = useState(null);
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -84,18 +87,24 @@ export default function QuestionsSection({ projectId, onChecklistChanged }) {
     }
   };
 
-  const handleDeleteQuestion = async (id) => {
-    if (!window.confirm('Delete this question?')) return;
+  const handleDeleteQuestion = (id) => {
+    setDeleteTargetId(id);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTargetId) return;
     try {
-      const response = await deleteQuestion({ id });
+      const response = await deleteQuestion({ id: deleteTargetId });
       if (response.data.success) {
-        setQuestions((prev) => prev.filter((q) => q.id !== id));
+        setQuestions((prev) => prev.filter((q) => q.id !== deleteTargetId));
         if (onChecklistChanged) onChecklistChanged();
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to delete question' });
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to delete question' });
+    } finally {
+      setDeleteTargetId(null);
     }
   };
 
@@ -107,7 +116,10 @@ export default function QuestionsSection({ projectId, onChecklistChanged }) {
         </Message>
       )}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">Questions</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="text-xl font-semibold">Questions</h2>
+          <Tooltip text="Questions guide the AI when generating your artwork. Project questions apply to all artworks, while artwork-specific questions are asked during the collection wizard. Answers shape the style, context, and details of generated images." />
+        </div>
         <ButtonOutline onClick={handleOpenNewQuestion}>
           <Icon name="add" />
           <span className="ml-2">New Question</span>
@@ -132,7 +144,7 @@ export default function QuestionsSection({ projectId, onChecklistChanged }) {
               <p className="pr-2">{question.question}</p>
               <div className="absolute top-2 right-2 flex gap-1">
                 <ButtonIcon name="edit" onClick={() => handleOpenEditQuestion(question.id, question.question)} title="Edit question" />
-                <ButtonIcon name="delete" onClick={() => handleDeleteQuestion(question.id)} title="Delete question" />
+                <ButtonIcon name="delete" color="red" onClick={() => handleDeleteQuestion(question.id)} title="Delete question" />
               </div>
             </div>
           ))}
@@ -146,6 +158,14 @@ export default function QuestionsSection({ projectId, onChecklistChanged }) {
         onClose={handleCloseQuestionModal}
         onChange={setQuestionFormValue}
         onSave={handleSaveQuestion}
+      />
+
+      <ConfirmModal
+        show={!!deleteTargetId}
+        title="Delete Question"
+        message="Do you really want to delete this question? This cannot be undone."
+        onConfirm={handleConfirmDelete}
+        onClose={() => setDeleteTargetId(null)}
       />
     </div>
   );

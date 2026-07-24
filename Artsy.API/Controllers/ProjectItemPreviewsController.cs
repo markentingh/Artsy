@@ -4,7 +4,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Artsy.API.Models;
 using Artsy.API.Models.Projects;
+using Artsy.API.Services;
+using Artsy.Data.Entities;
 using Artsy.Data.Entities.Projects;
+using Artsy.Data.Interfaces;
 using Artsy.Data.Interfaces.Projects;
 
 namespace Artsy.API.Controllers
@@ -48,26 +51,28 @@ namespace Artsy.API.Controllers
             if (userId == Guid.Empty)
                 return Json(new ApiResponse { success = false, message = "Could not find user" });
 
-            if (request.ProjectId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Project ID is required." });
-
             if (request.ItemId == Guid.Empty)
                 return Json(new ApiResponse { success = false, message = "Item ID is required." });
 
-            if (string.IsNullOrWhiteSpace(request.ImageModel))
-                return Json(new ApiResponse { success = false, message = "Image model is required." });
-
             try
             {
-                var project = await _projectRepository.GetByIdAsync(request.ProjectId, userId);
+                var item = await _projectItemRepository.GetByIdAsync(request.ItemId);
+                if (item == null)
+                    return Json(new ApiResponse { success = false, message = "Item not found." });
+
+                var project = await _projectRepository.GetByIdAsync(item.ProjectId, userId);
                 if (project == null)
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
-                var item = await _projectItemRepository.GetByIdAsync(request.ItemId);
-                if (item == null || item.ProjectId != request.ProjectId)
-                    return Json(new ApiResponse { success = false, message = "Item not found." });
+                var artworkList = await _projectItemArtworkRepository.GetByItemIdAsync(request.ItemId);
+                var artwork = artworkList.FirstOrDefault();
+                if (artwork == null || string.IsNullOrWhiteSpace(artwork.ImageModel))
+                    return Json(new ApiResponse { success = false, message = "No image model configured for this item." });
 
-                var imageModelJson = request.ImageModelJson ?? "{}";
+                var genModel = await _imageGenerationModelRepository.GetByModelKeyAsync(artwork.ImageModel);
+                if (genModel == null)
+                    return Json(new ApiResponse { success = false, message = "Image model not found in database." });
+
                 var jsonOptions = new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true,
@@ -75,15 +80,14 @@ namespace Artsy.API.Controllers
                     DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
                 };
 
-                var modelRequest = JsonSerializer.Deserialize<OpenAIImageRequest>(imageModelJson, jsonOptions);
-                if (modelRequest == null)
-                    modelRequest = new OpenAIImageRequest();
+                var modelRequest = new OpenAIImageRequest();
+                modelRequest.Model = genModel.Model;
 
-                var promptBuilder = new StringBuilder(modelRequest.Prompt ?? "");
+                var promptBuilder = new StringBuilder(artwork.Prompt ?? "");
 
                 if (request.Answers != null && request.Answers.Count > 0)
                 {
-                    var projectQuestions = await _projectQuestionRepository.GetByProjectIdAsync(request.ProjectId);
+                    var projectQuestions = await _projectQuestionRepository.GetByProjectIdAsync(item.ProjectId);
                     var itemQuestions = await _projectItemQuestionRepository.GetByItemIdAsync(request.ItemId);
                     var questionLookup = new Dictionary<Guid, string>();
                     foreach (var q in projectQuestions)
@@ -109,6 +113,8 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Prompt is required to generate a preview." });
 
                 modelRequest.Prompt = finalPrompt;
+                modelRequest.Size = "1024x1024";
+                modelRequest.Quality = "low";
 
                 var references = await _projectItemReferenceRepository.GetByItemIdAsync(request.ItemId);
                 if (references != null && references.Any())
@@ -128,21 +134,37 @@ namespace Artsy.API.Controllers
                     }
                 }
 
-                imageModelJson = JsonSerializer.Serialize(modelRequest, jsonOptions);
+                var imageModelJson = JsonSerializer.Serialize(modelRequest, jsonOptions);
 
                 var preview = new ProjectItemPreview
                 {
-                    ProjectId = request.ProjectId,
+                    ProjectId = item.ProjectId,
                     ItemId = request.ItemId,
-                    ImageModel = request.ImageModel,
+                    ImageModel = artwork.ImageModel,
                     ImageModelJson = imageModelJson
                 };
                 var createdPreview = await _projectItemPreviewRepository.CreateAsync(preview);
 
                 try
                 {
-                    var imageBytes = await _imageGeneration.GenerateAsync(request.ImageModel, imageModelJson, "low");
-                    await _imageService.SaveProjectItemPreviewAsync(createdPreview.ProjectId, createdPreview.ItemId, createdPreview.Id, imageBytes);
+                    var imageGen = _imageGenerations.FirstOrDefault(g => g.ModelKey.Equals(artwork.ImageModel, StringComparison.OrdinalIgnoreCase));
+                    if (imageGen == null)
+                        throw new InvalidOperationException($"Image model '{artwork.ImageModel}' is not supported.");
+
+                    var genResult = await imageGen.GenerateAsync(artwork.ImageModel, imageModelJson, "low");
+                    await _imageService.SaveProjectItemPreviewAsync(createdPreview.ProjectId, createdPreview.ItemId, createdPreview.Id, genResult.ImageBytes);
+
+                    await _projectImageGenerationRepository.CreateAsync(new ProjectImageGeneration
+                    {
+                        ProjectId = item.ProjectId,
+                        ItemId = request.ItemId,
+                        InputTextTokens = genResult.InputTokens,
+                        InputImageTokens = 0,
+                        OutputTokens = genResult.OutputTokens,
+                        ImageModel = genModel.Model,
+                        Prompt = finalPrompt,
+                        Filename = $"{createdPreview.Id}.jpg"
+                    });
                 }
                 catch
                 {

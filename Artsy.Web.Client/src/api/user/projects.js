@@ -4,8 +4,12 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
   const apiPath = '/api/projects';
   return {
     getAll: () => api.get(`${apiPath}/get-all`),
+    getArchived: () => api.get(`${apiPath}/get-archived`),
+    archiveProject: (request) => api.post(`${apiPath}/archive-project`, request),
+    unarchiveProject: (request) => api.post(`${apiPath}/unarchive-project`, request),
     getById: (id) => api.get(`${apiPath}/get-by-id?id=${id}`),
     getCollections: (projectId) => api.get(`${apiPath}/get-collections?projectId=${projectId}`),
+    deleteCollection: (request) => api.post(`${apiPath}/delete-collection`, request),
     getItems: (projectId) => api.get(`${apiPath}/get-items?projectId=${projectId}`),
     createItem: (request) => api.post(`${apiPath}/create-item`, request),
     deleteItem: (request) => api.post(`${apiPath}/delete-item`, request),
@@ -21,6 +25,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     getItemArtwork: (itemId) => api.get(`${apiPath}/get-item-artwork?itemId=${itemId}`),
     updateItemPrompt: (request) => api.post(`${apiPath}/update-item-prompt`, request),
     updateItemImageModel: (request) => api.post(`${apiPath}/update-item-image-model`, request),
+    estimateItemTokens: (itemId, width, height) => api.get(`${apiPath}/estimate-item-tokens?itemId=${itemId}&width=${width}&height=${height}`),
     updateItemArtworkType: (request) => api.post(`${apiPath}/update-item-artwork-type`, request),
     getItemPreviews: (itemId) => api.get(`${apiPath}/get-item-previews?itemId=${itemId}`),
     generateItemPreview: (request) => api.post(`${apiPath}/generate-item-preview`, request),
@@ -54,7 +59,27 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     create: (project) => api.post(`${apiPath}/create`, project),
     updateTitle: (request) => api.post(`${apiPath}/update-title`, request),
     updateKey: (request) => api.post(`${apiPath}/update-key`, request),
-    updatePublishToPrintify: (request) => api.post(`${apiPath}/update-publish-to-printify`, request)
+    updatePublishToPrintify: (request) => api.post(`${apiPath}/update-publish-to-printify`, request),
+    createCollection: (request) => api.post(`${apiPath}/create-collection`, request),
+    getCollectionAnswers: (collectionId) => api.get(`${apiPath}/get-collection-answers?collectionId=${collectionId}`),
+    getCollectionArtwork: (collectionId) => api.get(`${apiPath}/get-collection-artwork?collectionId=${collectionId}`),
+    saveCollectionDraft: (request) => api.post(`${apiPath}/save-collection-draft`, request),
+    generateCollectionArtwork: (request) => api.post(`${apiPath}/generate-collection-artwork`, request),
+    upscaleArtwork: (request) => api.post(`${apiPath}/upscale-artwork`, request),
+    acceptCollectionArtwork: (request) => api.post(`${apiPath}/accept-collection-artwork`, request),
+    estimateCollectionTokens: (request) => api.post(`${apiPath}/estimate-collection-tokens`, request),
+    getCollectionArtworkImageUrl: (collectionId, itemId, artworkId, fullSize = false, cacheBust = null) => {
+      const params = [];
+      if (fullSize) params.push('fullSize=true');
+      if (cacheBust) params.push(`r=${cacheBust}`);
+      const qs = params.length > 0 ? `?${params.join('&')}` : '';
+      return `${apiPath}/collection/${collectionId}/item/${itemId}/artwork/${artworkId}${qs}`;
+    },
+    getProductImageVariants: (projectId, collectionId) => api.get(`${apiPath}/get-product-image-variants?projectId=${projectId}&collectionId=${collectionId}`),
+    generateProductImage: (request) => api.post(`${apiPath}/generate-product-image`, request),
+    acceptProductImage: (request) => api.post(`${apiPath}/accept-product-image`, request),
+    getProductImages: (collectionId) => api.get(`${apiPath}/collection/${collectionId}/product-images`),
+    getProductImageUrl: (collectionId, productImageId) => `${apiPath}/collection/${collectionId}/product-image/${productImageId}`
   };
 });
 

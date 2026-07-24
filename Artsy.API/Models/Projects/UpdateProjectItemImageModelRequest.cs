@@ -4,6 +4,5 @@ namespace Artsy.API.Models.Projects
     {
         public Guid ItemId { get; set; }
         public string ImageModel { get; set; } = "";
-        public string ImageModelJson { get; set; } = "";
     }
 }

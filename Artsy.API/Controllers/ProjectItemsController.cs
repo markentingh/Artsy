@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Artsy.API.Models;
 using Artsy.API.Models.Projects;
+using Artsy.API.Services;
 using Artsy.Data.Entities.Projects;
+using Artsy.Data.Interfaces;
 using Artsy.Data.Interfaces.Projects;
 
 namespace Artsy.API.Controllers
@@ -99,7 +101,6 @@ namespace Artsy.API.Controllers
                     ItemId = created.Id,
                     ProjectId = created.ProjectId,
                     ImageModel = "openai",
-                    ImageModelJson = "",
                     Prompt = ""
                 };
                 await _projectItemArtworkRepository.CreateAsync(artwork);
@@ -239,6 +240,84 @@ namespace Artsy.API.Controllers
 
                 await _projectItemRepository.ReorderAsync(request.ItemIds);
                 return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("estimate-item-tokens")]
+        public async Task<IActionResult> EstimateItemTokens([FromQuery] Guid itemId, [FromQuery] int width = 1024, [FromQuery] int height = 1024)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (itemId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Item ID is required." });
+
+            try
+            {
+                var item = await _projectItemRepository.GetByIdAsync(itemId);
+                if (item == null)
+                    return Json(new ApiResponse { success = false, message = "Item not found." });
+
+                var project = await _projectRepository.GetByIdAsync(item.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                var artworkList = await _projectItemArtworkRepository.GetByItemIdAsync(itemId);
+                var artwork = artworkList.FirstOrDefault();
+                if (artwork == null || string.IsNullOrWhiteSpace(artwork.ImageModel))
+                    return Json(new ApiResponse { success = false, message = "No image model configured for this item." });
+
+                var model = await _imageGenerationModelRepository.GetByModelKeyAsync(artwork.ImageModel);
+                if (model == null)
+                    return Json(new ApiResponse { success = false, message = "Image model not found." });
+
+                if (artwork.ImageModel != "openai")
+                    return Json(new ApiResponse
+                    {
+                        success = true,
+                        data = new
+                        {
+                            textInputTokens = 0,
+                            imageInputTokens = 0,
+                            imageOutputTokens = 0,
+                            estimatedCostUSD = 0m
+                        }
+                    });
+
+                var references = await _projectItemReferenceRepository.GetByItemIdAsync(itemId);
+                var inputImages = references.Select(r => (1024, 1024)).ToList() as IReadOnlyList<(int width, int height)>;
+
+                var estImageGen = _imageGenerations.FirstOrDefault(g => g.ModelKey.Equals(artwork.ImageModel, StringComparison.OrdinalIgnoreCase));
+                if (estImageGen == null)
+                    return Json(new ApiResponse { success = false, message = "Image model not supported." });
+
+                var tokenizer = estImageGen.CreateTokenizer(model);
+                var result = tokenizer.CalculateTokens(
+                    artwork.Prompt ?? "",
+                    width > 0 ? width : 1024,
+                    height > 0 ? height : 1024,
+                    "medium",
+                    inputImages
+                );
+
+                var conversion = model.TokenConversion > 0 ? (1000 * model.TokenConversion) : 1000;
+
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = new
+                    {
+                        textInputTokens = Math.Max(1, (int)(result.TextInputTokens / conversion)),
+                        imageInputTokens = Math.Max(1, (int)(result.ImageInputTokens / conversion)),
+                        imageOutputTokens = Math.Max(1, (int)(result.ImageOutputTokens / conversion)),
+                        estimatedCostUSD = result.EstimatedCostUSD
+                    }
+                });
             }
             catch (Exception ex)
             {

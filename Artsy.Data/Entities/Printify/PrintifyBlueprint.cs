@@ -9,6 +9,7 @@ namespace Artsy.Data.Entities
         public string Model { get; set; } = "";
         public int ImageCount { get; set; }
         public bool Published { get; set; }
+        public string ImagePrompt { get; set; } = "";
         public DateTime DateCreated { get; set; }
         public DateTime DateUpdated { get; set; }
     }

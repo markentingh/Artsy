@@ -1,7 +1,7 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import ButtonIcon from '@/components/ui/button-icon';
 
-export default function Carousel({ images = [], alt = '', onImageClick, singleImage = false, defaultIndex = 0, infiniteScroll = false, placeholder = '', imageClassName = '' }) {
+export default function Carousel({ images = [], alt = '', onImageClick, singleImage = false, defaultIndex = 0, infiniteScroll = false, placeholder = '', imageClassName = '', imageWidth = '8rem', imageHeight = '12rem', overlayRender }) {
   const scrollRef = useRef(null);
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
@@ -92,7 +92,7 @@ export default function Carousel({ images = [], alt = '', onImageClick, singleIm
     if (infiniteScroll && el.scrollLeft <= 1) {
       el.scrollTo({ left: el.scrollWidth, behavior: 'smooth' });
     } else {
-      el.scrollBy({ left: -el.clientWidth * 0.75, behavior: 'smooth' });
+      el.scrollBy({ left: -el.clientWidth * 1, behavior: 'smooth' });
     }
   };
 
@@ -103,7 +103,7 @@ export default function Carousel({ images = [], alt = '', onImageClick, singleIm
     if (infiniteScroll && el.scrollLeft + el.clientWidth >= el.scrollWidth - 1) {
       el.scrollTo({ left: 0, behavior: 'smooth' });
     } else {
-      el.scrollBy({ left: el.clientWidth * 0.75, behavior: 'smooth' });
+      el.scrollBy({ left: el.clientWidth * 1, behavior: 'smooth' });
     }
   };
 
@@ -120,15 +120,17 @@ export default function Carousel({ images = [], alt = '', onImageClick, singleIm
           style={{ gap: '1em' }}
         >
           {images.map((src, i) => (
-            <img
-              key={i}
-              src={src}
-              alt={`${alt} ${i + 1}`}
-              className="max-h-48 object-contain cursor-pointer"
-              style={{ width: '8rem', flexShrink: 0 }}
-              onLoad={updateScrollState}
-              onClick={() => onImageClick?.(src, i)}
-            />
+            <div key={i} className="relative flex-shrink-0" style={{ width: imageWidth, height: imageHeight }}>
+              <img
+                src={src}
+                alt={`${alt} ${i + 1}`}
+                className={`object-contain cursor-pointer ${imageClassName}`}
+                style={{ width: '100%', height: '100%' }}
+                onLoad={updateScrollState}
+                onClick={() => onImageClick?.(src, i)}
+              />
+              {overlayRender?.(i)}
+            </div>
           ))}
         </div>
       </div>

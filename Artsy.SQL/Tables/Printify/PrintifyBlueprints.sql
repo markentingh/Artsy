@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public."PrintifyBlueprints"
 );
 
 ALTER TABLE public."PrintifyBlueprints" ADD COLUMN IF NOT EXISTS "Published" BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public."PrintifyBlueprints" ADD COLUMN IF NOT EXISTS "ImagePrompt" TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_printify_blueprints_brand ON public."PrintifyBlueprints" ("Brand");
 CREATE INDEX IF NOT EXISTS idx_printify_blueprints_title ON public."PrintifyBlueprints" ("Title");

@@ -4,7 +4,9 @@ import { Projects } from '@/api/user/projects';
 import { Connections } from '@/api/user/connections';
 import Icon from '@/components/ui/icon';
 import Checked from '@/components/ui/checked';
+import Tooltip from '@/components/ui/tooltip';
 import Message from '@/components/ui/message';
+import Button from '@/components/ui/button';
 
 const platforms = [
   { key: 'printify', name: 'Printify', color: 'bg-green-500' }
@@ -121,14 +123,9 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
             Loading...
           </span>
         ) : !isConnected ? (
-          <button
-            type="button"
-            onClick={() => handleConnect(platform.key)}
-            disabled={isConnecting}
-            className="mt-auto px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <Button className="mt-auto" onClick={() => handleConnect(platform.key)} disabled={isConnecting}>
             {isConnecting ? 'Connecting...' : 'Connect'}
-          </button>
+          </Button>
         ) : (
           <>
             <p
@@ -158,7 +155,10 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
           {message.text}
         </Message>
       )}
-      <h2 className="text-xl font-semibold mb-4">Publishing</h2>
+      <div className="flex items-center gap-1 mb-4">
+        <h2 className="text-xl font-semibold">Publishing</h2>
+        <Tooltip text="Connect your print-on-demand platforms to publish your collections as real products. Once connected, toggle publishing to automatically send your collection artwork to the platform for listing and sale." />
+      </div>
       <div
         className="grid gap-6"
         style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(0, 20em))' }}

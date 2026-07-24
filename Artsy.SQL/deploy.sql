@@ -11,6 +11,7 @@ SELECT 'CREATE DATABASE artsy' WHERE NOT EXISTS (SELECT FROM pg_database WHERE d
 \i Tables/AppUsers.sql
 \i Tables/AppUserRoles.sql
 \i Tables/AppUserTokens.sql
+\i Tables/ImageGeneration.sql
 \i Tables/LLM_Models.sql
 \i Tables/Printify/PrintifyBlueprintPrintProviders.sql
 \i Tables/Printify/PrintifyBlueprintShipping.sql
@@ -18,14 +19,16 @@ SELECT 'CREATE DATABASE artsy' WHERE NOT EXISTS (SELECT FROM pg_database WHERE d
 \i Tables/Printify/PrintifyBlueprintVariants.sql
 \i Tables/Printify/PrintifyBlueprints.sql
 \i Tables/Printify/PrintifyBlueprintImages.sql
-\i Tables/Projects/ProjectCollections.sql
 \i Tables/Projects/Projects.sql
-\i Tables/Projects/ProjectItemBlueprints.sql
+\i Tables/Projects/ProjectBlueprints.sql
+\i Tables/Projects/ProjectCollections.sql
+\i Tables/Projects/ProjectCollectionProductImages.sql
 \i Tables/Projects/ProjectItems.sql
 \i Tables/Projects/ProjectCollectionAnswers.sql
 \i Tables/Projects/ProjectCollectionArtwork.sql
 \i Tables/Projects/ProjectCollectionChatHistory.sql
-\i Tables/Projects/ProjectCollectionItems.sql
+\i Tables/Projects/ProjectImageGenerations.sql
+\i Tables/Projects/ProjectImageUpscales.sql
 \i Tables/Projects/ProjectItemArtwork.sql
 \i Tables/Projects/ProjectItemPreviews.sql
 \i Tables/Projects/ProjectItemQuestions.sql

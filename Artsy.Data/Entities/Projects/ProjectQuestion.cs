@@ -6,5 +6,6 @@ namespace Artsy.Data.Entities.Projects
         public Guid ProjectId { get; set; }
         public int Index { get; set; }
         public string Question { get; set; } = "";
+        public int Status { get; set; } = 1;
     }
 }

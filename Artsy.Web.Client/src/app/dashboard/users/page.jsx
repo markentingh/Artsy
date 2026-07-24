@@ -5,6 +5,7 @@ import Modal from '@/components/ui/modal';
 import Icon from '@/components/ui/icon';
 import Input from '@/components/forms/input';
 import ButtonOutline from '@/components/ui/button-outline';
+import Button from '@/components/ui/button';
 import Pagination from '@/components/ui/pagination';
 import Message from '@/components/ui/message';
 
@@ -228,24 +229,15 @@ export default function DashboardUsers() {
             <p>{formatDate(selectedUser.lastLogin)}</p>
           </div>
           <div className="buttons flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handleSaveFullName}
-              disabled={fullName === selectedUser.fullName}
-              className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <Button onClick={handleSaveFullName} disabled={fullName === selectedUser.fullName}>
               Save Changes
-            </button>
+            </Button>
             <ButtonOutline onClick={handleSendPasswordReset}>
               Send Password Reset
             </ButtonOutline>
-            <button
-              type="button"
-              onClick={handleCloseModal}
-              className="cancel px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition"
-            >
+            <Button color="gray" className="cancel" onClick={handleCloseModal}>
               Cancel
-            </button>
+            </Button>
           </div>
         </Modal>
       )}

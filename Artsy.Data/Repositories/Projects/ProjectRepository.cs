@@ -16,7 +16,13 @@ namespace Artsy.Data.Repositories.Projects
 
         public async Task<IEnumerable<Project>> GetAllAsync(Guid appUserId)
         {
-            const string query = @"SELECT * FROM public.""Projects"" WHERE ""AppUserId"" = @appUserId ORDER BY ""Created"" DESC";
+            const string query = @"SELECT * FROM public.""Projects"" WHERE ""AppUserId"" = @appUserId AND ""Status"" = 1 ORDER BY ""Created"" DESC";
+            return await _dbConnection.QueryAsync<Project>(query, new { appUserId });
+        }
+
+        public async Task<IEnumerable<Project>> GetArchivedAsync(Guid appUserId)
+        {
+            const string query = @"SELECT * FROM public.""Projects"" WHERE ""AppUserId"" = @appUserId AND ""Status"" = 0 ORDER BY ""Created"" DESC";
             return await _dbConnection.QueryAsync<Project>(query, new { appUserId });
         }
 
@@ -62,7 +68,13 @@ namespace Artsy.Data.Repositories.Projects
 
         public async Task DeleteAsync(Guid id, Guid appUserId)
         {
-            const string query = @"DELETE FROM public.""Projects"" WHERE ""Id"" = @id AND ""AppUserId"" = @appUserId";
+            const string query = @"UPDATE public.""Projects"" SET ""Status"" = 0 WHERE ""Id"" = @id AND ""AppUserId"" = @appUserId";
+            await _dbConnection.ExecuteAsync(query, new { id, appUserId });
+        }
+
+        public async Task UnarchiveAsync(Guid id, Guid appUserId)
+        {
+            const string query = @"UPDATE public.""Projects"" SET ""Status"" = 1 WHERE ""Id"" = @id AND ""AppUserId"" = @appUserId";
             await _dbConnection.ExecuteAsync(query, new { id, appUserId });
         }
     }

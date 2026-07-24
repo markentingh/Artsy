@@ -7,5 +7,6 @@ namespace Artsy.Data.Entities.Projects
         public int Index { get; set; }
         public string? Title { get; set; }
         public bool SocialMedia { get; set; }
+        public int Status { get; set; } = 1;
     }
 }

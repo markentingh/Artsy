@@ -15,5 +15,6 @@ namespace Artsy.Data.Entities.Projects
     {
         public Guid Id { get; set; }
         public Guid ItemId { get; set; }
+        public Guid ProjectId { get; set; }
     }
 }

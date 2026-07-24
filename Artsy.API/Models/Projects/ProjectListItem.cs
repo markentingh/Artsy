@@ -11,6 +11,6 @@ namespace Artsy.API.Models.Projects
         public string Color { get; set; } = "";
         public int Status { get; set; }
         public DateTime Created { get; set; }
-        public List<ProjectCollectionArtwork> Artwork { get; set; } = new();
+        public List<string> Images { get; set; } = new();
     }
 }

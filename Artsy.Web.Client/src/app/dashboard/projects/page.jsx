@@ -4,18 +4,21 @@ import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
+import Button from '@/components/ui/button';
 import Modal from '@/components/ui/modal';
 import Input from '@/components/forms/input';
 import TextArea from '@/components/forms/textarea';
 import Message from '@/components/ui/message';
 import ColorPicker from '@/components/ui/ColorPicker';
+import Carousel from '@/components/ui/carousel';
 
 export default function DashboardProjects() {
   const session = useSession();
   const navigate = useNavigate();
-  const { getAll, getCollectionArtworkUrl, create } = Projects(session);
+  const { getAll, getArchived, create, unarchiveProject } = Projects(session);
 
   const [projects, setProjects] = useState([]);
+  const [archivedProjects, setArchivedProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -32,28 +35,20 @@ export default function DashboardProjects() {
   const fetchProjects = async () => {
     setLoading(true);
     try {
-      const response = await getAll();
+      const [response, archivedResp] = await Promise.all([getAll(), getArchived()]);
       if (response.data.success) {
         setProjects(response.data.data || []);
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to load projects' });
+      }
+      if (archivedResp.data.success) {
+        setArchivedProjects(archivedResp.data.data || []);
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load projects' });
     } finally {
       setLoading(false);
     }
-  };
-
-  const buildImageUrls = (artworkRows) => {
-    const urls = [];
-    for (const row of artworkRows || []) {
-      for (let index = 1; index <= row.images && urls.length < 5; index++) {
-        urls.push(getCollectionArtworkUrl(row.collectionId, row.id, index));
-      }
-      if (urls.length >= 5) break;
-    }
-    return urls;
   };
 
   useEffect(() => {
@@ -95,7 +90,7 @@ export default function DashboardProjects() {
         color: form.color
       });
       if (response.data.success) {
-        setProjects((prev) => [{ ...response.data.data, artwork: [] }, ...prev]);
+        setProjects((prev) => [{ ...response.data.data, images: [] }, ...prev]);
         handleCloseModal();
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to create project' });
@@ -111,42 +106,54 @@ export default function DashboardProjects() {
     navigate(`/dashboard/project/${projectId}`);
   };
 
+  const handleUnarchive = async (projectId) => {
+    try {
+      const resp = await unarchiveProject({ projectId });
+      if (resp.data.success) {
+        const unarchived = archivedProjects.find((p) => p.id === projectId);
+        setArchivedProjects((prev) => prev.filter((p) => p.id !== projectId));
+        if (unarchived) setProjects((prev) => [{ ...unarchived, images: [] }, ...prev]);
+      } else {
+        setMessage({ type: 'error', text: resp.data.message || 'Failed to unarchive project' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to unarchive project' });
+    }
+  };
+
   const renderCarousel = (project) => {
-    const urls = buildImageUrls(project.artwork);
-    if (urls.length === 0) {
+    const images = project.images || [];
+    if (images.length === 0) {
       return (
         <div className="h-32 bg-gray-100 dark:bg-gray-700/50 rounded mb-4 flex items-center justify-center opacity-50">
           <span className="text-sm text-gray-600 dark:text-gray-400">
-            No Collections to display just yet
+            No artwork to display just yet
           </span>
         </div>
       );
     }
 
     return (
-      <div className="flex gap-2 overflow-x-auto mb-4 pb-2">
-        {urls.map((url, index) => (
-          <img
-            key={`${project.id}-${index}`}
-            src={url}
-            alt={`Project artwork ${index + 1}`}
-            className="h-32 w-32 object-cover rounded shrink-0 bg-gray-100 dark:bg-gray-700"
-          />
-        ))}
+      <div className="mb-4">
+        <Carousel
+          images={images}
+          alt={project.title}
+          placeholder="No artwork to display just yet"
+          imageWidth="250px"
+          imageHeight="250px"
+        />
       </div>
     );
   };
 
-  const renderRow = (project) => (
+  const renderCard = (project) => (
     <div
       key={project.id}
-      className="border-b border-gray-200 dark:border-gray-700 last:border-b-0"
+      className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+      onClick={() => handleRowClick(project.id)}
     >
       {renderCarousel(project)}
-      <div
-        className="flex items-center gap-4 p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-        onClick={() => handleRowClick(project.id)}
-      >
+      <div className="flex items-center gap-4">
         <div
           className="w-8 h-12 rounded shrink-0"
           style={{ backgroundColor: project.color, width: '2em' }}
@@ -184,7 +191,7 @@ export default function DashboardProjects() {
         </Message>
       )}
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+      <>
         {loading ? (
           <div className="p-8 text-center">
             <Icon name="progress_activity" spin className="w-8 h-8 mx-auto mb-2" />
@@ -195,9 +202,54 @@ export default function DashboardProjects() {
             No projects yet. Click "+ New Project" to create one.
           </div>
         ) : (
-          <div>{projects.map(renderRow)}</div>
+          <div className="grid grid-cols-[repeat(auto-fill,550px)] gap-4">
+            {projects.map(renderCard)}
+          </div>
         )}
-      </div>
+
+        {archivedProjects.length > 0 && (
+          <>
+            <hr className="border-gray-200 dark:border-gray-700 my-8" />
+            <h2 className="text-xl font-semibold mb-4 text-gray-500 dark:text-gray-400">Archived</h2>
+            <div className="grid grid-cols-[repeat(auto-fill,550px)] gap-4 opacity-60">
+              {archivedProjects.map((project) => (
+                <div
+                  key={project.id}
+                  className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 rounded-lg border border-gray-200 dark:border-gray-700"
+                >
+                  {renderCarousel(project)}
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="w-8 h-12 rounded shrink-0"
+                      style={{ backgroundColor: project.color, width: '2em' }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
+                        {project.title}
+                      </h3>
+                      {project.description && (
+                        <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
+                          {project.description}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                        Key: {project.key}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleUnarchive(project.id)}
+                      className="px-3 py-1.5 text-sm border border-blue-500 text-blue-500 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 transition whitespace-nowrap"
+                    >
+                      Unarchive
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </>
 
       {showModal && (
         <Modal title="New Project" onClose={handleCloseModal}>
@@ -252,21 +304,13 @@ export default function DashboardProjects() {
               />
             )}
 
-            <div className="buttons">
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+            <div className="buttons flex gap-3">
+              <Button type="submit" disabled={saving}>
                 {saving ? 'Creating...' : 'Create Project'}
-              </button>
-              <button
-                type="button"
-                onClick={handleCloseModal}
-                className="cancel px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition"
-              >
+              </Button>
+              <Button color="gray" className="cancel" onClick={handleCloseModal}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </form>
         </Modal>

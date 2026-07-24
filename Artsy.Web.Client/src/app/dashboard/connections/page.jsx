@@ -3,6 +3,7 @@ import { useSession } from '@/context/session';
 import { Connections } from '@/api/user/connections';
 import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';
+import Button from '@/components/ui/button';
 
 const services = [
   { key: 'telegram', name: 'Telegram', color: 'bg-blue-400' },
@@ -159,14 +160,9 @@ export default function DashboardConnections() {
           </div>
         )}
         {!isLoadingStatus && !(service.key === 'printify' && status.viaApiToken) && (
-          <button
-            type="button"
-            onClick={() => handleConnect(service.key)}
-            disabled={isLoading}
-            className="mt-auto px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <Button className="mt-auto" onClick={() => handleConnect(service.key)} disabled={isLoading}>
             {isLoading ? 'Connecting...' : status.connected ? 'Reconnect' : 'Connect'}
-          </button>
+          </Button>
         )}
       </div>
     );

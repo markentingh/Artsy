@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Input from '@/components/forms/input';
+import Button from '@/components/ui/button';
 
 function ColorPicker({ color, h, s, l, onChange, onClose }) {
   const [hue, setHue] = useState(h !== undefined ? h : 0);
@@ -513,18 +514,12 @@ function ColorPicker({ color, h, s, l, onChange, onClose }) {
           </div>
 
           <div className="flex gap-3 pt-2">
-            <button
-              onClick={handleOk}
-              className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition-colors"
-            >
+            <Button className="flex-1" onClick={handleOk}>
               OK
-            </button>
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
-            >
+            </Button>
+            <Button color="gray" className="flex-1 cancel" onClick={onClose}>
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       </div>

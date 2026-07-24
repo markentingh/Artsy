@@ -3,8 +3,8 @@ import { useSession } from '@/context/session';
 import { Telegram } from '@/api/admin/telegram';
 import { Printify } from '@/api/admin/printify';
 import Icon from '@/components/ui/icon';
-import Spinner from '@/components/ui/spinner';
 import Message from '@/components/ui/message';
+import Button from '@/components/ui/button';
 
 export default function DashboardServices() {
   const session = useSession();
@@ -272,21 +272,12 @@ export default function DashboardServices() {
 
                 {isEditing ? (
                   <>
-                    <button
-                      type="button"
-                      onClick={handleSave}
-                      disabled={saving}
-                      className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition disabled:opacity-50"
-                    >
+                    <Button onClick={handleSave} disabled={saving}>
                       {saving ? 'Saving...' : 'Save'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCancel}
-                      className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition"
-                    >
+                    </Button>
+                    <Button color="gray" className="cancel" onClick={handleCancel}>
                       Cancel
-                    </button>
+                    </Button>
                   </>
                 ) : (
                   <button
@@ -349,12 +340,7 @@ export default function DashboardServices() {
               />
               Product Images
             </label>
-            <button
-              type="button"
-              onClick={handleRefreshCatalog}
-              disabled={refreshing}
-              className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition disabled:opacity-50"
-            >
+            <Button onClick={handleRefreshCatalog} disabled={refreshing}>
               {refreshing ? (
                 <span className="inline-flex items-center gap-2">
                   <Icon name="progress_activity" spin className="w-4 h-4" />
@@ -363,7 +349,7 @@ export default function DashboardServices() {
               ) : (
                 'Refresh Catalog'
               )}
-            </button>
+            </Button>
           </div>
         </div>
 

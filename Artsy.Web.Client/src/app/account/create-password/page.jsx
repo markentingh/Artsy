@@ -5,6 +5,7 @@ import { Auth } from '@/api/account/auth';
 import Input from '@/components/forms/input';
 import Message from '@/components/ui/message';
 import Spinner from '@/components/ui/spinner';
+import Button from '@/components/ui/button';
 import ThemeToggle from '@/components/ui/theme-toggle';
 
 export default function CreatePassword() {
@@ -134,12 +135,9 @@ export default function CreatePassword() {
             <Spinner />
           </div>
         ) : (
-          <button
-            type="submit"
-            className="w-full py-2 px-4 bg-primary-600 text-white rounded hover:bg-primary-700 transition"
-          >
+          <Button type="submit" className="w-full">
             Update Password
-          </button>
+          </Button>
         )}
 
         <p className="mt-4 text-center text-sm">

@@ -118,7 +118,6 @@ namespace Artsy.API.Controllers
                         ItemId = request.ItemId,
                         ProjectId = item.ProjectId,
                         ImageModel = request.ImageModel,
-                        ImageModelJson = request.ImageModelJson ?? "",
                         Prompt = ""
                     };
                     var created = await _projectItemArtworkRepository.CreateAsync(artwork);
@@ -127,7 +126,6 @@ namespace Artsy.API.Controllers
                 else
                 {
                     artwork.ImageModel = request.ImageModel;
-                    artwork.ImageModelJson = request.ImageModelJson ?? "";
                     await _projectItemArtworkRepository.UpdateAsync(artwork);
                     return Json(new ApiResponse { success = true, data = artwork });
                 }

@@ -6,6 +6,7 @@ import { Auth } from '@/api/account/auth';
 import Message from '@/components/ui/message';
 import Input from '@/components/forms/input';
 import ButtonOutline from '@/components/ui/button-outline';
+import Button from '@/components/ui/button';
 import ThemeToggle from '@/components/ui/theme-toggle';
 
 export default function Login() {
@@ -89,13 +90,9 @@ export default function Login() {
           error={errors.password}
           autoComplete="current-password"
         />
-        <button
-          type="submit"
-          disabled={formState === 'submitting'}
-          className="w-full py-2 px-4 bg-primary-600 text-white rounded hover:bg-primary-700 transition disabled:opacity-50"
-        >
+        <Button type="submit" className="w-full" disabled={formState === 'submitting'}>
           {formState === 'submitting' ? 'Signing in...' : 'Sign In'}
-        </button>
+        </Button>
         <div className="mt-6 flex items-center">
           <div className="flex-1 border-t border-gray-300 dark:border-gray-600"></div>
           <span className="mx-4 text-sm text-gray-500 dark:text-gray-400">Or...</span>

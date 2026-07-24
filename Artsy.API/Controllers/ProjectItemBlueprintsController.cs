@@ -61,7 +61,8 @@ namespace Artsy.API.Controllers
                     BlueprintId = request.BlueprintId,
                     Name = request.Name.Trim(),
                     BlueprintJson = request.BlueprintJson ?? "",
-                    PlacementJson = request.PlacementJson ?? ""
+                    PlacementJson = request.PlacementJson ?? "",
+                    Prompt = request.Prompt ?? ""
                 };
                 var created = await _projectBlueprintRepository.CreateAsync(blueprint);
                 return Json(new ApiResponse { success = true, data = created });
@@ -128,6 +129,7 @@ namespace Artsy.API.Controllers
                 blueprint.Name = request.Name.Trim();
                 blueprint.BlueprintJson = request.BlueprintJson ?? "";
                 blueprint.PlacementJson = request.PlacementJson ?? "";
+                blueprint.Prompt = request.Prompt ?? "";
                 await _projectBlueprintRepository.UpdateAsync(blueprint);
                 return Json(new ApiResponse { success = true, data = blueprint });
             }

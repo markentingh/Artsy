@@ -17,11 +17,9 @@ namespace Artsy.Data.Repositories.Projects
         public async Task<IEnumerable<ProjectCollection>> GetByProjectIdAsync(Guid projectId)
         {
             const string query = @"
-                SELECT c.* FROM public.""ProjectCollections"" c
-                INNER JOIN public.""ProjectCollectionItems"" ci ON ci.""CollectionId"" = c.""Id""
-                WHERE ci.""ProjectId"" = @projectId
-                GROUP BY c.""Id""
-                ORDER BY c.""Created"" DESC";
+                SELECT * FROM public.""ProjectCollections""
+                WHERE ""ProjectId"" = @projectId AND ""Status"" = 1
+                ORDER BY ""Created"" DESC";
             return await _dbConnection.QueryAsync<ProjectCollection>(query, new { projectId });
         }
 
@@ -35,8 +33,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             collection.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectCollections"" (""Id"", ""Title"", ""Created"")
-                VALUES (@Id, @Title, CURRENT_TIMESTAMP)
+                INSERT INTO public.""ProjectCollections"" (""Id"", ""ProjectId"", ""Title"", ""Created"")
+                VALUES (@Id, @ProjectId, @Title, CURRENT_TIMESTAMP)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectCollection>(query, collection);
         }
@@ -52,7 +50,7 @@ namespace Artsy.Data.Repositories.Projects
 
         public async Task DeleteAsync(Guid id)
         {
-            const string query = @"DELETE FROM public.""ProjectCollections"" WHERE ""Id"" = @id";
+            const string query = @"UPDATE public.""ProjectCollections"" SET ""Status"" = 0 WHERE ""Id"" = @id";
             await _dbConnection.ExecuteAsync(query, new { id });
         }
     }

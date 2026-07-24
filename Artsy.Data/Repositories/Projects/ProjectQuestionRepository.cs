@@ -16,7 +16,7 @@ namespace Artsy.Data.Repositories.Projects
 
         public async Task<IEnumerable<ProjectQuestion>> GetByProjectIdAsync(Guid projectId)
         {
-            const string query = @"SELECT * FROM public.""ProjectQuestions"" WHERE ""ProjectId"" = @projectId ORDER BY ""Index""";
+            const string query = @"SELECT * FROM public.""ProjectQuestions"" WHERE ""ProjectId"" = @projectId AND ""Status"" = 1 ORDER BY ""Index""";
             return await _dbConnection.QueryAsync<ProjectQuestion>(query, new { projectId });
         }
 
@@ -47,7 +47,7 @@ namespace Artsy.Data.Repositories.Projects
 
         public async Task DeleteAsync(Guid id)
         {
-            const string query = @"DELETE FROM public.""ProjectQuestions"" WHERE ""Id"" = @id";
+            const string query = @"UPDATE public.""ProjectQuestions"" SET ""Status"" = 0 WHERE ""Id"" = @id";
             await _dbConnection.ExecuteAsync(query, new { id });
         }
     }

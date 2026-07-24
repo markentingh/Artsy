@@ -3,10 +3,13 @@ import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
+import ButtonIcon from '@/components/ui/button-icon';
 import Carousel from '@/components/ui/carousel';
+import Tooltip from '@/components/ui/tooltip';
 import EditArtworkModal from './EditArtworkModal';
 import NewArtworkModal from './NewArtworkModal';
 import Message from '@/components/ui/message';
+import ConfirmModal from '@/components/ui/confirm-modal';
 
 export default function ArtworksSection({ projectId, onArtworkChanged }) {
   const session = useSession();
@@ -17,6 +20,7 @@ export default function ArtworksSection({ projectId, onArtworkChanged }) {
   const [editingItem, setEditingItem] = useState(null);
   const [showNewModal, setShowNewModal] = useState(false);
   const [message, setMessage] = useState(null);
+  const [deleteTargetId, setDeleteTargetId] = useState(null);
   const dragItem = useRef(null);
   const dragOverItem = useRef(null);
   const draggedRef = useRef(false);
@@ -115,19 +119,25 @@ export default function ArtworksSection({ projectId, onArtworkChanged }) {
     if (onArtworkChanged) onArtworkChanged();
   };
 
-  const handleDeleteArtwork = async (e, id) => {
+  const handleDeleteArtwork = (e, id) => {
     e.stopPropagation();
-    if (!window.confirm('Delete this artwork?')) return;
+    setDeleteTargetId(id);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTargetId) return;
     try {
-      const response = await deleteItem({ id });
+      const response = await deleteItem({ id: deleteTargetId });
       if (response.data.success) {
-        setItems((prev) => prev.filter((item) => item.id !== id));
+        setItems((prev) => prev.filter((item) => item.id !== deleteTargetId));
         if (onArtworkChanged) onArtworkChanged();
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to delete artwork' });
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to delete artwork' });
+    } finally {
+      setDeleteTargetId(null);
     }
   };
 
@@ -148,7 +158,10 @@ export default function ArtworksSection({ projectId, onArtworkChanged }) {
         </Message>
       )}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">Artworks</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="text-xl font-semibold">Artworks</h2>
+          <Tooltip text="Artworks are the individual designs or uploaded images you assign to your project. They can be applied to printable products for sale, and collections will automatically post them to all of your connected social media accounts to help promote your collections products. Drag to reorder." />
+        </div>
         <ButtonOutline onClick={handleNewArtwork}>
           <Icon name="add" />
           <span className="ml-2">New Artwork</span>
@@ -196,14 +209,7 @@ export default function ArtworksSection({ projectId, onArtworkChanged }) {
                       <Icon name="share" className="text-green-500" title="Social Media enabled" />
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={(e) => handleDeleteArtwork(e, item.id)}
-                    className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                    title="Delete artwork"
-                  >
-                    <Icon name="delete" />
-                  </button>
+                  <ButtonIcon name="delete" color="red" onClick={(e) => handleDeleteArtwork(e, item.id)} title="Delete artwork" />
                 </div>
               </div>
             </div>
@@ -221,6 +227,14 @@ export default function ArtworksSection({ projectId, onArtworkChanged }) {
         item={editingItem}
         onClose={handleCloseModal}
         onChanged={() => fetchItems()}
+      />
+
+      <ConfirmModal
+        show={!!deleteTargetId}
+        title="Delete Artwork"
+        message="Do you really want to delete this artwork? This cannot be undone."
+        onConfirm={handleConfirmDelete}
+        onClose={() => setDeleteTargetId(null)}
       />
     </div>
   );

@@ -7,5 +7,6 @@ namespace Artsy.API.Models.Projects
         public string Name { get; set; } = "";
         public string BlueprintJson { get; set; } = "";
         public string PlacementJson { get; set; } = "";
+        public string Prompt { get; set; } = "";
     }
 }

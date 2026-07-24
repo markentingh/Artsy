@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useSession } from '@/context/session';
 import { Printify } from '@/api/admin/printify';
 import { Printify as PrintifyPublic } from '@/api/user/printify';
@@ -9,6 +9,7 @@ import ButtonOutline from '@/components/ui/button-outline';
 import Spinner from '@/components/ui/spinner';
 import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';
+import TextArea from '@/components/forms/textarea';
 
 const IMAGE_TYPE_NONE = 0;
 const IMAGE_TYPE_BEFORE = 1;
@@ -61,6 +62,9 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
   const [initialImageSettings, setInitialImageSettings] = useState({});
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [outOfStockIds, setOutOfStockIds] = useState(new Set());
+  const scrollRef = useRef(null);
+  const [scrollMaxHeight, setScrollMaxHeight] = useState('none');
+  const [imagePrompt, setImagePrompt] = useState('');
 
   useEffect(() => {
     if (!show || !blueprint) return;
@@ -75,20 +79,23 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
     setInitialImageSettings({});
     setDescriptionExpanded(false);
     setOutOfStockIds(new Set());
+    setImagePrompt('');
 
     (async () => {
+      let loadedVariants = [];
       try {
         const resp = await getBlueprintDetail(blueprint.id);
         if (resp.data.success) {
           const data = resp.data.data;
           setDetail(data.blueprint);
           setPublished(data.blueprint.published || false);
+          setImagePrompt(data.blueprint.imagePrompt || '');
           setPrintProviders(data.printProviders || []);
 
           if (data.printProviders?.length > 0) {
             const firstProvider = String(data.printProviders[0].id);
             setSelectedProvider(firstProvider);
-            await loadVariants(blueprint.id, data.printProviders[0].id);
+            loadedVariants = await loadVariants(blueprint.id, data.printProviders[0].id);
           }
         } else {
           setMessage({ type: 'error', text: resp.data.message || 'Failed to load blueprint' });
@@ -98,8 +105,15 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
         if (imagesResp.data.success) {
           const settings = {};
           for (const img of imagesResp.data.data || []) {
+            const colors = [...new Set(
+              (img.variants || [])
+                .map(vid => {
+                  const v = loadedVariants.find(va => va.id === vid);
+                  return v?.options?.color || 'Default';
+                })
+            )];
             settings[img.imageIndex] = {
-              variantIds: (img.variants || []).map(String),
+              variantColor: colors.length > 0 ? colors[0] : '',
               type: String(img.type),
               position: String(img.position ?? POSITION_FRONT),
             };
@@ -131,9 +145,13 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
             }
           })
           .catch(() => {});
+
+        return variantList;
       }
+      return [];
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to load variants' });
+      return [];
     }
   };
 
@@ -151,7 +169,7 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
     setImageSettings((prev) => ({
       ...prev,
       [index]: {
-        variantIds: field === 'variantIds' ? value : (prev[index]?.variantIds || []),
+        variantColor: field === 'variantColor' ? value : (prev[index]?.variantColor || ''),
         type: field === 'type' ? value : (prev[index]?.type || '0'),
         position: field === 'position' ? value : (prev[index]?.position || String(POSITION_FRONT)),
       },
@@ -225,16 +243,25 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
     })).sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
   }, [variants]);
 
-  const variantOptions = useMemo(() => {
-    return variants.map((v) => {
-      const color = v.options?.color || '';
-      const size = v.options?.size || '';
-      const label = color || size
-        ? [color, size].filter(Boolean).join(' · ')
-        : v.title;
-      return { value: String(v.id), label };
-    }).sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
-  }, [variants]);
+  const variantColorOptions = useMemo(() => {
+    const colorMap = new Map();
+    for (const v of variants) {
+      const color = v.options?.color || 'Default';
+      if (!colorMap.has(color)) {
+        const allOutOfStock = variants
+          .filter(va => (va.options?.color || 'Default') === color)
+          .every(va => outOfStockIds.has(va.id));
+        colorMap.set(color, {
+          value: color,
+          label: color,
+          note: allOutOfStock ? { text: 'Out of Stock', type: 'red' } : null,
+        });
+      }
+    }
+    return Array.from(colorMap.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' })
+    );
+  }, [variants, outOfStockIds]);
 
   const variantsByColor = useMemo(() => {
     if (variants.length === 0) return [];
@@ -262,6 +289,13 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
     }));
   }, [variants]);
 
+  const colorsToVariantIds = (color) => {
+    if (!color) return [];
+    return variants
+      .filter(v => (v.options?.color || 'Default') === color)
+      .map(v => v.id);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setMessage(null);
@@ -269,17 +303,17 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
       const images = [];
       if (detail?.imageCount > 0) {
         for (let i = 0; i < detail.imageCount; i++) {
-          const settings = imageSettings[i] || { variantIds: [], type: '0', position: String(POSITION_FRONT) };
+          const settings = imageSettings[i] || { variantColor: '', type: '0', position: String(POSITION_FRONT) };
           images.push({
             imageIndex: i,
-            variants: (settings.variantIds || []).map((v) => parseInt(v) || 0),
+            variants: colorsToVariantIds(settings.variantColor || ''),
             type: parseInt(settings.type) || 0,
             position: parseInt(settings.position) || 0,
           });
         }
       }
 
-      await saveBlueprintImages(blueprint.id, { images, published });
+      await saveBlueprintImages(blueprint.id, { images, published, imagePrompt });
       if (onSave) onSave();
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save' });
@@ -292,7 +326,7 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
     if (!detail?.imageCount || detail.imageCount === 0) return false;
     for (let i = 0; i < detail.imageCount; i++) {
       const settings = imageSettings[i];
-      if (!settings || !settings.variantIds || settings.variantIds.length === 0) return false;
+      if (!settings || !settings.variantColor) return false;
     }
     return true;
   }, [detail, imageSettings]);
@@ -300,11 +334,9 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
   const hasSettingsChanged = useMemo(() => {
     if (!detail?.imageCount || detail.imageCount === 0) return false;
     for (let i = 0; i < detail.imageCount; i++) {
-      const current = imageSettings[i] || { variantIds: [], type: '0', position: String(POSITION_FRONT) };
-      const initial = initialImageSettings[i] || { variantIds: [], type: '0', position: String(POSITION_FRONT) };
-      const currentVariants = (current.variantIds || []).slice().sort().join(',');
-      const initialVariants = (initial.variantIds || []).slice().sort().join(',');
-      if (currentVariants !== initialVariants) return true;
+      const current = imageSettings[i] || { variantColor: '', type: '0', position: String(POSITION_FRONT) };
+      const initial = initialImageSettings[i] || { variantColor: '', type: '0', position: String(POSITION_FRONT) };
+      if ((current.variantColor || '') !== (initial.variantColor || '')) return true;
       if ((current.type || '0') !== (initial.type || '0')) return true;
       if ((current.position || String(POSITION_FRONT)) !== (initial.position || String(POSITION_FRONT))) return true;
     }
@@ -318,17 +350,17 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
       const images = [];
       if (detail?.imageCount > 0) {
         for (let i = 0; i < detail.imageCount; i++) {
-          const settings = imageSettings[i] || { variantIds: [], type: '0', position: String(POSITION_FRONT) };
+          const settings = imageSettings[i] || { variantColor: '', type: '0', position: String(POSITION_FRONT) };
           images.push({
             imageIndex: i,
-            variants: (settings.variantIds || []).map((v) => parseInt(v) || 0),
+            variants: colorsToVariantIds(settings.variantColor || ''),
             type: parseInt(settings.type) || 0,
             position: parseInt(settings.position) || 0,
           });
         }
       }
 
-      await saveBlueprintImages(blueprint.id, { images, published: true });
+      await saveBlueprintImages(blueprint.id, { images, published: true, imagePrompt });
       setPublished(true);
       setInitialImageSettings(JSON.parse(JSON.stringify(imageSettings)));
       if (onSave) onSave();
@@ -346,17 +378,17 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
       const images = [];
       if (detail?.imageCount > 0) {
         for (let i = 0; i < detail.imageCount; i++) {
-          const settings = imageSettings[i] || { variantIds: [], type: '0', position: String(POSITION_FRONT) };
+          const settings = imageSettings[i] || { variantColor: '', type: '0', position: String(POSITION_FRONT) };
           images.push({
             imageIndex: i,
-            variants: (settings.variantIds || []).map((v) => parseInt(v) || 0),
+            variants: colorsToVariantIds(settings.variantColor || ''),
             type: parseInt(settings.type) || 0,
             position: parseInt(settings.position) || 0,
           });
         }
       }
 
-      await saveBlueprintImages(blueprint.id, { images, published: false });
+      await saveBlueprintImages(blueprint.id, { images, published: false, imagePrompt });
       setPublished(false);
       if (onSave) onSave();
     } catch (error) {
@@ -365,6 +397,19 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
       setSaving(false);
     }
   };
+
+  useEffect(() => {
+    const updateMaxHeight = () => {
+      if (scrollRef.current) {
+        const rect = scrollRef.current.getBoundingClientRect();
+        setScrollMaxHeight(`calc(100vh - ${rect.top + 80}px)`);
+      }
+    };
+    updateMaxHeight();
+    window.addEventListener('resize', updateMaxHeight);
+    setTimeout(updateMaxHeight, 10);
+    return () => window.removeEventListener('resize', updateMaxHeight);
+  }, [show, loading]);
 
   if (!show) return null;
 
@@ -391,14 +436,24 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
           <Spinner className="text-4xl" />
         </div>
       ) : detail ? (
-        <div className="max-h-[60vh] overflow-y-auto space-y-4 p-2">
+        <div ref={scrollRef} className="overflow-y-auto space-y-4 p-2" style={{ maxHeight: scrollMaxHeight }}>
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-medium">{detail.title}</h3>
-            {published && (
-              <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-500 text-white whitespace-nowrap">
-                Published
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              <h3 className="text-lg font-medium">{detail.title}</h3>
+              {published && (
+                <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-500 text-white whitespace-nowrap">
+                  Published
+                </span>
+              )}
+            </div>
+            <a
+              href={`https://printify.com/app/products/${blueprint.id}/${(detail.brand || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}/${(detail.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
+            >
+              View on Printify
+            </a>
           </div>
 
           <div className="space-y-1">
@@ -508,9 +563,9 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
           {detail.imageCount > 0 && (
             <div>
               <label className="block text-sm font-medium mb-2">Images</label>
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-[repeat(auto-fill,300px)] gap-4">
                 {Array.from({ length: detail.imageCount }, (_, i) => {
-                  const settings = imageSettings[i] || { variantIds: [], type: '0', position: String(POSITION_FRONT) };
+                  const settings = imageSettings[i] || { variantColor: '', type: '0', position: String(POSITION_FRONT) };
                   return (
                     <div key={i} className="rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
                       <img
@@ -519,12 +574,13 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
                         className="w-full aspect-square object-cover"
                       />
                       <div className="p-2 space-y-2">
-                        <SelectChecklist
+                        <Select
                           name={`img-variant-${i}`}
-                          options={variantOptions}
-                          values={settings.variantIds || []}
-                          onChange={(vals) => handleImageSettingChange(i, 'variantIds', vals)}
-                          placeholder="Variants"
+                          options={variantColorOptions}
+                          value={settings.variantColor || ''}
+                          onChange={(e) => handleImageSettingChange(i, 'variantColor', e.target.value)}
+                          placeholder="Variant Color"
+                          className="mb-0"
                         />
                         <Select
                           name={`img-type-${i}`}
@@ -547,6 +603,19 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
               </div>
             </div>
           )}
+
+          <hr className="border-gray-200 dark:border-gray-700" />
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Image Prompt</label>
+            <TextArea
+              name="imagePrompt"
+              value={imagePrompt}
+              onChange={(e) => setImagePrompt(e.target.value)}
+              placeholder="Enter a prompt used for generating artwork images..."
+              rows={4}
+            />
+          </div>
         </div>
       ) : (
         <p className="text-sm text-gray-500 dark:text-gray-400">No blueprint data available.</p>
@@ -554,24 +623,23 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
 
       <div className="buttons flex justify-between gap-2 mt-4">
         <div className="flex gap-2">
-          {allImagesHaveVariants && (
-            <button
-              type="button"
+          {allImagesHaveVariants && !published && (
+            <ButtonOutline
               onClick={handlePublish}
               disabled={saving || loading}
+              color="green"
             >
-              {published && hasSettingsChanged ? 'Publish Changes' : 'Publish'}
-            </button>
+              Publish
+            </ButtonOutline>
           )}
           {published && (
-            <button
-              type="button"
+            <ButtonOutline
               onClick={handleUnpublish}
               disabled={saving || loading}
-              className="cancel"
+              color="red"
             >
               Unpublish
-            </button>
+            </ButtonOutline>
           )}
         </div>
         <div className="flex gap-2">

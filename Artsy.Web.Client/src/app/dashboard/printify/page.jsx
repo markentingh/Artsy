@@ -27,6 +27,7 @@ export default function DashboardPrintify() {
   const [searchInitiated, setSearchInitiated] = useState(false);
   const [selectedBlueprint, setSelectedBlueprint] = useState(null);
   const scrollRef = useRef(null);
+  const [scrollMaxHeight, setScrollMaxHeight] = useState('none');
 
   useEffect(() => {
     let savedSearch = '';
@@ -55,6 +56,19 @@ export default function DashboardPrintify() {
   const saveFilter = (searchVal, brandVal) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ search: searchVal, brand: brandVal }));
   };
+
+  useEffect(() => {
+    const updateMaxHeight = () => {
+      if (scrollRef.current) {
+        const rect = scrollRef.current.getBoundingClientRect();
+        setScrollMaxHeight(`calc(100vh - ${rect.top + 40}px)`);
+      }
+    };
+    updateMaxHeight();
+    window.addEventListener('resize', updateMaxHeight);
+    setTimeout(updateMaxHeight, 10);
+    return () => window.removeEventListener('resize', updateMaxHeight);
+  }, []);
 
   const handleSearch = useCallback((keyword, brandVal, append = false) => {
     if (!append) {
@@ -161,14 +175,14 @@ export default function DashboardPrintify() {
         </div>
       </div>
 
-      <div ref={scrollRef} className="max-h-[70vh] overflow-y-auto" onScroll={handleScroll}>
+      <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: scrollMaxHeight }} onScroll={handleScroll}>
         {searching ? (
           <div className="flex items-center justify-center py-12">
             <Spinner className="text-4xl" />
           </div>
         ) : results.length > 0 ? (
           <>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-[repeat(auto-fill,300px)] gap-4">
               {results.map((bp) => (
                 <div
                   key={bp.id}
@@ -199,6 +213,23 @@ export default function DashboardPrintify() {
                   </div>
                 </div>
               ))}
+              {hasMore && (
+                <div
+                  className="cursor-pointer rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 hover:border-primary-500 transition flex flex-col items-center justify-center"
+                  onClick={() => !loadingMore && handleSearch(search, brand, true)}
+                >
+                  <div className="w-full aspect-square flex items-center justify-center bg-gray-100 dark:bg-gray-700">
+                    {loadingMore ? (
+                      <Spinner className="text-3xl" />
+                    ) : (
+                      <span className="text-sm text-gray-500 dark:text-gray-400">View More</span>
+                    )}
+                  </div>
+                  <div className="p-3">
+                    <p className="text-sm font-medium text-center text-gray-500 dark:text-gray-400">View More</p>
+                  </div>
+                </div>
+              )}
             </div>
             {loadingMore && (
               <div className="flex items-center justify-center py-4">

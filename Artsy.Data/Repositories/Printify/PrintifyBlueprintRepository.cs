@@ -20,29 +20,33 @@ namespace Artsy.Data.Repositories
             return await _dbConnection.ExecuteScalarAsync<int>(query);
         }
 
-        public async Task<int> GetCountAsync(string keyword, string brand)
+        public async Task<int> GetCountAsync(string keyword, string brand, bool? published = null)
         {
             var kw = keyword?.Trim().ToLowerInvariant() ?? "";
             var br = brand?.Trim().ToLowerInvariant() ?? "";
-            var sql = @"SELECT COUNT(*) FROM public.""PrintifyBlueprints"" WHERE ""Published"" = true";
+            var sql = @"SELECT COUNT(*) FROM public.""PrintifyBlueprints"" WHERE 1=1";
+            if (published.HasValue)
+                sql += @" AND ""Published"" = @published";
             if (!string.IsNullOrWhiteSpace(kw))
                 sql += @" AND LOWER(""Title"") LIKE @kw";
             if (!string.IsNullOrWhiteSpace(br) && br != "all")
                 sql += @" AND LOWER(""Brand"") = @br";
-            return await _dbConnection.ExecuteScalarAsync<int>(sql, new { kw = $"%{kw}%", br });
+            return await _dbConnection.ExecuteScalarAsync<int>(sql, new { kw = $"%{kw}%", br, published });
         }
 
-        public async Task<IEnumerable<PrintifyBlueprint>> SearchAsync(string keyword, string brand, int start, int length)
+        public async Task<IEnumerable<PrintifyBlueprint>> SearchAsync(string keyword, string brand, int start, int length, bool? published = null)
         {
             var kw = keyword?.Trim().ToLowerInvariant() ?? "";
             var br = brand?.Trim().ToLowerInvariant() ?? "";
-            var sql = @"SELECT * FROM public.""PrintifyBlueprints"" WHERE ""Published"" = true";
+            var sql = @"SELECT * FROM public.""PrintifyBlueprints"" WHERE 1=1";
+            if (published.HasValue)
+                sql += @" AND ""Published"" = @published";
             if (!string.IsNullOrWhiteSpace(kw))
                 sql += @" AND LOWER(""Title"") LIKE @kw";
             if (!string.IsNullOrWhiteSpace(br) && br != "all")
                 sql += @" AND LOWER(""Brand"") = @br";
             sql += @" ORDER BY ""DateUpdated"" DESC LIMIT @length OFFSET @start";
-            return await _dbConnection.QueryAsync<PrintifyBlueprint>(sql, new { kw = $"%{kw}%", br, start, length });
+            return await _dbConnection.QueryAsync<PrintifyBlueprint>(sql, new { kw = $"%{kw}%", br, start, length, published });
         }
 
         public async Task<PrintifyBlueprint?> GetByBlueprintIdAsync(int blueprintId)
@@ -85,7 +89,7 @@ namespace Artsy.Data.Repositories
 
         public async Task<IEnumerable<string>> GetBrandsAsync()
         {
-            const string query = @"SELECT DISTINCT ""Brand"" FROM public.""PrintifyBlueprints"" WHERE ""Brand"" != '' AND ""Published"" = true ORDER BY ""Brand""";
+            const string query = @"SELECT DISTINCT ""Brand"" FROM public.""PrintifyBlueprints"" WHERE ""Brand"" != '' ORDER BY ""Brand""";
             return await _dbConnection.QueryAsync<string>(query);
         }
 
@@ -105,6 +109,12 @@ namespace Artsy.Data.Repositories
         {
             const string query = @"UPDATE public.""PrintifyBlueprints"" SET ""Published"" = @published, ""DateUpdated"" = CURRENT_TIMESTAMP WHERE ""BlueprintId"" = @blueprintId";
             await _dbConnection.ExecuteAsync(query, new { blueprintId, published });
+        }
+
+        public async Task UpdateImagePromptAsync(int blueprintId, string imagePrompt)
+        {
+            const string query = @"UPDATE public.""PrintifyBlueprints"" SET ""ImagePrompt"" = @imagePrompt, ""DateUpdated"" = CURRENT_TIMESTAMP WHERE ""BlueprintId"" = @blueprintId";
+            await _dbConnection.ExecuteAsync(query, new { blueprintId, imagePrompt });
         }
     }
 }
