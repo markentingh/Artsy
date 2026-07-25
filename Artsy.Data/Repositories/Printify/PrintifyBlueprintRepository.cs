@@ -55,6 +55,14 @@ namespace Artsy.Data.Repositories
             return await _dbConnection.QueryFirstOrDefaultAsync<PrintifyBlueprint>(query, new { blueprintId });
         }
 
+        public async Task<IEnumerable<PrintifyBlueprint>> GetByBlueprintIdsAsync(IEnumerable<int> blueprintIds)
+        {
+            var ids = blueprintIds.ToList();
+            if (ids.Count == 0) return Enumerable.Empty<PrintifyBlueprint>();
+            const string query = @"SELECT * FROM public.""PrintifyBlueprints"" WHERE ""BlueprintId"" = ANY(@blueprintIds)";
+            return await _dbConnection.QueryAsync<PrintifyBlueprint>(query, new { blueprintIds = ids.ToArray() });
+        }
+
         public async Task UpsertAsync(PrintifyBlueprint blueprint)
         {
             const string query = @"

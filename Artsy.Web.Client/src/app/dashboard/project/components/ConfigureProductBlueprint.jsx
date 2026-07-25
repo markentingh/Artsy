@@ -13,6 +13,7 @@ import ButtonOutline from '@/components/ui/button-outline';
 import Spinner from '@/components/ui/spinner';
 import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';
+import Tabs from '@/components/ui/tabs';
 import ProductImagePreview from './ProductImagePreview';
 import CustomImageSelector from './CustomImageSelector';
 
@@ -34,7 +35,6 @@ export default function ConfigureProductBlueprint({
   const [variants, setVariants] = useState([]);
   const [selectedProvider, setSelectedProvider] = useState('');
   const [selectedVariants, setSelectedVariants] = useState([]);
-  const [initialVariantIds, setInitialVariantIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
@@ -62,7 +62,6 @@ export default function ConfigureProductBlueprint({
     setVariants([]);
     setSelectedProvider('');
     setSelectedVariants([]);
-    setInitialVariantIds([]);
     setDescriptionExpanded(false);
     setPlacementSettings({});
     setOutOfStockIds(new Set());
@@ -111,7 +110,6 @@ export default function ConfigureProductBlueprint({
               await loadVariants(blueprint.id, cfg.printProviderId);
               if (cfg.variantIds) {
                 setSelectedVariants(cfg.variantIds);
-                setInitialVariantIds(cfg.variantIds);
               }
             }
             try {
@@ -499,161 +497,175 @@ export default function ConfigureProductBlueprint({
 
           <hr className="border-gray-200 dark:border-gray-700" />
 
-          {variantsByColor.length > 0 && (
-            <div>
-              <div className="flex items-center gap-1 mb-2">
-                <label className="block text-sm font-medium">Variants</label>
-                <Tooltip marginTop={2} text="Choose which sizes and colors of this product you want to offer. Only selected variants will be available for sale. Out-of-stock variants cannot be selected." />
-              </div>
-              <div className="grid grid-cols-[repeat(auto-fill,250px)] gap-4">
-                {variantsByColor.map((group) => {
-                  const options = group.variants.map((v) => {
-                    const size = v.options?.size || v.title;
-                    const isOutOfStock = outOfStockIds.has(v.id);
-                    return {
-                      value: String(v.id),
-                      label: size,
-                      note: isOutOfStock ? { text: 'Out of Stock', type: 'red' } : null,
-                    };
-                  });
-                  const selectedValues = group.variants
-                    .filter((v) => selectedVariants.includes(v.id))
-                    .map((v) => String(v.id));
-                  const colorImages = imagesByColor.get(group.color) || [];
-                  return (
-                    <div key={group.color}>
-                      {colorImages.length > 0 ? (
-                        <div className="aspect-square w-full mb-2 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
-                          <Carousel
-                            images={colorImages}
-                            alt={`${detail.title} - ${group.color}`}
-                            singleImage
-                            infiniteScroll
-                            onImageClick={(src) => {
-                              const allImages = Array.from({ length: detail.imageCount || 0 }, (_, i) => getBlueprintImageUrl(blueprint.id, i));
-                              const globalIdx = allImages.indexOf(src);
-                              setPreviewImage(src);
-                              setPreviewIndex(globalIdx >= 0 ? globalIdx : 0);
-                            }}
-                            imageClassName="!max-h-none w-full h-full object-contain"
+          <Tabs tabs={[
+            {
+              id: 'variants',
+              label: 'Variants',
+              content: variantsByColor.length > 0 ? (
+                <div>
+                  <div className="flex items-center gap-1 mb-2">
+                    <label className="block text-sm font-medium">Variants</label>
+                    <Tooltip marginTop={2} text="Choose which sizes and colors of this product you want to offer. Only selected variants will be available for sale. Out-of-stock variants cannot be selected." />
+                  </div>
+                  <div className="grid grid-cols-[repeat(auto-fill,250px)] gap-4">
+                    {variantsByColor.map((group) => {
+                      const options = group.variants.map((v) => {
+                        const size = v.options?.size || v.title;
+                        const isOutOfStock = outOfStockIds.has(v.id);
+                        return {
+                          value: String(v.id),
+                          label: size,
+                          note: isOutOfStock ? { text: 'Out of Stock', type: 'red' } : null,
+                        };
+                      });
+                      const selectedValues = group.variants
+                        .filter((v) => selectedVariants.includes(v.id))
+                        .map((v) => String(v.id));
+                      const colorImages = imagesByColor.get(group.color) || [];
+                      return (
+                        <div key={group.color}>
+                          {colorImages.length > 0 ? (
+                            <div className="aspect-square w-full mb-2 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
+                              <Carousel
+                                images={colorImages}
+                                alt={`${detail.title} - ${group.color}`}
+                                singleImage
+                                infiniteScroll
+                                onImageClick={(src) => {
+                                  const allImages = Array.from({ length: detail.imageCount || 0 }, (_, i) => getBlueprintImageUrl(blueprint.id, i));
+                                  const globalIdx = allImages.indexOf(src);
+                                  setPreviewImage(src);
+                                  setPreviewIndex(globalIdx >= 0 ? globalIdx : 0);
+                                }}
+                                imageClassName="!max-h-none w-full h-full object-contain"
+                              />
+                            </div>
+                          ) : (
+                            <div className="aspect-square w-full mb-2 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-sm text-gray-400 dark:text-gray-500">No Preview</div>
+                          )}
+                          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{group.color}</label>
+                          <SelectChecklist
+                            name={`color-variants-${group.color}`}
+                            options={options}
+                            values={selectedValues}
+                            onChange={(vals) => handleColorVariantsChange(group.color, vals)}
+                            placeholder="Select sizes"
                           />
                         </div>
-                      ) : (
-                        <div className="aspect-square w-full mb-2 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-sm text-gray-400 dark:text-gray-500">No Preview</div>
-                      )}
-                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{group.color}</label>
-                      <SelectChecklist
-                        name={`color-variants-${group.color}`}
-                        options={options}
-                        values={selectedValues}
-                        onChange={(vals) => handleColorVariantsChange(group.color, vals)}
-                        placeholder="Select sizes"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <hr className="border-gray-200 dark:border-gray-700" />
-
-          {allPlaceholders.length > 0 && (
-            <div>
-              <div className="flex items-center gap-1 mb-2">
-                <label className="block text-sm font-medium">Placements</label>
-                <Tooltip marginTop={2} text="Each placement represents a print area on the product. Choose which artwork to display in each area, and select the decoration method and dimensions for printing. At least one placement must be configured — the rest are optional." />
-              </div>
-              <div className="grid grid-cols-[repeat(auto-fill,200px)] gap-4">
-                {allPlaceholders.map((ph) => {
-                  const settings = placementSettings[ph.key] || { source: '', customImageId: null };
-                  const carouselImages = getPlacementCarouselImages(ph.key);
-                  return (
-                    <div key={ph.key} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
-                      <div className="w-full aspect-square mb-2 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
-                        {carouselImages.length > 0 ? (
-                          <Carousel
-                            images={carouselImages}
-                            alt={formatPosition(ph.position)}
-                            singleImage
-                            infiniteScroll
-                            imageClassName="!max-h-none w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
-                            No Image
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400">No variants available. Select a print provider to load variants.</p>
+              ),
+            },
+            {
+              id: 'placements',
+              label: 'Placements',
+              content: allPlaceholders.length > 0 ? (
+                <div>
+                  <div className="flex items-center gap-1 mb-2">
+                    <label className="block text-sm font-medium">Placements</label>
+                    <Tooltip marginTop={2} text="Each placement represents a print area on the product. Choose which artwork to display in each area, and select the decoration method and dimensions for printing. At least one placement must be configured — the rest are optional." />
+                  </div>
+                  <div className="grid grid-cols-[repeat(auto-fill,200px)] gap-4">
+                    {allPlaceholders.map((ph) => {
+                      const settings = placementSettings[ph.key] || { source: '', customImageId: null };
+                      const carouselImages = getPlacementCarouselImages(ph.key);
+                      return (
+                        <div key={ph.key} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
+                          <div className="w-full aspect-square mb-2 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
+                            {carouselImages.length > 0 ? (
+                              <Carousel
+                                images={carouselImages}
+                                alt={formatPosition(ph.position)}
+                                singleImage
+                                infiniteScroll
+                                imageClassName="!max-h-none w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                                No Image
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                      <p className="text-sm font-medium mb-2">{formatPosition(ph.position)}</p>
-                      {(() => {
-                        const dmOptions = ph.decorationMethods.map((d) => ({
-                          value: d.method,
-                          label: formatDecorationMethod(d.method),
-                        }));
-                        const selectedDm = settings.decorationMethod || dmOptions[0]?.value || '';
-                        const dimOptions = (ph.decorationMethods.find((d) => d.method === selectedDm)?.dimensions || []).map((dim) => ({
-                          value: dim,
-                          label: dim.replace('x', ' × '),
-                        }));
-                        const selectedDim = settings.dimensions || dimOptions[0]?.value || '';
-                        return (
-                          <>
-                            <Select
-                              name={`placement-dm-${ph.key}`}
-                              options={dmOptions}
-                              value={selectedDm}
-                              onChange={(e) => handlePlacementDecorationMethodChange(ph.key, e.target.value)}
-                              className="mb-2 w-full"
-                            />
-                            <Select
-                              name={`placement-dims-${ph.key}`}
-                              options={dimOptions}
-                              value={selectedDim}
-                              onChange={(e) => handlePlacementDimensionsChange(ph.key, e.target.value)}
-                              className="mb-2 w-full"
-                            />
-                          </>
-                        );
-                      })()}
-                      <Select
-                        name={`placement-${ph.key}`}
-                        options={artworkOptions}
-                        value={settings.source === 'item' ? (settings.itemId || '') : (settings.source || '')}
-                        onChange={(e) => handlePlacementSourceChange(ph.key, e.target.value)}
-                        className="mb-0 w-full"
-                      />
-                      {settings.source === 'custom' && (
-                        <ButtonOutline
-                          onClick={() => setCustomImageSelectorTarget({ key: ph.key, itemId: projectItems[0]?.id })}
-                          className="mb-0 mt-2 w-full"
-                        >
-                          <Icon name="image" className="mr-2" />
-                          <span>Select</span>
-                        </ButtonOutline>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <hr className="border-gray-200 dark:border-gray-700" />
-
-          <div>
-            <div className="flex items-center gap-1 mb-1">
-              <label className="block text-sm font-medium">Image Prompt</label>
-              <Tooltip marginTop={2} text="Write a prompt to describe the product being displayed in any way — being worn or used by any person you describe. This will be used in your product listing and advertising." />
-            </div>
-            <TextArea
-              name="prompt"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe how the product should be displayed..."
-              rows={5}
-            />
-          </div>
+                          <p className="text-sm font-medium mb-2">{formatPosition(ph.position)}</p>
+                          {(() => {
+                            const dmOptions = ph.decorationMethods.map((d) => ({
+                              value: d.method,
+                              label: formatDecorationMethod(d.method),
+                            }));
+                            const selectedDm = settings.decorationMethod || dmOptions[0]?.value || '';
+                            const dimOptions = (ph.decorationMethods.find((d) => d.method === selectedDm)?.dimensions || []).map((dim) => ({
+                              value: dim,
+                              label: dim.replace('x', ' × '),
+                            }));
+                            const selectedDim = settings.dimensions || dimOptions[0]?.value || '';
+                            return (
+                              <>
+                                <Select
+                                  name={`placement-dm-${ph.key}`}
+                                  options={dmOptions}
+                                  value={selectedDm}
+                                  onChange={(e) => handlePlacementDecorationMethodChange(ph.key, e.target.value)}
+                                  className="mb-2 w-full"
+                                />
+                                <Select
+                                  name={`placement-dims-${ph.key}`}
+                                  options={dimOptions}
+                                  value={selectedDim}
+                                  onChange={(e) => handlePlacementDimensionsChange(ph.key, e.target.value)}
+                                  className="mb-2 w-full"
+                                />
+                              </>
+                            );
+                          })()}
+                          <Select
+                            name={`placement-${ph.key}`}
+                            options={artworkOptions}
+                            value={settings.source === 'item' ? (settings.itemId || '') : (settings.source || '')}
+                            onChange={(e) => handlePlacementSourceChange(ph.key, e.target.value)}
+                            className="mb-0 w-full"
+                          />
+                          {settings.source === 'custom' && (
+                            <ButtonOutline
+                              onClick={() => setCustomImageSelectorTarget({ key: ph.key, itemId: projectItems[0]?.id })}
+                              className="mb-0 mt-2 w-full"
+                            >
+                              <Icon name="image" className="mr-2" />
+                              <span>Select</span>
+                            </ButtonOutline>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400">No placements available. Select variants to load placement options.</p>
+              ),
+            },
+            {
+              id: 'prompt',
+              label: 'Image Prompt',
+              content: (
+                <div>
+                  <div className="flex items-center gap-1 mb-1">
+                    <label className="block text-sm font-medium">Image Prompt</label>
+                    <Tooltip marginTop={2} text="Write a prompt to describe the product being displayed in any way — being worn or used by any person you describe. This will be used in your product listing and advertising." />
+                  </div>
+                  <TextArea
+                    name="prompt"
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="Describe how the product should be displayed..."
+                    rows={5}
+                  />
+                </div>
+              ),
+            },
+          ]} />
         </div>
       ) : (
         <p className="text-sm text-gray-500 dark:text-gray-400">No blueprint data available.</p>

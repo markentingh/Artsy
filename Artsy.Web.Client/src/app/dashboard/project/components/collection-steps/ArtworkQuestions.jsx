@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { useCollection } from '@/context/collection';
 import TextArea from '@/components/forms/textarea';
 import ButtonOutline from '@/components/ui/button-outline';
+import { List, Item } from '@/components/ui/list';
 
 export default function ArtworkQuestions() {
   const {
@@ -28,22 +29,25 @@ export default function ArtworkQuestions() {
       <h3 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
         Artwork {currentItemIndex + 1} of {aiItems.length}: {currentItem?.title || 'Untitled'}
       </h3>
-      <div className="max-h-[40vh] overflow-y-auto space-y-4">
+      <div className="max-h-[40vh] overflow-y-auto">
         {currentItemQuestions.length === 0 ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">No questions for this artwork.</p>
         ) : (
-          currentItemQuestions.map((question) => (
-            <TextArea
-              key={question.id}
-              name={`item-answer-${question.id}`}
-              label={question.question}
-              value={itemAnswers[question.id] || ''}
-              onChange={(e) => handleItemAnswerChange(question.id, e.target.value)}
-              placeholder="Enter an answer"
-              rows={3}
-              maxLength={255}
-            />
-          ))
+          <List>
+            {currentItemQuestions.map((question) => (
+              <Item key={question.id}>
+                <TextArea
+                  name={`item-answer-${question.id}`}
+                  label={question.question}
+                  value={itemAnswers[question.id] || ''}
+                  onChange={(e) => handleItemAnswerChange(question.id, e.target.value)}
+                  placeholder="Enter an answer"
+                  rows={3}
+                  maxLength={255}
+                />
+              </Item>
+            ))}
+          </List>
         )}
       </div>
       <div className="buttons flex justify-end gap-2 mt-4">

@@ -8,6 +8,7 @@ namespace Artsy.Data.Interfaces
         Task<int> GetCountAsync(string keyword, string brand, bool? published = null);
         Task<IEnumerable<PrintifyBlueprint>> SearchAsync(string keyword, string brand, int start, int length, bool? published = null);
         Task<PrintifyBlueprint?> GetByBlueprintIdAsync(int blueprintId);
+        Task<IEnumerable<PrintifyBlueprint>> GetByBlueprintIdsAsync(IEnumerable<int> blueprintIds);
         Task UpsertAsync(PrintifyBlueprint blueprint);
         Task UpsertBatchAsync(IEnumerable<PrintifyBlueprint> blueprints);
         Task<IEnumerable<string>> GetBrandsAsync();

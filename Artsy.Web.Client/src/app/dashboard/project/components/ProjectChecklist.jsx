@@ -1,5 +1,6 @@
 import React from 'react';
 import Checked from '@/components/ui/checked';
+import { List, Item } from '@/components/ui/list';
 
 export default function ProjectChecklist({ checklist }) {
   const items = [
@@ -44,22 +45,19 @@ export default function ProjectChecklist({ checklist }) {
   return (
     <div className="mb-8">
       <h2 className="text-xl font-semibold mb-4">Project Setup Checklist</h2>
-      <div className="space-y-3">
+      <List>
         {items.map((item) => (
-          <div
-            key={item.key}
-            className="flex items-center justify-between gap-4 rounded-lg bg-white dark:bg-gray-800 p-4 shadow"
-          >
+          <Item key={item.key} className="justify-between gap-4">
             <div className="flex items-center gap-4">
               <Checked checked={item.isChecked ?? checklist?.[item.key]} />
               <span className="text-gray-700 dark:text-gray-200">{item.label}</span>
             </div>
-            <span className="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-sm font-medium rounded px-2 py-1">
+            <span className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-sm font-medium rounded px-2 py-1">
               {item.completed}/{item.total}
             </span>
-          </div>
+          </Item>
         ))}
-      </div>
+      </List>
     </div>
   );
 }

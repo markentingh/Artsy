@@ -21,15 +21,21 @@ namespace Artsy.API.Models.Projects
 
         [JsonPropertyName("images")]
         public List<OpenAIImageReference>? Images { get; set; }
+    }
+
+    public class OpenAIResponsesRequest
+    {
+        [JsonPropertyName("model")]
+        public string Model { get; set; } = "gpt-4o";
 
         [JsonPropertyName("previous_response_id")]
         public string? PreviousResponseId { get; set; }
 
         [JsonPropertyName("input")]
-        public object? Input { get; set; }
+        public List<OpenAIInputMessage> Input { get; set; } = new();
 
         [JsonPropertyName("tools")]
-        public List<OpenAITool>? Tools { get; set; }
+        public List<OpenAITool> Tools { get; set; } = new();
 
         [JsonPropertyName("tool_choice")]
         public string? ToolChoice { get; set; }

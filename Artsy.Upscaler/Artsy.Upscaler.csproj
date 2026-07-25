@@ -8,6 +8,10 @@
     <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
+  <Target Name="KillRunningInstance" BeforeTargets="Build">
+    <Exec Command="taskkill /F /IM Artsy.Upscaler.exe 2>nul" IgnoreExitCode="true" />
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250506" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />

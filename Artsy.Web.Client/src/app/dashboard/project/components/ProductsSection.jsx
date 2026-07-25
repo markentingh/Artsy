@@ -100,6 +100,7 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
           name: config.name,
           blueprintJson: config.blueprintJson,
           placementJson: config.placementJson || '',
+          prompt: config.prompt || '',
         });
         if (resp.data.success) {
           await fetchBlueprints();
@@ -120,6 +121,7 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
           name: config.name,
           blueprintJson: config.blueprintJson,
           placementJson: config.placementJson || '',
+          prompt: config.prompt || '',
         });
         if (resp.data.success) {
           await fetchBlueprints();

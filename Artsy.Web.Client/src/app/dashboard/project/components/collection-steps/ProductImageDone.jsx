@@ -6,6 +6,7 @@ import Carousel from '@/components/ui/carousel';
 export default function ProductImageDone() {
   const {
     allProductImages, collectionId, setStep, STEPS, onClose, api,
+    setArtworkPreview,
   } = useCollection();
 
   const handleNext = useCallback(() => {
@@ -13,6 +14,10 @@ export default function ProductImageDone() {
   }, [setStep, STEPS]);
 
   const images = allProductImages.map(img => api.getProductImageUrl(collectionId, img.id));
+
+  const handleImageClick = useCallback((src, index) => {
+    setArtworkPreview({ images, src, alt: 'Product Image Preview' });
+  }, [images, setArtworkPreview]);
 
   return (
     <div>
@@ -25,6 +30,7 @@ export default function ProductImageDone() {
             <Carousel
               images={images}
               alt="Generated product images"
+              onImageClick={handleImageClick}
               infiniteScroll
               imageClassName="!max-h-none w-[150px] h-[150px] object-contain rounded-lg"
             />

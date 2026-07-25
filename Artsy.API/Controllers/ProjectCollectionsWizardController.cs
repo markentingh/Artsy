@@ -100,6 +100,7 @@ namespace Artsy.API.Controllers
                         itemId = a.ItemId,
                         active = a.Active,
                         accepted = a.Accepted,
+                        fullSize = a.FullSize,
                         width = a.Width,
                         height = a.Height
                     })
@@ -615,65 +616,253 @@ namespace Artsy.API.Controllers
 
                 var blueprints = (await _projectBlueprintRepository.GetByProjectIdAsync(projectId)).ToList();
                 var collectionArtworkList = (await _projectCollectionArtworkRepository.GetByCollectionIdAsync(collectionId)).ToList();
+
+                var printifyBlueprintIds = blueprints.Select(b => b.BlueprintId).Where(id => id > 0).Distinct().ToList();
+                var allVariants = printifyBlueprintIds.Count > 0
+                    ? (await _variantRepository.GetByBlueprintIdsAsync(printifyBlueprintIds)).ToList()
+                    : new List<PrintifyBlueprintVariant>();
+                var allImages = printifyBlueprintIds.Count > 0
+                    ? (await _printifyBlueprintImageRepository.GetByBlueprintIdsAsync(printifyBlueprintIds)).ToList()
+                    : new List<PrintifyBlueprintImage>();
+
+                var variantsByBlueprint = allVariants.GroupBy(v => v.BlueprintId).ToDictionary(g => g.Key, g => g.ToList());
+                var imagesByBlueprint = allImages.GroupBy(i => i.BlueprintId).ToDictionary(g => g.Key, g => g.ToList());
+
+                var existingProductImages = collectionId != Guid.Empty
+                    ? (await _projectCollectionProductImageRepository.GetByCollectionIdAsync(collectionId)).ToList()
+                    : new List<ProjectCollectionProductImage>();
+
+                var printifyBlueprintsById = printifyBlueprintIds.Count > 0
+                    ? (await _printifyBlueprintRepository.GetByBlueprintIdsAsync(printifyBlueprintIds)).ToDictionary(b => b.BlueprintId)
+                    : new Dictionary<int, PrintifyBlueprint>();
+
+                var genModel = await _imageGenerationModelRepository.GetByModelKeyAsync("openai");
+                var conversion = genModel != null && genModel.TokenConversion > 0 ? (1000m * genModel.TokenConversion) : 1000m;
+
+                IImageTokens? tokenizer = null;
+                if (genModel != null)
+                {
+                    var imageGen = _imageGenerations.FirstOrDefault(g => g.ModelKey.Equals("openai", StringComparison.OrdinalIgnoreCase));
+                    if (imageGen != null)
+                        tokenizer = imageGen.CreateTokenizer(genModel);
+                }
+
+                var printifyImageDimensionsCache = new Dictionary<(int, int), (int width, int height)>();
+
                 var result = new List<object>();
 
                 foreach (var bp in blueprints)
                 {
-                    if (string.IsNullOrWhiteSpace(bp.PlacementJson)) continue;
-
                     var printifyBlueprintId = bp.BlueprintId;
 
-                    var placements = new List<object>();
-                    try
+                    var selectedVariantIds = new HashSet<int>();
+                    if (!string.IsNullOrWhiteSpace(bp.BlueprintJson))
                     {
-                        var placementDict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(bp.PlacementJson);
-                        if (placementDict != null)
+                        try
                         {
-                            foreach (var kv in placementDict)
+                            using var doc = JsonDocument.Parse(bp.BlueprintJson);
+                            if (doc.RootElement.TryGetProperty("variantIds", out var vIdsEl) && vIdsEl.ValueKind == JsonValueKind.Array)
                             {
-                                var placementNum = int.Parse(kv.Key);
-                                var placementObj = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(kv.Value.ToString() ?? "{}");
-                                if (placementObj == null) continue;
-
-                                var source = placementObj.TryGetValue("source", out var sVal) ? sVal.ToString() : "";
-                                var itemId = placementObj.TryGetValue("itemId", out var iVal) ? iVal.ToString() : "";
-
-                                if (source != "item" || string.IsNullOrWhiteSpace(itemId)) continue;
-
-                                var artwork = collectionArtworkList.FirstOrDefault(a => a.ItemId.ToString() == itemId);
-                                if (artwork == null || !artwork.Active) continue;
-
-                                placements.Add(new
+                                foreach (var v in vIdsEl.EnumerateArray())
                                 {
-                                    placement = placementNum,
-                                    itemId = itemId,
-                                    artworkId = artwork.Id,
-                                    artworkUrl = $"/api/projects/collection/{collectionId}/item/{itemId}/artwork/{artwork.Id}"
-                                });
+                                    if (v.TryGetInt32(out var vId))
+                                        selectedVariantIds.Add(vId);
+                                }
                             }
                         }
+                        catch { }
                     }
-                    catch { }
 
-                    if (placements.Count == 0) continue;
+                    var variantTitles = new Dictionary<int, string>();
+                    var colorsSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    if (printifyBlueprintId > 0 && variantsByBlueprint.TryGetValue(printifyBlueprintId, out var bpVariants))
+                    {
+                        foreach (var v in bpVariants)
+                        {
+                            if (selectedVariantIds.Count > 0 && !selectedVariantIds.Contains(v.VariantId))
+                                continue;
+
+                            var color = v.Title;
+                            try
+                            {
+                                if (!string.IsNullOrWhiteSpace(v.Options))
+                                {
+                                    using var optsDoc = JsonDocument.Parse(v.Options);
+                                    if (optsDoc.RootElement.TryGetProperty("color", out var colorEl))
+                                        color = colorEl.GetString() ?? v.Title;
+                                }
+                            }
+                            catch { }
+
+                            if (colorsSeen.Add(color))
+                                variantTitles[v.VariantId] = color;
+                        }
+                    }
+
+                    var placements = new List<object>();
+                    var placementKeys = new List<string>();
+                    if (!string.IsNullOrWhiteSpace(bp.PlacementJson))
+                    {
+                        try
+                        {
+                            var placementDict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(bp.PlacementJson);
+                            if (placementDict != null)
+                            {
+                                int placementIndex = 0;
+                                foreach (var kv in placementDict)
+                                {
+                                    var placementName = kv.Key;
+                                    var placementObj = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(kv.Value.ToString() ?? "{}");
+                                    if (placementObj == null) continue;
+
+                                    placementKeys.Add(placementName);
+
+                                    var source = placementObj.TryGetValue("source", out var sVal) ? sVal.ToString() : "";
+                                    var itemId = placementObj.TryGetValue("itemId", out var iVal) ? iVal.ToString() : "";
+
+                                    Guid? artworkId = null;
+                                    string artworkUrl = null;
+
+                                    if (source == "item" && !string.IsNullOrWhiteSpace(itemId))
+                                    {
+                                        var artwork = collectionArtworkList.FirstOrDefault(a => a.ItemId.ToString() == itemId);
+                                        if (artwork != null && artwork.Active)
+                                        {
+                                            artworkId = artwork.Id;
+                                            artworkUrl = $"/api/projects/collection/{collectionId}/item/{itemId}/artwork/{artwork.Id}";
+                                        }
+                                    }
+
+                                    placements.Add(new
+                                    {
+                                        placementIndex,
+                                        placement = placementName,
+                                        placementName,
+                                        itemId = itemId ?? "",
+                                        artworkId,
+                                        artworkUrl
+                                    });
+                                    placementIndex++;
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+
+                    string imagePrompt = "";
+                    if (printifyBlueprintId > 0 && printifyBlueprintsById.TryGetValue(printifyBlueprintId, out var printifyBp))
+                        imagePrompt = printifyBp.ImagePrompt ?? "";
+
+                    var existingProductImage = existingProductImages.FirstOrDefault(pi => pi.ProjectBlueprintId == bp.Id);
+                    var prompt = !string.IsNullOrWhiteSpace(existingProductImage?.Prompt)
+                        ? existingProductImage.Prompt
+                        : bp.Prompt ?? "";
+
+                    var combinedPrompt = $"{imagePrompt}\n{prompt}".Trim();
 
                     var variants = new List<object>();
-                    if (printifyBlueprintId > 0)
+                    var variantIdsAdded = new HashSet<int>();
+                    if (printifyBlueprintId > 0 && imagesByBlueprint.TryGetValue(printifyBlueprintId, out var bpImages))
                     {
-                        var bpImages = await _printifyBlueprintImageRepository.GetByBlueprintIdAsync(printifyBlueprintId);
                         foreach (var img in bpImages)
                         {
                             var imgVariants = System.Text.Json.JsonSerializer.Deserialize<int[]>(img.Variants ?? "[]") ?? Array.Empty<int>();
                             foreach (var v in imgVariants)
                             {
-                                variants.Add(new
+                                if (!variantTitles.ContainsKey(v))
+                                    continue;
+                                if (variantIdsAdded.Add(v))
                                 {
-                                    variant = v,
-                                    imageIndex = img.ImageIndex,
-                                    type = img.Type,
-                                    position = img.Position,
-                                    imageUrl = $"/api/printify/blueprint-image?blueprintId={printifyBlueprintId}&index={img.ImageIndex}"
-                                });
+                                    var variantImages = bpImages.Where(img2 =>
+                                    {
+                                        var img2Variants = System.Text.Json.JsonSerializer.Deserialize<int[]>(img2.Variants ?? "[]") ?? Array.Empty<int>();
+                                        return img2Variants.Contains(v);
+                                    }).ToList();
+
+                                    var hasForProductImage = variantImages.Any(i => i.Type == 3);
+                                    var hasBefore = variantImages.Any(i => i.Type == 1);
+                                    var hasAfter = variantImages.Any(i => i.Type == 2);
+                                    var hasNone = variantImages.Any(i => i.Type == 0);
+
+                                    var selectedPrintifyImages = new List<PrintifyBlueprintImage>();
+                                    if (hasForProductImage)
+                                        selectedPrintifyImages.Add(variantImages.First(i => i.Type == 3));
+                                    else if (hasBefore && hasAfter)
+                                    {
+                                        selectedPrintifyImages.Add(variantImages.First(i => i.Type == 1));
+                                        selectedPrintifyImages.Add(variantImages.First(i => i.Type == 2));
+                                    }
+                                    else if (hasBefore)
+                                        selectedPrintifyImages.Add(variantImages.First(i => i.Type == 1));
+                                    else if (hasAfter)
+                                        selectedPrintifyImages.Add(variantImages.First(i => i.Type == 2));
+                                    else if (hasNone)
+                                        selectedPrintifyImages.Add(variantImages.First(i => i.Type == 0));
+
+                                    var printifyDims = new List<(int width, int height)>();
+                                    foreach (var pImg in selectedPrintifyImages.Take(2))
+                                    {
+                                        var cacheKey = (printifyBlueprintId, pImg.ImageIndex);
+                                        if (!printifyImageDimensionsCache.TryGetValue(cacheKey, out var dims))
+                                        {
+                                            var imgBytes = await _imageService.GetPrintifyCatalogImageAsync(printifyBlueprintId, pImg.ImageIndex);
+                                            var dimResult = await _imageService.GetImageDimensionsAsync(imgBytes);
+                                            dims = dimResult ?? (1024, 1024);
+                                            printifyImageDimensionsCache[cacheKey] = dims;
+                                        }
+                                        printifyDims.Add(dims);
+                                    }
+
+                                    var combos = new List<object>();
+                                    foreach (var p in placements)
+                                    {
+                                        dynamic placement = p;
+                                        int inputImageCount = selectedPrintifyImages.Count + 1;
+
+                                        var inputImages = new List<(int width, int height)>(printifyDims);
+
+                                        var artworkId = (Guid?)placement.artworkId;
+                                        var placementArtwork = artworkId != null
+                                            ? collectionArtworkList.FirstOrDefault(a => a.Id == artworkId.Value)
+                                            : null;
+                                        if (placementArtwork != null && placementArtwork.Width > 0 && placementArtwork.Height > 0)
+                                            inputImages.Add((placementArtwork.Width, placementArtwork.Height));
+                                        else
+                                            inputImages.Add((1024, 1024));
+
+                                        int comboTokens;
+                                        if (tokenizer != null)
+                                        {
+                                            var tokenResult = tokenizer.CalculateTokens(combinedPrompt, 2048, 2048, "medium", inputImages);
+                                            comboTokens = (int)Math.Round((tokenResult.TextInputTokens + tokenResult.ImageInputTokens + tokenResult.ImageOutputTokens) / conversion);
+                                        }
+                                        else
+                                        {
+                                            comboTokens = Math.Max(1, inputImageCount);
+                                        }
+
+                                        combos.Add(new
+                                        {
+                                            placementIndex = placement.placementIndex,
+                                            placement = placement.placement,
+                                            placementName = placement.placementName,
+                                            tokens = comboTokens,
+                                            inputImageCount,
+                                            hasArtwork = artworkId != null
+                                        });
+                                    }
+
+                                    variants.Add(new
+                                    {
+                                        variant = v,
+                                        variantTitle = variantTitles[v],
+                                        imageIndex = img.ImageIndex,
+                                        type = img.Type,
+                                        position = img.Position,
+                                        imageUrl = $"/api/printify/blueprint-image?blueprintId={printifyBlueprintId}&index={img.ImageIndex}",
+                                        combos
+                                    });
+                                }
                             }
                         }
                     }
@@ -683,6 +872,8 @@ namespace Artsy.API.Controllers
                         projectBlueprintId = bp.Id,
                         blueprintName = bp.Name,
                         printifyBlueprintId,
+                        imagePrompt,
+                        prompt,
                         placements,
                         variants
                     });
@@ -728,11 +919,19 @@ namespace Artsy.API.Controllers
                 try
                 {
                     var placementDict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(bp.PlacementJson ?? "{}");
-                    if (placementDict != null && placementDict.TryGetValue(request.Placement.ToString(), out var pVal))
+                    if (placementDict != null)
                     {
-                        var placementObj = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(pVal.ToString() ?? "{}");
-                        if (placementObj != null && placementObj.TryGetValue("itemId", out var iVal))
-                            Guid.TryParse(iVal.ToString(), out placementItemId);
+                        var placementKeys = placementDict.Keys.ToList();
+                        if (request.Placement >= 0 && request.Placement < placementKeys.Count)
+                        {
+                            var placementKey = placementKeys[request.Placement];
+                            if (placementDict.TryGetValue(placementKey, out var pVal))
+                            {
+                                var placementObj = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(pVal.ToString() ?? "{}");
+                                if (placementObj != null && placementObj.TryGetValue("itemId", out var iVal))
+                                    Guid.TryParse(iVal.ToString(), out placementItemId);
+                            }
+                        }
                     }
                 }
                 catch { }
@@ -779,16 +978,10 @@ namespace Artsy.API.Controllers
                 {
                     Model = genModel.Model,
                     Prompt = finalPrompt,
-                    Size = "1024x1024",
+                    Size = "2048x2048",
                     Quality = "medium",
                     Images = new List<OpenAIImageReference>()
                 };
-
-                modelRequest.Images.Add(new OpenAIImageReference
-                {
-                    Image = Convert.ToBase64String(artworkImageBytes),
-                    Detail = "auto"
-                });
 
                 if (printifyBlueprintId > 0)
                 {
@@ -799,38 +992,58 @@ namespace Artsy.API.Controllers
                         return imgVariants.Contains(request.Variant);
                     }).ToList();
 
-                    var beforeImage = variantImages.FirstOrDefault(img => img.Type == 1);
-                    if (beforeImage == null)
-                        beforeImage = variantImages.FirstOrDefault();
+                    var selectedPrintifyImages = new List<PrintifyBlueprintImage>();
 
-                    var afterImage = variantImages.FirstOrDefault(img => img.Type == 2);
-
-                    if (beforeImage != null)
+                    var forProductImage = variantImages.FirstOrDefault(img => img.Type == 3);
+                    if (forProductImage != null)
                     {
-                        var beforeBytes = await _imageService.GetPrintifyCatalogImageAsync(printifyBlueprintId, beforeImage.ImageIndex);
-                        if (beforeBytes != null && beforeBytes.Length > 0)
+                        selectedPrintifyImages.Add(forProductImage);
+                    }
+                    else
+                    {
+                        var beforeImage = variantImages.FirstOrDefault(img => img.Type == 1);
+                        var afterImage = variantImages.FirstOrDefault(img => img.Type == 2);
+
+                        if (beforeImage != null && afterImage != null)
                         {
-                            modelRequest.Images.Add(new OpenAIImageReference
-                            {
-                                Image = Convert.ToBase64String(beforeBytes),
-                                Detail = "auto"
-                            });
+                            selectedPrintifyImages.Add(beforeImage);
+                            selectedPrintifyImages.Add(afterImage);
+                        }
+                        else if (beforeImage != null)
+                        {
+                            selectedPrintifyImages.Add(beforeImage);
+                        }
+                        else if (afterImage != null)
+                        {
+                            selectedPrintifyImages.Add(afterImage);
+                        }
+                        else
+                        {
+                            var noneImage = variantImages.FirstOrDefault(img => img.Type == 0);
+                            if (noneImage != null)
+                                selectedPrintifyImages.Add(noneImage);
                         }
                     }
 
-                    if (afterImage != null)
+                    foreach (var pImg in selectedPrintifyImages.Take(2))
                     {
-                        var afterBytes = await _imageService.GetPrintifyCatalogImageAsync(printifyBlueprintId, afterImage.ImageIndex);
-                        if (afterBytes != null && afterBytes.Length > 0)
+                        var imgBytes = await _imageService.GetPrintifyCatalogImageAsync(printifyBlueprintId, pImg.ImageIndex);
+                        if (imgBytes != null && imgBytes.Length > 0)
                         {
                             modelRequest.Images.Add(new OpenAIImageReference
                             {
-                                Image = Convert.ToBase64String(afterBytes),
+                                Image = Convert.ToBase64String(imgBytes),
                                 Detail = "auto"
                             });
                         }
                     }
                 }
+
+                modelRequest.Images.Add(new OpenAIImageReference
+                {
+                    Image = Convert.ToBase64String(artworkImageBytes),
+                    Detail = "auto"
+                });
 
                 var jsonOptions = new JsonSerializerOptions
                 {
@@ -864,8 +1077,8 @@ namespace Artsy.API.Controllers
                     Placement = request.Placement,
                     ImageModel = genModel.Model,
                     Prompt = finalPrompt,
-                    Width = 1024,
-                    Height = 1024,
+                    Width = 2048,
+                    Height = 2048,
                     Accepted = false,
                     ResponseId = genResult.ResponseId ?? ""
                 };
@@ -997,6 +1210,14 @@ namespace Artsy.API.Controllers
                 return Json(new ApiResponse { success = false, message = ex.Message });
             }
         }
+
+        private static readonly string[] PlacementNames = [
+            "Front", "Back", "Left Sleeve", "Right Sleeve", "Left", "Right",
+            "Top", "Bottom", "Inside", "Outside"
+        ];
+
+        private static string GetPlacementName(int num) =>
+            num >= 0 && num < PlacementNames.Length ? PlacementNames[num] : $"Placement {num + 1}";
 
     }
 }

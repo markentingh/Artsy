@@ -159,75 +159,57 @@ namespace Artsy.API.Services
                 throw new InvalidOperationException("OpenAI API key is missing.");
 
             var imageModel = request.Model ?? "gpt-image-2";
-            request.Model = "gpt-4o";
-
             var toolSize = !string.IsNullOrWhiteSpace(request.Size) ? FindBestResolution(request.Size) : "1024x1024";
             var toolQuality = !string.IsNullOrWhiteSpace(quality) ? quality
                 : !string.IsNullOrWhiteSpace(request.Quality) ? request.Quality
                 : "medium";
 
-            request.Tools = new List<OpenAITool>
+            var responsesRequest = new OpenAIResponsesRequest
             {
-                new()
-                {
-                    Type = "image_generation",
-                    Model = imageModel,
-                    Size = toolSize,
-                    Quality = toolQuality
-                }
-            };
-            request.ToolChoice = "auto";
-
-            // Clear size/quality/prompt from top-level since they go in the tool config / input
-            request.Size = null;
-            request.Quality = null;
-
-            if (!string.IsNullOrWhiteSpace(previousResponseId))
-            {
-                request.PreviousResponseId = previousResponseId;
-                request.Input = new List<OpenAIInputMessage>
+                Model = "gpt-4o",
+                Tools = new List<OpenAITool>
                 {
                     new()
                     {
-                        Role = "user",
-                        Content = new List<OpenAIInputContent>
-                        {
-                            new() { Type = "input_text", Text = request.Prompt }
-                        }
+                        Type = "image_generation",
+                        Model = imageModel,
+                        Size = toolSize,
+                        Quality = toolQuality
                     }
-                };
-            }
-            else
-            {
-                var contentItems = new List<OpenAIInputContent>
-                {
-                    new() { Type = "input_text", Text = request.Prompt }
-                };
+                },
+                ToolChoice = "auto"
+            };
 
-                if (request.Images != null && request.Images.Count > 0)
+            if (!string.IsNullOrWhiteSpace(previousResponseId))
+                responsesRequest.PreviousResponseId = previousResponseId;
+
+            var contentItems = new List<OpenAIInputContent>
+            {
+                new() { Type = "input_text", Text = request.Prompt }
+            };
+
+            if (request.Images != null && request.Images.Count > 0)
+            {
+                foreach (var img in request.Images)
                 {
-                    foreach (var img in request.Images)
+                    if (!string.IsNullOrWhiteSpace(img.Image))
                     {
-                        if (!string.IsNullOrWhiteSpace(img.Image))
+                        contentItems.Add(new OpenAIInputContent
                         {
-                            contentItems.Add(new OpenAIInputContent
-                            {
-                                Type = "input_image",
-                                ImageUrl = $"data:image/png;base64,{img.Image}",
-                                Detail = img.Detail ?? "auto"
-                            });
-                        }
+                            Type = "input_image",
+                            ImageUrl = $"data:image/png;base64,{img.Image}",
+                            Detail = img.Detail ?? "auto"
+                        });
                     }
                 }
-
-                request.Input = new List<OpenAIInputMessage>
-                {
-                    new() { Role = "user", Content = contentItems }
-                };
             }
 
-            request.Prompt = null;
-            var jsonContent = JsonSerializer.Serialize(request, jsonOptions);
+            responsesRequest.Input = new List<OpenAIInputMessage>
+            {
+                new() { Role = "user", Content = contentItems }
+            };
+
+            var jsonContent = JsonSerializer.Serialize(responsesRequest, jsonOptions);
             var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
             using var client = _httpClientFactory.CreateClient("ImageGeneration");

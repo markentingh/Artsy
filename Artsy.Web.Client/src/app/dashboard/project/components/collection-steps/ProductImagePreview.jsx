@@ -94,7 +94,7 @@ export default function ProductImagePreview() {
     <div>
       <h3 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
         Product Image {currentProductComboIndex + 1} of {selectedProductCombos.length}
-        {combo && ` — ${combo.blueprintName} (Variant ${combo.variant}, Placement ${combo.placement})`}
+        {combo && ` — ${combo.blueprintName} - ${combo.variantTitle} - ${combo.placementName}`}
       </h3>
       <div className="flex flex-col items-center gap-4">
         <div className="w-[512px] h-[512px] max-w-full flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden">

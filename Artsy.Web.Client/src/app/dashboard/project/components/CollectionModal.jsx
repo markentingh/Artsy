@@ -10,6 +10,7 @@ import ArtworkQuestions from './collection-steps/ArtworkQuestions';
 import ArtworkPreview from './collection-steps/ArtworkPreview';
 import ReadyToGenerate from './collection-steps/ReadyToGenerate';
 import NextStep from './collection-steps/NextStep';
+import ProductImageSelection from './collection-steps/ProductImageSelection';
 import ProductImagePrompt from './collection-steps/ProductImagePrompt';
 import ProductImagePreview from './collection-steps/ProductImagePreview';
 import ProductImageDone from './collection-steps/ProductImageDone';
@@ -20,7 +21,8 @@ const stepTitle = (step) => {
     case STEPS.ARTWORK_QUESTIONS: return 'New Collection - Artwork Questions';
     case STEPS.ARTWORK_PREVIEW: return 'New Collection - Artwork Preview';
     case STEPS.READY_TO_GENERATE: return 'New Collection - Ready to Upscale';
-    case STEPS.PRODUCT_IMAGE_PROMPT: return 'New Collection - Product Images';
+    case STEPS.PRODUCT_IMAGE_SELECTION: return 'New Collection - Product Image Selection';
+    case STEPS.PRODUCT_IMAGE_PROMPT: return 'New Collection - Product Image Prompt';
     case STEPS.PRODUCT_IMAGE_PREVIEW: return 'New Collection - Product Images';
     case STEPS.PRODUCT_IMAGE_DONE: return 'New Collection - Product Images';
     case STEPS.NEXT_STEP: return 'New Collection - Next Step';
@@ -60,6 +62,7 @@ function CollectionWizard() {
           {step === STEPS.ARTWORK_QUESTIONS && <ArtworkQuestions />}
           {step === STEPS.ARTWORK_PREVIEW && <ArtworkPreview />}
           {step === STEPS.READY_TO_GENERATE && <ReadyToGenerate />}
+          {step === STEPS.PRODUCT_IMAGE_SELECTION && <ProductImageSelection />}
           {step === STEPS.PRODUCT_IMAGE_PROMPT && <ProductImagePrompt />}
           {step === STEPS.PRODUCT_IMAGE_PREVIEW && <ProductImagePreview />}
           {step === STEPS.PRODUCT_IMAGE_DONE && <ProductImageDone />}
@@ -86,6 +89,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
     setStep, setCurrentItemIndex, loadItemData,
     fetchEstimate, setInitialLoading,
     STEPS, reset, loadData,
+    loadProductImageVariants, loadImageModels, ensureCollection,
   } = useCollection();
 
   const [aiItemsLoaded, setAiItemsLoaded] = useState(false);
@@ -115,6 +119,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
     }
     if (resumeStep === 'artwork_resume') {
       if (!aiItemsLoaded) return;
+      if (initialCollectionId && collectionArtwork.length === 0) return;
       setResumeStep(null);
 
       const artworkItemIds = new Set(
@@ -155,14 +160,29 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
           setCurrentItemIndex(firstUnacceptedIndex);
           loadItemData(firstUnacceptedIndex);
         } else {
-          setStep(STEPS.READY_TO_GENERATE);
-          fetchEstimate();
+          const allFullSize = collectionArtwork.length > 0 &&
+            collectionArtwork.filter(a => a.accepted).every(a => a.fullSize);
+          if (allFullSize) {
+            (async () => {
+              const colId = initialCollectionId || await ensureCollection();
+              if (colId) {
+                await Promise.all([loadProductImageVariants(colId), loadImageModels()]);
+                setStep(STEPS.PRODUCT_IMAGE_SELECTION);
+              } else {
+                setStep(STEPS.READY_TO_GENERATE);
+                fetchEstimate();
+              }
+            })();
+          } else {
+            setStep(STEPS.READY_TO_GENERATE);
+            fetchEstimate();
+          }
         }
       }
       setInitialLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiItems, aiItemsLoaded, resumeStep, blueprintItemIds]);
+  }, [aiItems, aiItemsLoaded, resumeStep, blueprintItemIds, collectionArtwork, initialCollectionId]);
 
   return null;
 }

@@ -14,6 +14,9 @@ export default function ReadyToGenerate() {
     doGenerateAll, handleSaveDraft,
     setArtworkPreview, onClose, api,
     projectId, cancelRef, STEPS,
+    upscaleComplete, setUpscaleComplete,
+    setStep, loadProductImageVariants, loadImageModels,
+    ensureCollection, setAllProductImages,
   } = useCollection();
 
   const acceptedArtworks = collectionArtwork.filter(a => a.active);
@@ -46,8 +49,30 @@ export default function ReadyToGenerate() {
 
   const handleTryAgain = useCallback(() => {
     setGenerationError(null);
+    setUpscaleComplete(false);
     if (collectionId) doGenerateAll(collectionId);
-  }, [collectionId, doGenerateAll, setGenerationError]);
+  }, [collectionId, doGenerateAll, setGenerationError, setUpscaleComplete]);
+
+  const handleNext = useCallback(async () => {
+    const colId = collectionId || await ensureCollection();
+    if (!colId) return;
+    await Promise.all([loadProductImageVariants(colId), loadImageModels()]);
+
+    try {
+      const imgRes = await api.getProductImages(colId);
+      if (imgRes.data.success) {
+        const existing = imgRes.data.data || [];
+        const accepted = existing.filter(img => img.accepted);
+        if (accepted.length > 0) {
+          setAllProductImages(accepted);
+          setStep(STEPS.NEXT_STEP);
+          return;
+        }
+      }
+    } catch { /* fall through to selection */ }
+
+    setStep(STEPS.PRODUCT_IMAGE_SELECTION);
+  }, [collectionId, ensureCollection, loadProductImageVariants, loadImageModels, setStep, STEPS, api, setAllProductImages]);
 
   const renderOverlay = (i) => {
     if (!isGeneratingAll) return null;
@@ -127,6 +152,16 @@ export default function ReadyToGenerate() {
             </>
           )}
         </div>
+      ) : upscaleComplete ? (
+        <>
+          <p className="text-center text-lg mb-4">
+            Upscaling complete! {generatedArtworks.length} artwork{generatedArtworks.length !== 1 ? 's' : ''} upscaled to full size.
+          </p>
+          <div className="buttons flex justify-end gap-2">
+            <ButtonOutline className="cancel" onClick={onClose}>Close</ButtonOutline>
+            <ButtonOutline onClick={handleNext}>Next</ButtonOutline>
+          </div>
+        </>
       ) : (
         <>
           <p className="text-center text-lg mb-2">

@@ -24,6 +24,7 @@ namespace Artsy.API.Services
         Task SaveProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId, byte[] imageData);
         Task<byte[]> GetProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId);
         Task<byte[]> GetImageGenerationAsync(Guid projectId, Guid? itemId, Guid? collectionId, Guid? blueprintId, string filename);
+        Task<(int width, int height)?> GetImageDimensionsAsync(byte[] imageBytes);
     }
 
     public class ImageService : IImageService
@@ -393,6 +394,23 @@ namespace Artsy.API.Services
                 return await GetFromAzureBlobAsync(relativePath);
 
             return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task<(int width, int height)?> GetImageDimensionsAsync(byte[] imageBytes)
+        {
+            if (imageBytes == null || imageBytes.Length == 0)
+                return null;
+
+            try
+            {
+                using var ms = new MemoryStream(imageBytes);
+                using var img = await Image.LoadAsync(ms);
+                return (img.Width, img.Height);
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 }

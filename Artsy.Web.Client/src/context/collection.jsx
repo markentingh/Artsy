@@ -9,6 +9,7 @@ export const STEPS = {
   ARTWORK_QUESTIONS: 'artwork_questions',
   ARTWORK_PREVIEW: 'artwork_preview',
   READY_TO_GENERATE: 'ready_to_generate',
+  PRODUCT_IMAGE_SELECTION: 'product_image_selection',
   PRODUCT_IMAGE_PROMPT: 'product_image_prompt',
   PRODUCT_IMAGE_PREVIEW: 'product_image_preview',
   PRODUCT_IMAGE_DONE: 'product_image_done',
@@ -24,11 +25,20 @@ export const WIZARD_STEPS = [
   'Next Steps',
 ];
 
+const PLACEMENT_NAMES = [
+  'Front', 'Back', 'Left Sleeve', 'Right Sleeve', 'Left', 'Right',
+  'Top', 'Bottom', 'Inside', 'Outside',
+];
+export function getPlacementName(num) {
+  return PLACEMENT_NAMES[num] || `Placement ${num + 1}`;
+}
+
 export const STEP_INDEX = {
   project_questions: 0,
   artwork_questions: 1,
   artwork_preview: 2,
   ready_to_generate: 3,
+  product_image_selection: 4,
   product_image_prompt: 4,
   product_image_preview: 4,
   product_image_done: 4,
@@ -75,6 +85,9 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const [selectedProductCombos, setSelectedProductCombos] = useState([]);
   const [currentProductComboIndex, setCurrentProductComboIndex] = useState(0);
   const [allProductImages, setAllProductImages] = useState([]);
+  const [imageModels, setImageModels] = useState([]);
+  const [selectedImageModel, setSelectedImageModel] = useState(null);
+  const [upscaleComplete, setUpscaleComplete] = useState(false);
 
   const blueprintItemIds = useMemo(() => {
     const ids = new Set();
@@ -240,24 +253,6 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     }
   }, [aiItems, collectionId, savedAnswers, api, ensureCollection, doGeneratePreview, fetchEstimate]);
 
-  const advanceToNextItem = useCallback((fromIndex = currentItemIndex) => {
-    const acceptedItemIds = new Set(
-      collectionArtwork.filter(a => a.accepted).map(a => String(a.itemId))
-    );
-    const nextIndex = aiItems.findIndex((item, idx) =>
-      idx > fromIndex &&
-      blueprintItemIds.has(String(item.id)) &&
-      !acceptedItemIds.has(String(item.id))
-    );
-    if (nextIndex === -1) {
-      setStep(STEPS.READY_TO_GENERATE);
-      fetchEstimate();
-    } else {
-      setCurrentItemIndex(nextIndex);
-      loadItemData(nextIndex);
-    }
-  }, [currentItemIndex, collectionArtwork, aiItems, blueprintItemIds, fetchEstimate, loadItemData]);
-
   const handleSaveDraft = useCallback(async () => {
     if (!collectionId) {
       try {
@@ -300,19 +295,22 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     }
   }, [collectionId, projectId, api, buildAllAnswers, onSaved, onClose]);
 
-  const loadProductImageVariants = useCallback(async () => {
-    if (!collectionId) return;
+  const loadProductImageVariants = useCallback(async (colId) => {
+    const id = colId || collectionId;
+    if (!id) {
+      console.warn('loadProductImageVariants: no collectionId');
+      return;
+    }
     try {
-      const res = await api.getProductImageVariants(projectId, collectionId);
+      const res = await api.getProductImageVariants(projectId, id);
       if (res.data.success) {
         const variants = res.data.data || [];
         setProductImageVariants(variants);
 
         let defaultPrompt = '';
         for (const bp of variants) {
-          const pb = blueprints.find(b => b.id === bp.projectBlueprintId);
-          if (pb?.prompt) {
-            defaultPrompt = pb.prompt;
+          if (bp.prompt) {
+            defaultPrompt = bp.prompt;
             break;
           }
         }
@@ -322,6 +320,65 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load product image variants' });
     }
   }, [collectionId, projectId, api, blueprints]);
+
+  const loadImageModels = useCallback(async () => {
+    try {
+      const res = await api.getActiveImageModels();
+      if (res.data.success) {
+        const models = res.data.data || [];
+        setImageModels(models);
+        if (models.length > 0 && !selectedImageModel) {
+          setSelectedImageModel(models[0]);
+        }
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load image models' });
+    }
+  }, [api, selectedImageModel]);
+
+  const advanceToNextItem = useCallback((fromIndex = currentItemIndex) => {
+    const acceptedItemIds = new Set(
+      collectionArtwork.filter(a => a.accepted).map(a => String(a.itemId))
+    );
+    const nextIndex = aiItems.findIndex((item, idx) =>
+      idx > fromIndex &&
+      blueprintItemIds.has(String(item.id)) &&
+      !acceptedItemIds.has(String(item.id))
+    );
+    if (nextIndex === -1) {
+      const allFullSize = collectionArtwork.length > 0 &&
+        collectionArtwork.filter(a => a.accepted).every(a => a.fullSize);
+      if (allFullSize) {
+        (async () => {
+          const colId = collectionId || await ensureCollection();
+          if (colId) {
+            await Promise.all([loadProductImageVariants(colId), loadImageModels()]);
+            try {
+              const imgRes = await api.getProductImages(colId);
+              if (imgRes.data.success) {
+                const accepted = (imgRes.data.data || []).filter(img => img.accepted);
+                if (accepted.length > 0) {
+                  setAllProductImages(accepted);
+                  setStep(STEPS.NEXT_STEP);
+                  return;
+                }
+              }
+            } catch { /* fall through to selection */ }
+            setStep(STEPS.PRODUCT_IMAGE_SELECTION);
+          } else {
+            setStep(STEPS.READY_TO_GENERATE);
+            fetchEstimate();
+          }
+        })();
+      } else {
+        setStep(STEPS.READY_TO_GENERATE);
+        fetchEstimate();
+      }
+    } else {
+      setCurrentItemIndex(nextIndex);
+      loadItemData(nextIndex);
+    }
+  }, [currentItemIndex, collectionArtwork, aiItems, blueprintItemIds, fetchEstimate, loadItemData, collectionId, ensureCollection, loadProductImageVariants, loadImageModels, setAllProductImages]);
 
   const doGenerateAll = useCallback(async (colId) => {
     if (!estimate || estimate.generations.length === 0) return;
@@ -373,10 +430,9 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     setIsGeneratingAll(false);
     setCurrentGeneratingIndex(-1);
     if (!cancelRef.current) {
-      await loadProductImageVariants();
-      setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+      setUpscaleComplete(true);
     }
-  }, [estimate, aiItems, projectId, api, buildProjectAnswers, loadProductImageVariants]);
+  }, [estimate, aiItems, projectId, api, buildProjectAnswers]);
 
   const reset = useCallback(() => {
     setStep(STEPS.PROJECT_QUESTIONS);
@@ -413,6 +469,9 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     setSelectedProductCombos([]);
     setCurrentProductComboIndex(0);
     setAllProductImages([]);
+    setImageModels([]);
+    setSelectedImageModel(null);
+    setUpscaleComplete(false);
   }, [initialCollectionId]);
 
   const loadData = useCallback(async (existingCollectionId) => {
@@ -526,7 +585,9 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     selectedProductCombos, setSelectedProductCombos,
     currentProductComboIndex, setCurrentProductComboIndex,
     allProductImages, setAllProductImages,
-    loadProductImageVariants,
+    loadProductImageVariants, loadImageModels,
+    imageModels, selectedImageModel, setSelectedImageModel,
+    upscaleComplete, setUpscaleComplete,
     reset, loadData,
   };
 

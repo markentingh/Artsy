@@ -7,18 +7,19 @@ import Select from '@/components/forms/select';
 import SelectChecklist from '@/components/ui/select-checklist';
 import ButtonOutline from '@/components/ui/button-outline';
 import Spinner from '@/components/ui/spinner';
-import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';
 import TextArea from '@/components/forms/textarea';
 
 const IMAGE_TYPE_NONE = 0;
 const IMAGE_TYPE_BEFORE = 1;
 const IMAGE_TYPE_AFTER = 2;
+const IMAGE_TYPE_FOR_PRODUCT_IMAGE = 3;
 
 const TYPE_OPTIONS = [
   { value: String(IMAGE_TYPE_NONE), label: 'None' },
   { value: String(IMAGE_TYPE_BEFORE), label: 'Before Artwork Applied' },
   { value: String(IMAGE_TYPE_AFTER), label: 'After Artwork Applied' },
+  { value: String(IMAGE_TYPE_FOR_PRODUCT_IMAGE), label: 'For Product Image' },
 ];
 
 const POSITION_NONE = 0;

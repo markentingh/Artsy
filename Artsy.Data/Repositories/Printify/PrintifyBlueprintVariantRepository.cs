@@ -20,6 +20,20 @@ namespace Artsy.Data.Repositories
             return await _dbConnection.QueryAsync<PrintifyBlueprintVariant>(query, new { blueprintId, printProviderId });
         }
 
+        public async Task<IEnumerable<PrintifyBlueprintVariant>> GetByBlueprintIdAsync(int blueprintId)
+        {
+            const string query = @"SELECT * FROM public.""PrintifyBlueprintVariants"" WHERE ""BlueprintId"" = @blueprintId ORDER BY ""Title""";
+            return await _dbConnection.QueryAsync<PrintifyBlueprintVariant>(query, new { blueprintId });
+        }
+
+        public async Task<IEnumerable<PrintifyBlueprintVariant>> GetByBlueprintIdsAsync(IEnumerable<int> blueprintIds)
+        {
+            var ids = blueprintIds.ToList();
+            if (ids.Count == 0) return Enumerable.Empty<PrintifyBlueprintVariant>();
+            const string query = @"SELECT * FROM public.""PrintifyBlueprintVariants"" WHERE ""BlueprintId"" = ANY(@blueprintIds) ORDER BY ""BlueprintId"", ""Title""";
+            return await _dbConnection.QueryAsync<PrintifyBlueprintVariant>(query, new { blueprintIds = ids.ToArray() });
+        }
+
         public async Task UpsertBatchAsync(IEnumerable<PrintifyBlueprintVariant> variants)
         {
             const string query = @"

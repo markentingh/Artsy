@@ -8,6 +8,7 @@ import Tooltip from '@/components/ui/tooltip';
 import EditQuestionModal from './EditQuestionModal';
 import Message from '@/components/ui/message';
 import ConfirmModal from '@/components/ui/confirm-modal';
+import { List, Item } from '@/components/ui/list';
 
 export default function QuestionsSection({ projectId, onChecklistChanged }) {
   const session = useSession();
@@ -135,20 +136,17 @@ export default function QuestionsSection({ projectId, onChecklistChanged }) {
           No Questions exist for this project
         </div>
       ) : (
-        <div className="space-y-3">
+        <List>
           {questions.map((question) => (
-            <div
-              key={question.id}
-              className="relative bg-white dark:bg-gray-800 rounded-lg shadow p-4 pr-14"
-            >
+            <Item key={question.id} className="pr-14 relative">
               <p className="pr-2">{question.question}</p>
               <div className="absolute top-2 right-2 flex gap-1">
                 <ButtonIcon name="edit" onClick={() => handleOpenEditQuestion(question.id, question.question)} title="Edit question" />
                 <ButtonIcon name="delete" color="red" onClick={() => handleDeleteQuestion(question.id)} title="Delete question" />
               </div>
-            </div>
+            </Item>
           ))}
-        </div>
+        </List>
       )}
 
       <EditQuestionModal

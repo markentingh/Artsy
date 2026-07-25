@@ -30,7 +30,8 @@ namespace Artsy.API.Controllers
                     model = m.Model,
                     cpmitTokens = m.CPMITTokens,
                     cpmiiTokens = m.CPMIITokens,
-                    cpmoTokens = m.CPMOTokens
+                    cpmoTokens = m.CPMOTokens,
+                    tokenConversion = m.TokenConversion
                 }).ToList();
 
                 return Json(new ApiResponse { success = true, data = result });

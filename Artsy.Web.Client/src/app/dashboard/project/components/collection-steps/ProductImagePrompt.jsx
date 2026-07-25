@@ -1,43 +1,62 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useCollection } from '@/context/collection';
 import TextArea from '@/components/forms/textarea';
 import ButtonOutline from '@/components/ui/button-outline';
+import Carousel from '@/components/ui/carousel';
 
 export default function ProductImagePrompt() {
   const {
     productImageVariants, productImagePrompt, setProductImagePrompt,
-    selectedProductCombos, setSelectedProductCombos,
+    selectedProductCombos,
     setCurrentProductComboIndex,
     setStep, setMessage, STEPS, onClose,
   } = useCollection();
 
-  const toggleCombo = useCallback((bp, variant, placement) => {
-    setSelectedProductCombos(prev => {
-      const exists = prev.find(c =>
-        c.projectBlueprintId === bp.projectBlueprintId && c.variant === variant && c.placement === placement
-      );
-      if (exists) {
-        return prev.filter(c => !(c.projectBlueprintId === bp.projectBlueprintId && c.variant === variant && c.placement === placement));
-      }
-      return [...prev, { projectBlueprintId: bp.projectBlueprintId, variant, placement, blueprintName: bp.blueprintName }];
-    });
-  }, [setSelectedProductCombos]);
+  const firstCombo = selectedProductCombos[0];
 
-  const isComboSelected = (bpId, variant, placement) => {
-    return selectedProductCombos.some(c => c.projectBlueprintId === bpId && c.variant === variant && c.placement === placement);
-  };
+  const variantImages = useMemo(() => {
+    if (!firstCombo) return [];
+    const bp = productImageVariants.find(b => b.projectBlueprintId === firstCombo.projectBlueprintId);
+    if (!bp || !bp.variants) return [];
+    const variant = bp.variants.find(v => v.variant === firstCombo.variant);
+    if (!variant) return [];
+    return [variant.imageUrl].filter(Boolean);
+  }, [firstCombo, productImageVariants]);
 
   const handleNext = useCallback(() => {
-    if (selectedProductCombos.length === 0) {
-      setMessage({ type: 'error', text: 'Select at least one variant/placement combination.' });
+    if (!productImagePrompt.trim()) {
+      setMessage({ type: 'error', text: 'Enter a product image prompt.' });
       return;
     }
     setCurrentProductComboIndex(0);
     setStep(STEPS.PRODUCT_IMAGE_PREVIEW);
-  }, [selectedProductCombos, setCurrentProductComboIndex, setStep, setMessage, STEPS]);
+  }, [productImagePrompt, setCurrentProductComboIndex, setStep, setMessage, STEPS]);
 
   return (
     <div>
+      <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-4">
+        {selectedProductCombos.length} combination{selectedProductCombos.length !== 1 ? 's' : ''} selected for product image generation.
+      </p>
+
+      {firstCombo && (
+        <div className="flex flex-col items-center mb-4">
+          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            {firstCombo.blueprintName} — {firstCombo.variantTitle}
+          </h4>
+          {variantImages.length > 0 && (
+            <div className="w-full max-w-[300px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 mb-4">
+              <Carousel
+                images={variantImages}
+                alt={`${firstCombo.blueprintName} - ${firstCombo.variantTitle}`}
+                singleImage
+                infiniteScroll
+                imageClassName="!max-h-none w-full h-full object-contain"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="mb-4">
         <TextArea
           name="productImagePrompt"
@@ -49,38 +68,10 @@ export default function ProductImagePrompt() {
         />
       </div>
 
-      <div className="max-h-[40vh] overflow-y-auto space-y-4">
-        {productImageVariants.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">No variants or placements available.</p>
-        ) : (
-          productImageVariants.map((bp) => (
-            <div key={bp.projectBlueprintId} className="space-y-2">
-              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">{bp.blueprintName}</h4>
-              {bp.placements.map((placement) => (
-                <div key={placement.placement} className="pl-4 space-y-1">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Placement: {placement.placement}</p>
-                  {bp.variants.map((v) => (
-                    <label key={v.variant} className="flex items-center gap-2 cursor-pointer text-sm py-1">
-                      <input
-                        type="checkbox"
-                        checked={isComboSelected(bp.projectBlueprintId, v.variant, placement.placement)}
-                        onChange={() => toggleCombo(bp, v.variant, placement.placement)}
-                        className="rounded"
-                      />
-                      <span>Variant {v.variant}</span>
-                    </label>
-                  ))}
-                </div>
-              ))}
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="buttons flex justify-end gap-2 mt-4">
+      <div className="buttons flex justify-end gap-2">
         <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
-        <ButtonOutline onClick={handleNext} disabled={selectedProductCombos.length === 0}>
-          Next ({selectedProductCombos.length} selected)
+        <ButtonOutline onClick={handleNext} disabled={!productImagePrompt.trim()}>
+          Next
         </ButtonOutline>
       </div>
     </div>

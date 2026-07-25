@@ -79,7 +79,8 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     generateProductImage: (request) => api.post(`${apiPath}/generate-product-image`, request),
     acceptProductImage: (request) => api.post(`${apiPath}/accept-product-image`, request),
     getProductImages: (collectionId) => api.get(`${apiPath}/collection/${collectionId}/product-images`),
-    getProductImageUrl: (collectionId, productImageId) => `${apiPath}/collection/${collectionId}/product-image/${productImageId}`
+    getProductImageUrl: (collectionId, productImageId) => `${apiPath}/collection/${collectionId}/product-image/${productImageId}`,
+    getActiveImageModels: () => api.get('/api/image-generation/active-models')
   };
 });
 
