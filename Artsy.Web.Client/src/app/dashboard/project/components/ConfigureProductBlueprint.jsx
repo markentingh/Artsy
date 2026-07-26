@@ -28,7 +28,7 @@ export default function ConfigureProductBlueprint({
   const session = useSession();
   const { getBlueprintDetail, getBlueprintVariants, getBlueprintImageUrl, getBlueprintImages } = Printify(session);
   const { getVariantAvailability } = PrintifyPublic(session);
-  const { getItems, getItemPreviews, getItemPreviewUrl, getItemReferences, uploadItemReference, deleteItemReference, getItemReferenceUrl } = Projects(session);
+  const { getItems, getItemPreviews, getItemPreviewUrl, getItemReferences, uploadItemReference, deleteItemReference, getItemReferenceUrl, getItemArtwork } = Projects(session);
 
   const [detail, setDetail] = useState(null);
   const [printProviders, setPrintProviders] = useState([]);
@@ -43,6 +43,7 @@ export default function ConfigureProductBlueprint({
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [projectItems, setProjectItems] = useState([]);
   const [itemPreviews, setItemPreviews] = useState({});
+  const [itemArtworkMap, setItemArtworkMap] = useState({});
   const [placementSettings, setPlacementSettings] = useState({});
   const [customImageSelectorTarget, setCustomImageSelectorTarget] = useState(null);
   const [outOfStockIds, setOutOfStockIds] = useState(new Set());
@@ -76,6 +77,7 @@ export default function ConfigureProductBlueprint({
             const items = itemsResp.data.data || [];
             setProjectItems(items);
             const previewsMap = {};
+            const artworkMap = {};
             for (const item of items) {
               try {
                 const prevResp = await getItemPreviews(item.id);
@@ -83,8 +85,15 @@ export default function ConfigureProductBlueprint({
                   previewsMap[item.id] = prevResp.data.data || [];
                 }
               } catch { /* ignore */ }
+              try {
+                const artResp = await getItemArtwork(item.id);
+                if (artResp.data.success) {
+                  artworkMap[item.id] = artResp.data.data || null;
+                }
+              } catch { /* ignore */ }
             }
             setItemPreviews(previewsMap);
+            setItemArtworkMap(artworkMap);
           }
         } catch { /* ignore */ }
       }
@@ -364,11 +373,15 @@ export default function ConfigureProductBlueprint({
   const getPlacementCarouselImages = (key) => {
     const settings = placementSettings[key];
     if (!settings) return [];
-    if (settings.source === 'custom' && settings.customImageId && settings.itemId) {
-      return [getItemReferenceUrl(settings.itemId, settings.customImageId, true)];
+    if (settings.source === 'custom' && settings.customImageId && settings.customItemId) {
+      return [getItemReferenceUrl(settings.customItemId, settings.customImageId, true)];
     }
     if (settings.source === 'item' && settings.itemId) {
       const itemId = settings.itemId;
+      const artwork = itemArtworkMap[itemId];
+      if (artwork && artwork.artworkType === 'custom' && artwork.customImageId) {
+        return [getItemReferenceUrl(itemId, artwork.customImageId, true)];
+      }
       const previews = itemPreviews[itemId] || [];
       return previews.map((p) => getItemPreviewUrl(itemId, p.id, true));
     }
@@ -380,7 +393,7 @@ export default function ConfigureProductBlueprint({
     const sizeOrder = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
     const groups = new Map();
     for (const variant of variants) {
-      const color = variant.options?.color || 'Default';
+      const color = variant.title || 'Default';
       if (!groups.has(color)) {
         groups.set(color, []);
       }
@@ -389,8 +402,8 @@ export default function ConfigureProductBlueprint({
     return Array.from(groups.entries()).map(([color, vars]) => ({
       color,
       variants: vars.sort((a, b) => {
-        const aSize = a.options?.size || '';
-        const bSize = b.options?.size || '';
+        const aSize = a.size || '';
+        const bSize = b.size || '';
         const aIdx = sizeOrder.indexOf(aSize);
         const bIdx = sizeOrder.indexOf(bSize);
         if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
@@ -510,7 +523,7 @@ export default function ConfigureProductBlueprint({
                   <div className="grid grid-cols-[repeat(auto-fill,250px)] gap-4">
                     {variantsByColor.map((group) => {
                       const options = group.variants.map((v) => {
-                        const size = v.options?.size || v.title;
+                        const size = v.size || v.title;
                         const isOutOfStock = outOfStockIds.has(v.id);
                         return {
                           value: String(v.id),

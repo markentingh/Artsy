@@ -9,7 +9,7 @@ import Button from '@/components/ui/button';
 export default function DashboardServices() {
   const session = useSession();
   const { getWebhookInfo, setWebhook } = Telegram(session);
-  const { getCatalogCount, refreshCatalog, fetchPrintProviders, fetchVariants, fetchShipping, downloadCatalogImage } = Printify(session);
+  const { getCatalogCount, refreshCatalog, fetchPrintProviders, fetchVariants, fetchShipping, downloadCatalogImage, convertVariants, convertImageVariants } = Printify(session);
 
   const [webhookUrl, setWebhookUrl] = useState('');
   const [maxConnections, setMaxConnections] = useState(0);
@@ -25,6 +25,7 @@ export default function DashboardServices() {
   const [progress, setProgress] = useState(null);
   const [allVariants, setAllVariants] = useState(false);
   const [productImages, setProductImages] = useState(false);
+  const [catalogAction, setCatalogAction] = useState('refresh');
 
   const fetchWebhookInfo = async () => {
     try {
@@ -68,8 +69,40 @@ export default function DashboardServices() {
     setRefreshing(true);
     setMessage(null);
     setProgress(null);
+
+    if (catalogAction === 'convertVariants') {
+      try {
+        const resp = await convertVariants();
+        if (resp.data.success)
+          setMessage({ type: 'success', text: `Converted ${resp.data.data.updated} variants.` });
+        else
+          setMessage({ type: 'error', text: resp.data.message || 'Failed to convert variants' });
+      } catch (error) {
+        setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to convert variants' });
+      } finally {
+        setRefreshing(false);
+      }
+      return;
+    }
+
+    if (catalogAction === 'convertImageVariants') {
+      try {
+        const resp = await convertImageVariants();
+        if (resp.data.success)
+          setMessage({ type: 'success', text: `Converted ${resp.data.data.inserted} image variants.` });
+        else
+          setMessage({ type: 'error', text: resp.data.message || 'Failed to convert image variants' });
+      } catch (error) {
+        setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to convert image variants' });
+      } finally {
+        setRefreshing(false);
+      }
+      return;
+    }
+
+    const isAllVariants = catalogAction === 'allVariants';
     try {
-      const response = await refreshCatalog(allVariants);
+      const response = await refreshCatalog(isAllVariants);
       if (!response.data.success) {
         setMessage({ type: 'error', text: response.data.message || 'Failed to refresh catalog' });
         return;
@@ -320,36 +353,41 @@ export default function DashboardServices() {
                 </span>
               )}
             </div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={allVariants}
-                onChange={(e) => setAllVariants(e.target.checked)}
+            {catalogAction === 'refresh' && (
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={productImages}
+                  onChange={(e) => setProductImages(e.target.checked)}
+                  disabled={refreshing}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                Product Images
+              </label>
+            )}
+            <div className="flex items-center gap-2">
+              <select
+                className="w-auto inline-block rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
+                value={catalogAction}
+                onChange={(e) => setCatalogAction(e.target.value)}
                 disabled={refreshing}
-                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-              />
-              All Product Variants
-            </label>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={productImages}
-                onChange={(e) => setProductImages(e.target.checked)}
-                disabled={refreshing}
-                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-              />
-              Product Images
-            </label>
-            <Button onClick={handleRefreshCatalog} disabled={refreshing}>
-              {refreshing ? (
-                <span className="inline-flex items-center gap-2">
-                  <Icon name="progress_activity" spin className="w-4 h-4" />
-                  Refreshing...
-                </span>
-              ) : (
-                'Refresh Catalog'
-              )}
-            </Button>
+              >
+                <option value="refresh">Refresh Catalog</option>
+                <option value="allVariants">All Product Variants</option>
+                <option value="convertVariants">Convert Variants</option>
+                <option value="convertImageVariants">Convert Image Variants</option>
+              </select>
+              <Button onClick={handleRefreshCatalog} disabled={refreshing}>
+                {refreshing ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Icon name="progress_activity" spin className="w-4 h-4" />
+                    Refreshing...
+                  </span>
+                ) : (
+                  'Refresh Catalog'
+                )}
+              </Button>
+            </div>
           </div>
         </div>
 

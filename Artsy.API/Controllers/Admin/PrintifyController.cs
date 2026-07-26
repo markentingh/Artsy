@@ -19,6 +19,7 @@ namespace Artsy.API.Controllers.Admin
         readonly IPrintifyBlueprintVariantPlaceholderRepository _placeholderRepo;
         readonly IPrintifyBlueprintShippingRepository _shippingRepo;
         readonly IPrintifyBlueprintImageRepository _imageRepo;
+        readonly IPrintifyBlueprintImageVariantRepository _imageVariantRepo;
         readonly IHttpClientFactory _httpClientFactory;
         readonly IImageService _imageService;
 
@@ -29,6 +30,7 @@ namespace Artsy.API.Controllers.Admin
             IPrintifyBlueprintVariantPlaceholderRepository placeholderRepo,
             IPrintifyBlueprintShippingRepository shippingRepo,
             IPrintifyBlueprintImageRepository imageRepo,
+            IPrintifyBlueprintImageVariantRepository imageVariantRepo,
             IHttpClientFactory httpClientFactory,
             IImageService imageService)
         {
@@ -38,6 +40,7 @@ namespace Artsy.API.Controllers.Admin
             _placeholderRepo = placeholderRepo;
             _shippingRepo = shippingRepo;
             _imageRepo = imageRepo;
+            _imageVariantRepo = imageVariantRepo;
             _httpClientFactory = httpClientFactory;
             _imageService = imageService;
         }
@@ -468,7 +471,7 @@ namespace Artsy.API.Controllers.Admin
                 {
                     id = v.VariantId,
                     title = v.Title,
-                    options = JsonSerializer.Deserialize<Dictionary<string, string>>(v.Options) ?? new Dictionary<string, string>(),
+                    size = v.Size ?? "",
                     placeholders = allPlaceholders.TryGetValue(v.VariantId, out var phs) ? phs : new List<object>(),
                     decoration_methods = JsonSerializer.Deserialize<string[]>(v.DecorationMethods) ?? Array.Empty<string>()
                 }).ToList();
@@ -485,7 +488,13 @@ namespace Artsy.API.Controllers.Admin
         {
             try
             {
-                var images = await _imageRepo.GetByBlueprintIdAsync(blueprintId);
+                var images = (await _imageRepo.GetByBlueprintIdAsync(blueprintId)).ToList();
+                var imageIds = images.Select(img => img.Id).ToList();
+                var imageVariants = imageIds.Count > 0
+                    ? (await _imageVariantRepo.GetByImageIdsAsync(imageIds)).ToList()
+                    : new List<PrintifyBlueprintImageVariant>();
+                var variantsByImageId = imageVariants.GroupBy(iv => iv.ImageId).ToDictionary(g => g.Key, g => g.Select(iv => iv.VariantId).ToList());
+
                 return Json(new ApiResponse
                 {
                     success = true,
@@ -494,7 +503,7 @@ namespace Artsy.API.Controllers.Admin
                         id = img.Id,
                         blueprintId = img.BlueprintId,
                         imageIndex = img.ImageIndex,
-                        variants = JsonSerializer.Deserialize<int[]>(img.Variants) ?? Array.Empty<int>(),
+                        variants = variantsByImageId.TryGetValue(img.Id, out var ivs) ? ivs : new List<int>(),
                         type = img.Type,
                         position = img.Position
                     })
@@ -519,21 +528,46 @@ namespace Artsy.API.Controllers.Admin
                         var type = img.TryGetProperty("type", out var tp) ? tp.GetInt32() : 0;
                         var position = img.TryGetProperty("position", out var pos) ? pos.GetInt32() : 0;
 
-                        var variants = new List<int>();
-                        if (img.TryGetProperty("variants", out var vArr) && vArr.ValueKind == JsonValueKind.Array)
+                        var addedVariants = new List<int>();
+                        if (img.TryGetProperty("addedVariants", out var addArr) && addArr.ValueKind == JsonValueKind.Array)
                         {
-                            foreach (var v in vArr.EnumerateArray())
-                                variants.Add(v.GetInt32());
+                            foreach (var v in addArr.EnumerateArray())
+                                addedVariants.Add(v.GetInt32());
                         }
 
-                        await _imageRepo.UpsertAsync(new PrintifyBlueprintImage
+                        var removedVariants = new List<int>();
+                        if (img.TryGetProperty("removedVariants", out var remArr) && remArr.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var v in remArr.EnumerateArray())
+                                removedVariants.Add(v.GetInt32());
+                        }
+
+                        var imageId = await _imageRepo.UpsertAsync(new PrintifyBlueprintImage
                         {
                             BlueprintId = blueprintId,
                             ImageIndex = imageIndex,
-                            Variants = JsonSerializer.Serialize(variants),
+                            Variants = "[]",
                             Type = type,
                             Position = position
                         });
+
+                        if (imageId != Guid.Empty)
+                        {
+                            if (addedVariants.Count > 0)
+                            {
+                                var toAdd = addedVariants.Select(vid => new PrintifyBlueprintImageVariant
+                                {
+                                    ImageId = imageId,
+                                    VariantId = vid
+                                });
+                                await _imageVariantRepo.InsertBatchAsync(toAdd);
+                            }
+
+                            if (removedVariants.Count > 0)
+                            {
+                                await _imageVariantRepo.DeleteByImageAndVariantIdsAsync(imageId, removedVariants);
+                            }
+                        }
                     }
                 }
 
@@ -550,6 +584,34 @@ namespace Artsy.API.Controllers.Admin
                 }
 
                 return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("convert-variants")]
+        public async Task<IActionResult> ConvertVariants()
+        {
+            try
+            {
+                var updated = await _variantRepo.ConvertVariantsAsync();
+                return Json(new ApiResponse { success = true, data = new { updated } });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("convert-image-variants")]
+        public async Task<IActionResult> ConvertImageVariants()
+        {
+            try
+            {
+                var inserted = await _imageRepo.ConvertImageVariantsAsync();
+                return Json(new ApiResponse { success = true, data = new { inserted } });
             }
             catch (Exception ex)
             {

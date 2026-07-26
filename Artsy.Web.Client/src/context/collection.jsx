@@ -12,8 +12,8 @@ export const STEPS = {
   PRODUCT_IMAGE_SELECTION: 'product_image_selection',
   PRODUCT_IMAGE_PROMPT: 'product_image_prompt',
   PRODUCT_IMAGE_PREVIEW: 'product_image_preview',
-  PRODUCT_IMAGE_DONE: 'product_image_done',
-  NEXT_STEP: 'next_step',
+  PUBLISH: 'publish',
+  SOCIAL_MEDIA: 'social_media',
 };
 
 export const WIZARD_STEPS = [
@@ -22,7 +22,8 @@ export const WIZARD_STEPS = [
   'Artwork Preview',
   'Ready to Upscale',
   'Product Images',
-  'Next Steps',
+  'Publish Products',
+  'Social Media',
 ];
 
 const PLACEMENT_NAMES = [
@@ -40,10 +41,32 @@ export const STEP_INDEX = {
   ready_to_generate: 3,
   product_image_selection: 4,
   product_image_prompt: 4,
-  product_image_preview: 4,
-  product_image_done: 4,
-  next_step: 5,
+  product_image_preview: 5,
+  publish: 6,
+  social_media: 7,
 };
+
+export function buildWizardSteps(hasProjectQuestions) {
+  const steps = [];
+  if (hasProjectQuestions) steps.push('Project Questions');
+  steps.push('Artwork Questions', 'Artwork Preview', 'Ready to Upscale', 'Select Variations', 'Generate Images', 'Publish Products', 'Social Media');
+  return steps;
+}
+
+export function buildStepIndex(hasProjectQuestions) {
+  const offset = hasProjectQuestions ? 0 : -1;
+  return {
+    project_questions: 0,
+    artwork_questions: 1 + offset,
+    artwork_preview: 2 + offset,
+    ready_to_generate: 3 + offset,
+    product_image_selection: 4 + offset,
+    product_image_prompt: 5 + offset,
+    product_image_preview: 5 + offset,
+    publish: 6 + offset,
+    social_media: 7 + offset,
+  };
+}
 
 export function CollectionProvider({ children, projectId, project, collectionId: initialCollectionId, onClose, onSaved }) {
   const session = useSession();
@@ -78,6 +101,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const [artworkPreview, setArtworkPreview] = useState(null);
   const [initialLoading, setInitialLoading] = useState(false);
   const cancelRef = useRef(false);
+  const advanceToNextItemRef = useRef(null);
 
   // Product image state
   const [productImageVariants, setProductImageVariants] = useState([]);
@@ -209,6 +233,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   }, [aiItems, currentItemIndex, itemAnswers, showChanges, requestedChanges, projectId, api, buildProjectAnswers]);
 
   const loadItemData = useCallback(async (index) => {
+    setCurrentItemIndex(index);
     const item = aiItems[index];
     if (!item) {
       setStep(STEPS.READY_TO_GENERATE);
@@ -226,6 +251,26 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       setCurrentItemQuestions(questions);
       const art = artRes.data.success ? artRes.data.data : null;
       setCurrentArtwork(art);
+
+      if (art && art.artworkType === 'custom') {
+        const colId = await ensureCollection();
+        if (colId) {
+          try {
+            await api.autoAcceptCustomArtwork({ projectId, collectionId: colId, itemId: item.id });
+            const artRes2 = await api.getCollectionArtwork(colId);
+            if (artRes2.data.success) {
+              const updatedArtwork = artRes2.data.data || [];
+              setCollectionArtwork(updatedArtwork);
+              advanceToNextItemRef.current(index, updatedArtwork);
+              return;
+            }
+          } catch (e) {
+            console.error('autoAcceptCustomArtwork error:', e?.response?.data || e);
+          }
+        }
+        advanceToNextItemRef.current(index);
+        return;
+      }
 
       const restoredItemAnswers = {};
       if (collectionId) {
@@ -251,7 +296,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load artwork data' });
     }
-  }, [aiItems, collectionId, savedAnswers, api, ensureCollection, doGeneratePreview, fetchEstimate]);
+  }, [aiItems, collectionId, savedAnswers, api, ensureCollection, doGeneratePreview, fetchEstimate, projectId]);
 
   const handleSaveDraft = useCallback(async () => {
     if (!collectionId) {
@@ -299,7 +344,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     const id = colId || collectionId;
     if (!id) {
       console.warn('loadProductImageVariants: no collectionId');
-      return;
+      return [];
     }
     try {
       const res = await api.getProductImageVariants(projectId, id);
@@ -315,10 +360,12 @@ export function CollectionProvider({ children, projectId, project, collectionId:
           }
         }
         setProductImagePrompt(defaultPrompt);
+        return variants;
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load product image variants' });
     }
+    return [];
   }, [collectionId, projectId, api, blueprints]);
 
   const loadImageModels = useCallback(async () => {
@@ -336,9 +383,10 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     }
   }, [api, selectedImageModel]);
 
-  const advanceToNextItem = useCallback((fromIndex = currentItemIndex) => {
+  const advanceToNextItem = useCallback((fromIndex = currentItemIndex, artworkOverride = null) => {
+    const artwork = artworkOverride || collectionArtwork;
     const acceptedItemIds = new Set(
-      collectionArtwork.filter(a => a.accepted).map(a => String(a.itemId))
+      artwork.filter(a => a.accepted).map(a => String(a.itemId))
     );
     const nextIndex = aiItems.findIndex((item, idx) =>
       idx > fromIndex &&
@@ -346,24 +394,71 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       !acceptedItemIds.has(String(item.id))
     );
     if (nextIndex === -1) {
-      const allFullSize = collectionArtwork.length > 0 &&
-        collectionArtwork.filter(a => a.accepted).every(a => a.fullSize);
+      const allFullSize = artwork.length > 0 &&
+        artwork.filter(a => a.accepted).every(a => a.fullSize);
       if (allFullSize) {
         (async () => {
           const colId = collectionId || await ensureCollection();
           if (colId) {
-            await Promise.all([loadProductImageVariants(colId), loadImageModels()]);
+            const [variants,] = await Promise.all([loadProductImageVariants(colId), loadImageModels()]);
             try {
               const imgRes = await api.getProductImages(colId);
+              console.log('[advanceToNextItem] getProductImages response:', imgRes.data);
               if (imgRes.data.success) {
-                const accepted = (imgRes.data.data || []).filter(img => img.accepted);
-                if (accepted.length > 0) {
-                  setAllProductImages(accepted);
-                  setStep(STEPS.NEXT_STEP);
+                const allImages = (imgRes.data.data || []).filter(img => img.active);
+                const accepted = allImages.filter(img => img.accepted);
+                const acceptedKeys = new Set(accepted.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
+                console.log('[advanceToNextItem] existing:', allImages.length, 'accepted:', accepted.length, accepted);
+
+                const activeKeys = new Set(allImages.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
+
+                const allCombos = [];
+                for (const bp of variants) {
+                  for (const v of (bp.variants || [])) {
+                    for (const c of (v.combos || [])) {
+                      if (c.hasArtwork) {
+                        const key = `${bp.projectBlueprintId}:${v.variant}:${c.placementIndex}`;
+                        if (activeKeys.has(key)) {
+                          allCombos.push({
+                            projectBlueprintId: bp.projectBlueprintId,
+                            blueprintName: bp.blueprintName,
+                            variant: v.variant,
+                            variantTitle: v.variantTitle,
+                            placement: c.placementIndex,
+                            placementName: c.placementName,
+                            tokens: c.tokens,
+                          });
+                        }
+                      }
+                    }
+                  }
+                }
+
+                const missingCombos = allCombos.filter(c => !acceptedKeys.has(`${c.projectBlueprintId}:${c.variant}:${c.placement}`));
+                console.log('[advanceToNextItem] allCombos:', allCombos.length, 'missing:', missingCombos.length);
+
+                if (allCombos.length === 0) {
+                  setAllProductImages(allImages);
+                  setStep(STEPS.PRODUCT_IMAGE_SELECTION);
+                  return;
+                }
+
+                if (missingCombos.length === 0) {
+                  setAllProductImages(allImages);
+                  setStep(STEPS.PUBLISH);
+                  return;
+                }
+
+                if (missingCombos.length < allCombos.length) {
+                  setSelectedProductCombos(missingCombos);
+                  setCurrentProductComboIndex(0);
+                  setAllProductImages(allImages);
+                  setStep(STEPS.PRODUCT_IMAGE_PROMPT);
                   return;
                 }
               }
-            } catch { /* fall through to selection */ }
+            } catch (e) { console.log('[advanceToNextItem] getProductImages error:', e); }
+            console.log('[advanceToNextItem] falling through to PRODUCT_IMAGE_SELECTION');
             setStep(STEPS.PRODUCT_IMAGE_SELECTION);
           } else {
             setStep(STEPS.READY_TO_GENERATE);
@@ -378,7 +473,8 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       setCurrentItemIndex(nextIndex);
       loadItemData(nextIndex);
     }
-  }, [currentItemIndex, collectionArtwork, aiItems, blueprintItemIds, fetchEstimate, loadItemData, collectionId, ensureCollection, loadProductImageVariants, loadImageModels, setAllProductImages]);
+  }, [currentItemIndex, collectionArtwork, aiItems, blueprintItemIds, fetchEstimate, loadItemData, collectionId, ensureCollection, loadProductImageVariants, loadImageModels, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex]);
+  advanceToNextItemRef.current = advanceToNextItem;
 
   const doGenerateAll = useCallback(async (colId) => {
     if (!estimate || estimate.generations.length === 0) return;
@@ -413,6 +509,11 @@ export function CollectionProvider({ children, projectId, project, collectionId:
           const url = api.getCollectionArtworkImageUrl(colId, gen.itemId, artwork.id, true, Date.now());
           results.push({ itemId: gen.itemId, artworkId: artwork.id, url, width: gen.width, height: gen.height });
           setGeneratedArtworks([...results]);
+          setCollectionArtwork(prev => prev.map(a =>
+            String(a.itemId) === String(gen.itemId)
+              ? { ...a, fullSize: true }
+              : a
+          ));
         } else {
           setGenerationError(res.data.message || 'Failed to generate artwork');
           setIsGeneratingAll(false);
@@ -482,7 +583,10 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         api.getBlueprints(projectId),
       ]);
 
-      if (qRes.data.success) setProjectQuestions(qRes.data.data || []);
+      if (qRes.data.success) {
+        setProjectQuestions(qRes.data.data || []);
+        console.log('[loadData] projectQuestions loaded:', (qRes.data.data || []).length, 'items');
+      }
       if (itemsRes.data.success) {
         const allItems = itemsRes.data.data || [];
         setItems(allItems);
@@ -540,6 +644,8 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         } else {
           setResumeStep('artwork_resume');
         }
+      } else {
+        setInitialLoading(false);
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load data' });
@@ -547,11 +653,15 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     }
   }, [projectId, api]);
 
+  const hasProjectQuestions = projectQuestions.length > 0;
+  const wizardSteps = useMemo(() => buildWizardSteps(hasProjectQuestions), [hasProjectQuestions]);
+  const stepIndex = useMemo(() => buildStepIndex(hasProjectQuestions), [hasProjectQuestions]);
+
   const value = {
     // props
     projectId, project, onClose, onSaved, api,
     // step
-    step, setStep, STEPS, WIZARD_STEPS, STEP_INDEX,
+    step, setStep, STEPS, wizardSteps, stepIndex,
     // data
     projectQuestions, items, aiItems, setAiItems, blueprints, blueprintItemIds,
     currentItemIndex, setCurrentItemIndex, currentItem,

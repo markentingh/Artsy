@@ -22,11 +22,17 @@ namespace Artsy.Data.Repositories.Projects
 
         public async Task<ProjectCollectionProductImage?> GetByCollectionBlueprintVariantPlacementAsync(Guid collectionId, Guid projectBlueprintId, int variant, int placement)
         {
-            const string query = @"SELECT * FROM public.""ProjectCollectionProductImages"" WHERE ""CollectionId"" = @collectionId AND ""ProjectBlueprintId"" = @projectBlueprintId AND ""Variant"" = @variant AND ""Placement"" = @placement";
+            const string query = @"SELECT * FROM public.""ProjectCollectionProductImages"" WHERE ""CollectionId"" = @collectionId AND ""ProjectBlueprintId"" = @projectBlueprintId AND ""Variant"" = @variant AND ""Placement"" = @placement AND ""Active"" = TRUE";
             return await _dbConnection.QueryFirstOrDefaultAsync<ProjectCollectionProductImage>(query, new { collectionId, projectBlueprintId, variant, placement });
         }
 
         public async Task<IEnumerable<ProjectCollectionProductImage>> GetByCollectionIdAsync(Guid collectionId)
+        {
+            const string query = @"SELECT * FROM public.""ProjectCollectionProductImages"" WHERE ""CollectionId"" = @collectionId AND ""Active"" = TRUE ORDER BY ""ProjectBlueprintId"", ""Variant"", ""Placement""";
+            return await _dbConnection.QueryAsync<ProjectCollectionProductImage>(query, new { collectionId });
+        }
+
+        public async Task<IEnumerable<ProjectCollectionProductImage>> GetAllByCollectionIdAsync(Guid collectionId)
         {
             const string query = @"SELECT * FROM public.""ProjectCollectionProductImages"" WHERE ""CollectionId"" = @collectionId ORDER BY ""ProjectBlueprintId"", ""Variant"", ""Placement""";
             return await _dbConnection.QueryAsync<ProjectCollectionProductImage>(query, new { collectionId });
@@ -34,7 +40,7 @@ namespace Artsy.Data.Repositories.Projects
 
         public async Task<IEnumerable<ProjectCollectionProductImage>> GetByCollectionAndBlueprintIdAsync(Guid collectionId, Guid projectBlueprintId)
         {
-            const string query = @"SELECT * FROM public.""ProjectCollectionProductImages"" WHERE ""CollectionId"" = @collectionId AND ""ProjectBlueprintId"" = @projectBlueprintId ORDER BY ""Variant"", ""Placement""";
+            const string query = @"SELECT * FROM public.""ProjectCollectionProductImages"" WHERE ""CollectionId"" = @collectionId AND ""ProjectBlueprintId"" = @projectBlueprintId AND ""Active"" = TRUE ORDER BY ""Variant"", ""Placement""";
             return await _dbConnection.QueryAsync<ProjectCollectionProductImage>(query, new { collectionId, projectBlueprintId });
         }
 
@@ -42,8 +48,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             image.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectCollectionProductImages"" (""Id"", ""ProjectId"", ""CollectionId"", ""ProjectBlueprintId"", ""Variant"", ""Placement"", ""ImageModel"", ""Prompt"", ""Width"", ""Height"", ""Accepted"", ""ResponseId"")
-                VALUES (@Id, @ProjectId, @CollectionId, @ProjectBlueprintId, @Variant, @Placement, @ImageModel, @Prompt, @Width, @Height, @Accepted, @ResponseId)
+                INSERT INTO public.""ProjectCollectionProductImages"" (""Id"", ""ProjectId"", ""CollectionId"", ""ProjectBlueprintId"", ""Variant"", ""Placement"", ""ImageModel"", ""Prompt"", ""Width"", ""Height"", ""Accepted"", ""ResponseId"", ""Active"")
+                VALUES (@Id, @ProjectId, @CollectionId, @ProjectBlueprintId, @Variant, @Placement, @ImageModel, @Prompt, @Width, @Height, @Accepted, @ResponseId, @Active)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectCollectionProductImage>(query, image);
         }
@@ -53,9 +59,15 @@ namespace Artsy.Data.Repositories.Projects
             const string query = @"
                 UPDATE public.""ProjectCollectionProductImages""
                 SET ""ImageModel"" = @ImageModel, ""Prompt"" = @Prompt, ""Width"" = @Width, ""Height"" = @Height,
-                    ""Accepted"" = @Accepted, ""ResponseId"" = @ResponseId
+                    ""Accepted"" = @Accepted, ""ResponseId"" = @ResponseId, ""Active"" = @Active
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, image);
+        }
+
+        public async Task SetInactiveAsync(Guid collectionId, Guid projectBlueprintId, int variant, int placement)
+        {
+            const string query = @"UPDATE public.""ProjectCollectionProductImages"" SET ""Active"" = FALSE WHERE ""CollectionId"" = @collectionId AND ""ProjectBlueprintId"" = @projectBlueprintId AND ""Variant"" = @variant AND ""Placement"" = @placement";
+            await _dbConnection.ExecuteAsync(query, new { collectionId, projectBlueprintId, variant, placement });
         }
 
         public async Task DeleteAsync(Guid id)

@@ -11,12 +11,14 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionArtwork"
     "Prompt" TEXT NOT NULL DEFAULT '',
     "Accepted" BOOLEAN NOT NULL DEFAULT FALSE,
     "ResponseId" VARCHAR(64) NOT NULL DEFAULT '',
-    "FullSize" BOOLEAN NOT NULL DEFAULT FALSE
+    "FullSize" BOOLEAN NOT NULL DEFAULT FALSE,
+    "Index" INT NOT NULL DEFAULT 0
 );
 
 ALTER TABLE public."ProjectCollectionArtwork" ADD COLUMN IF NOT EXISTS "Accepted" BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE public."ProjectCollectionArtwork" ADD COLUMN IF NOT EXISTS "ResponseId" VARCHAR(32) NOT NULL DEFAULT '';
 ALTER TABLE public."ProjectCollectionArtwork" ADD COLUMN IF NOT EXISTS "FullSize" BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public."ProjectCollectionArtwork" ADD COLUMN IF NOT EXISTS "Index" INT NOT NULL DEFAULT 0;
 ALTER TABLE public."ProjectCollectionArtwork" ALTER COLUMN "ResponseId" TYPE VARCHAR(64);
 
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_ProjectCollectionArtwork_CollectionId_ItemId"

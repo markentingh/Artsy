@@ -14,5 +14,6 @@ namespace Artsy.Data.Entities.Projects
         public bool Accepted { get; set; }
         public string ResponseId { get; set; } = "";
         public bool FullSize { get; set; }
+        public int Index { get; set; }
     }
 }

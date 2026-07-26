@@ -43,4 +43,82 @@ namespace Artsy.API.Models.Collections
         [JsonPropertyName("collectionId")]
         public Guid CollectionId { get; set; }
     }
+
+    public class AutoAcceptCustomArtworkRequest
+    {
+        [JsonPropertyName("projectId")]
+        public Guid ProjectId { get; set; }
+
+        [JsonPropertyName("collectionId")]
+        public Guid CollectionId { get; set; }
+
+        [JsonPropertyName("itemId")]
+        public Guid ItemId { get; set; }
+    }
+
+    public class DeleteCollectionArtworkRequest
+    {
+        [JsonPropertyName("collectionId")]
+        public Guid CollectionId { get; set; }
+
+        [JsonPropertyName("itemId")]
+        public Guid ItemId { get; set; }
+    }
+
+    public class DeleteProductImageRequest
+    {
+        [JsonPropertyName("collectionId")]
+        public Guid CollectionId { get; set; }
+
+        [JsonPropertyName("projectBlueprintId")]
+        public Guid ProjectBlueprintId { get; set; }
+
+        [JsonPropertyName("variant")]
+        public int Variant { get; set; }
+
+        [JsonPropertyName("placement")]
+        public int Placement { get; set; }
+    }
+
+    public class GenerateArtworkThumbnailRequest
+    {
+        [JsonPropertyName("collectionId")]
+        public Guid CollectionId { get; set; }
+
+        [JsonPropertyName("itemId")]
+        public Guid ItemId { get; set; }
+    }
+
+    public class DeactivateProductImagesRequest
+    {
+        [JsonPropertyName("collectionId")]
+        public Guid CollectionId { get; set; }
+
+        [JsonPropertyName("combos")]
+        public List<DeleteProductImageRequest> Combos { get; set; } = new();
+    }
+
+    public class SyncProductImageSelectionsRequest
+    {
+        [JsonPropertyName("collectionId")]
+        public Guid CollectionId { get; set; }
+
+        [JsonPropertyName("projectId")]
+        public Guid ProjectId { get; set; }
+
+        [JsonPropertyName("selectedCombos")]
+        public List<SyncComboDto> SelectedCombos { get; set; } = new();
+    }
+
+    public class SyncComboDto
+    {
+        [JsonPropertyName("projectBlueprintId")]
+        public Guid ProjectBlueprintId { get; set; }
+
+        [JsonPropertyName("variant")]
+        public int Variant { get; set; }
+
+        [JsonPropertyName("placement")]
+        public int Placement { get; set; }
+    }
 }

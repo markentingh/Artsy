@@ -11,8 +11,10 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionProductImages"
     "Width" INT NOT NULL DEFAULT 0,
     "Height" INT NOT NULL DEFAULT 0,
     "Accepted" BOOLEAN NOT NULL DEFAULT FALSE,
-    "ResponseId" VARCHAR(64) NOT NULL DEFAULT ''
+    "ResponseId" VARCHAR(64) NOT NULL DEFAULT '',
+    "Active" BOOLEAN NOT NULL DEFAULT TRUE
 );
+ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "Active" BOOLEAN NOT NULL DEFAULT TRUE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_ProjectCollectionProductImages_CollectionId_BlueprintId_Variant_Placement"
     ON public."ProjectCollectionProductImages" ("CollectionId", "ProjectBlueprintId", "Variant", "Placement");

@@ -1,7 +1,29 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Icon from '@/components/ui/icon';
 
 export default function Modal({ title, children, onClose, top = false, className }) {
+  const innerRef = useRef(null);
+  const [maxHeight, setMaxHeight] = useState(null);
+
+  useEffect(() => {
+    const updateHeight = () => {
+      if (innerRef.current) {
+        const rect = innerRef.current.getBoundingClientRect();
+        const effectiveTop = Math.max(rect.top, 10);
+        const available = window.innerHeight - effectiveTop - 10;
+        setMaxHeight(available > 0 ? available : null);
+      }
+    };
+    updateHeight();
+    window.addEventListener('resize', updateHeight);
+    const observer = new ResizeObserver(updateHeight);
+    if (innerRef.current) observer.observe(innerRef.current);
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      observer.disconnect();
+    };
+  }, []);
+
   const handleBackdropClick = (e) => {
     if (e.target === e.currentTarget) {
       onClose();
@@ -17,11 +39,15 @@ export default function Modal({ title, children, onClose, top = false, className
       }
       onClick={handleBackdropClick}
     >
-      <div className={
-        className
-          ? `rounded-lg bg-white dark:bg-gray-800 shadow-xl ${className}`
-          : 'w-full max-w-lg rounded-lg bg-white dark:bg-gray-800 shadow-xl'
-      }>
+      <div
+        ref={innerRef}
+        className={
+          className
+            ? `rounded-lg bg-white dark:bg-gray-800 shadow-xl ${className}`
+            : 'w-full max-w-lg rounded-lg bg-white dark:bg-gray-800 shadow-xl'
+        }
+        style={maxHeight ? { maxHeight: `${maxHeight}px`, overflowY: 'auto' } : undefined}
+      >
         <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 px-6 py-4">
           <h2 className="text-xl">{title}</h2>
           <button

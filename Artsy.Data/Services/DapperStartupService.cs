@@ -43,6 +43,7 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<IPrintifyBlueprintVariantPlaceholderRepository, PrintifyBlueprintVariantPlaceholderRepository>();
             builder.Services.AddTransient<IPrintifyBlueprintShippingRepository, PrintifyBlueprintShippingRepository>();
             builder.Services.AddTransient<IPrintifyBlueprintImageRepository, PrintifyBlueprintImageRepository>();
+            builder.Services.AddTransient<IPrintifyBlueprintImageVariantRepository, PrintifyBlueprintImageVariantRepository>();
             builder.Services.AddTransient<ITrendRepository, TrendRepository>();
         }
     }

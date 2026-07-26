@@ -9,5 +9,6 @@ namespace Artsy.Data.Interfaces
         Task<IEnumerable<PrintifyBlueprintVariant>> GetByBlueprintIdsAsync(IEnumerable<int> blueprintIds);
         Task UpsertBatchAsync(IEnumerable<PrintifyBlueprintVariant> variants);
         Task DeleteByBlueprintAndProviderAsync(int blueprintId, int printProviderId);
+        Task<int> ConvertVariantsAsync();
     }
 }

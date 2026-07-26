@@ -67,6 +67,11 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     generateCollectionArtwork: (request) => api.post(`${apiPath}/generate-collection-artwork`, request),
     upscaleArtwork: (request) => api.post(`${apiPath}/upscale-artwork`, request),
     acceptCollectionArtwork: (request) => api.post(`${apiPath}/accept-collection-artwork`, request),
+    autoAcceptCustomArtwork: (request) => api.post(`${apiPath}/auto-accept-custom-artwork`, request),
+    deleteCollectionArtwork: (request) => api.post(`${apiPath}/delete-collection-artwork`, request),
+    deleteProductImage: (request) => api.post(`${apiPath}/delete-product-image`, request),
+    deactivateProductImages: (request) => api.post(`${apiPath}/deactivate-product-images`, request),
+    syncProductImageSelections: (request) => api.post(`${apiPath}/sync-product-image-selections`, request),
     estimateCollectionTokens: (request) => api.post(`${apiPath}/estimate-collection-tokens`, request),
     getCollectionArtworkImageUrl: (collectionId, itemId, artworkId, fullSize = false, cacheBust = null) => {
       const params = [];
@@ -75,6 +80,12 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
       const qs = params.length > 0 ? `?${params.join('&')}` : '';
       return `${apiPath}/collection/${collectionId}/item/${itemId}/artwork/${artworkId}${qs}`;
     },
+    getCollectionArtworkThumbUrl: (collectionId, itemId, artworkId, cacheBust = null) => {
+      const params = ['thumb=true'];
+      if (cacheBust) params.push(`r=${cacheBust}`);
+      return `${apiPath}/collection/${collectionId}/item/${itemId}/artwork/${artworkId}?${params.join('&')}`;
+    },
+    generateArtworkThumbnail: (request) => api.post(`${apiPath}/generate-artwork-thumbnail`, request),
     getProductImageVariants: (projectId, collectionId) => api.get(`${apiPath}/get-product-image-variants?projectId=${projectId}&collectionId=${collectionId}`),
     generateProductImage: (request) => api.post(`${apiPath}/generate-product-image`, request),
     acceptProductImage: (request) => api.post(`${apiPath}/accept-product-image`, request),

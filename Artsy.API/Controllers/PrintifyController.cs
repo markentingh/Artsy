@@ -27,6 +27,7 @@ namespace Artsy.API.Controllers
         readonly IPrintifyBlueprintVariantRepository _variantRepo;
         readonly IPrintifyBlueprintVariantPlaceholderRepository _placeholderRepo;
         readonly IPrintifyBlueprintImageRepository _imageRepo;
+        readonly IPrintifyBlueprintImageVariantRepository _imageVariantRepo;
         readonly IImageService _imageService;
 
         public PrintifyController(
@@ -38,6 +39,7 @@ namespace Artsy.API.Controllers
             IPrintifyBlueprintVariantRepository variantRepo,
             IPrintifyBlueprintVariantPlaceholderRepository placeholderRepo,
             IPrintifyBlueprintImageRepository imageRepo,
+            IPrintifyBlueprintImageVariantRepository imageVariantRepo,
             IImageService imageService)
         {
             _userRepository = userRepository;
@@ -48,6 +50,7 @@ namespace Artsy.API.Controllers
             _variantRepo = variantRepo;
             _placeholderRepo = placeholderRepo;
             _imageRepo = imageRepo;
+            _imageVariantRepo = imageVariantRepo;
             _imageService = imageService;
         }
 
@@ -327,7 +330,7 @@ namespace Artsy.API.Controllers
                 {
                     id = v.VariantId,
                     title = v.Title,
-                    options = JsonSerializer.Deserialize<Dictionary<string, string>>(v.Options) ?? new Dictionary<string, string>(),
+                    size = v.Size ?? "",
                     placeholders = allPlaceholders.TryGetValue(v.VariantId, out var phs) ? phs : new List<object>(),
                     decoration_methods = JsonSerializer.Deserialize<string[]>(v.DecorationMethods) ?? Array.Empty<string>()
                 }).ToList();
@@ -395,7 +398,13 @@ namespace Artsy.API.Controllers
         {
             try
             {
-                var images = await _imageRepo.GetByBlueprintIdAsync(blueprintId);
+                var images = (await _imageRepo.GetByBlueprintIdAsync(blueprintId)).ToList();
+                var imageIds = images.Select(img => img.Id).ToList();
+                var imageVariants = imageIds.Count > 0
+                    ? (await _imageVariantRepo.GetByImageIdsAsync(imageIds)).ToList()
+                    : new List<PrintifyBlueprintImageVariant>();
+                var variantsByImageId = imageVariants.GroupBy(iv => iv.ImageId).ToDictionary(g => g.Key, g => g.Select(iv => iv.VariantId).ToList());
+
                 return Json(new ApiResponse
                 {
                     success = true,
@@ -404,7 +413,7 @@ namespace Artsy.API.Controllers
                         id = img.Id,
                         blueprintId = img.BlueprintId,
                         imageIndex = img.ImageIndex,
-                        variants = JsonSerializer.Deserialize<int[]>(img.Variants) ?? Array.Empty<int>(),
+                        variants = variantsByImageId.TryGetValue(img.Id, out var ivs) ? ivs : new List<int>(),
                         type = img.Type,
                         position = img.Position
                     })

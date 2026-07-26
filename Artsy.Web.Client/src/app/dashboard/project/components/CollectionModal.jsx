@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { CollectionProvider, useCollection, STEPS, WIZARD_STEPS, STEP_INDEX } from '@/context/collection';
+import { CollectionProvider, useCollection, STEPS } from '@/context/collection';
 import Modal from '@/components/ui/modal';
 import Spinner from '@/components/ui/spinner';
 import Message from '@/components/ui/message';
@@ -9,11 +9,11 @@ import ProjectQuestions from './collection-steps/ProjectQuestions';
 import ArtworkQuestions from './collection-steps/ArtworkQuestions';
 import ArtworkPreview from './collection-steps/ArtworkPreview';
 import ReadyToGenerate from './collection-steps/ReadyToGenerate';
-import NextStep from './collection-steps/NextStep';
+import PublishProducts from './collection-steps/PublishProducts';
 import ProductImageSelection from './collection-steps/ProductImageSelection';
 import ProductImagePrompt from './collection-steps/ProductImagePrompt';
 import ProductImagePreview from './collection-steps/ProductImagePreview';
-import ProductImageDone from './collection-steps/ProductImageDone';
+import CollectionSetupList from './CollectionSetupList';
 
 const stepTitle = (step) => {
   switch (step) {
@@ -24,8 +24,8 @@ const stepTitle = (step) => {
     case STEPS.PRODUCT_IMAGE_SELECTION: return 'New Collection - Product Image Selection';
     case STEPS.PRODUCT_IMAGE_PROMPT: return 'New Collection - Product Image Prompt';
     case STEPS.PRODUCT_IMAGE_PREVIEW: return 'New Collection - Product Images';
-    case STEPS.PRODUCT_IMAGE_DONE: return 'New Collection - Product Images';
-    case STEPS.NEXT_STEP: return 'New Collection - Next Step';
+    case STEPS.PUBLISH: return 'New Collection - Publish';
+    case STEPS.SOCIAL_MEDIA: return 'New Collection - Social Media';
     default: return 'New Collection';
   }
 };
@@ -34,8 +34,10 @@ function CollectionWizard() {
   const {
     step, message, setMessage,
     initialLoading, artworkPreview, setArtworkPreview,
-    onClose,
+    onClose, STEPS, wizardSteps, stepIndex,
   } = useCollection();
+
+  console.log('[CollectionWizard] wizardSteps:', wizardSteps, 'stepIndex:', stepIndex, 'step:', step);
 
   return (
     <Modal
@@ -56,8 +58,10 @@ function CollectionWizard() {
         </div>
       ) : (
         <>
-          <Steps steps={WIZARD_STEPS} currentIndex={STEP_INDEX[step] ?? 0} />
-
+          <Steps steps={wizardSteps} currentIndex={stepIndex[step] ?? 0} />
+          <div className="px-2">
+            <CollectionSetupList />
+          </div>
           {step === STEPS.PROJECT_QUESTIONS && <ProjectQuestions />}
           {step === STEPS.ARTWORK_QUESTIONS && <ArtworkQuestions />}
           {step === STEPS.ARTWORK_PREVIEW && <ArtworkPreview />}
@@ -65,8 +69,8 @@ function CollectionWizard() {
           {step === STEPS.PRODUCT_IMAGE_SELECTION && <ProductImageSelection />}
           {step === STEPS.PRODUCT_IMAGE_PROMPT && <ProductImagePrompt />}
           {step === STEPS.PRODUCT_IMAGE_PREVIEW && <ProductImagePreview />}
-          {step === STEPS.PRODUCT_IMAGE_DONE && <ProductImageDone />}
-          {step === STEPS.NEXT_STEP && <NextStep />}
+          {step === STEPS.PUBLISH && <PublishProducts />}
+          {step === STEPS.SOCIAL_MEDIA && <PublishProducts />}
         </>
       )}
 
@@ -90,6 +94,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
     fetchEstimate, setInitialLoading,
     STEPS, reset, loadData,
     loadProductImageVariants, loadImageModels, ensureCollection,
+    api, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex,
   } = useCollection();
 
   const [aiItemsLoaded, setAiItemsLoaded] = useState(false);
@@ -124,10 +129,6 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
 
       const artworkItemIds = new Set(
         collectionArtwork.map(a => String(a.itemId))
-      );
-
-      const acceptedItemIds = new Set(
-        collectionArtwork.filter(a => a.accepted).map(a => String(a.itemId))
       );
 
       const unacceptedArtworkItemIds = collectionArtwork
@@ -166,7 +167,68 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
             (async () => {
               const colId = initialCollectionId || await ensureCollection();
               if (colId) {
-                await Promise.all([loadProductImageVariants(colId), loadImageModels()]);
+                const [variants,] = await Promise.all([loadProductImageVariants(colId), loadImageModels()]);
+                try {
+                  const imgRes = await api.getProductImages(colId);
+                  console.log('[ResumeManager] getProductImages response:', imgRes.data);
+                  if (imgRes.data.success) {
+                    const allImages = (imgRes.data.data || []).filter(img => img.active);
+                    const accepted = allImages.filter(img => img.accepted);
+                    const acceptedKeys = new Set(accepted.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
+                    console.log('[ResumeManager] existing:', allImages.length, 'accepted:', accepted.length, accepted);
+
+                    const activeKeys = new Set(allImages.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
+
+                    const allCombos = [];
+                    for (const bp of variants) {
+                      for (const v of (bp.variants || [])) {
+                        for (const c of (v.combos || [])) {
+                          if (c.hasArtwork) {
+                            const key = `${bp.projectBlueprintId}:${v.variant}:${c.placementIndex}`;
+                            if (activeKeys.has(key)) {
+                              allCombos.push({
+                                projectBlueprintId: bp.projectBlueprintId,
+                                blueprintName: bp.blueprintName,
+                                variant: v.variant,
+                                variantTitle: v.variantTitle,
+                                placement: c.placementIndex,
+                                placementName: c.placementName,
+                                tokens: c.tokens,
+                              });
+                            }
+                          }
+                        }
+                      }
+                    }
+
+                    const missingCombos = allCombos.filter(c => !acceptedKeys.has(`${c.projectBlueprintId}:${c.variant}:${c.placement}`));
+                    console.log('[ResumeManager] allCombos:', allCombos.length, 'missing:', missingCombos.length);
+
+                    if (allCombos.length === 0) {
+                      setAllProductImages(allImages);
+                      setStep(STEPS.PRODUCT_IMAGE_SELECTION);
+                      setInitialLoading(false);
+                      return;
+                    }
+
+                    if (missingCombos.length === 0) {
+                      setAllProductImages(allImages);
+                      setStep(STEPS.PUBLISH);
+                      setInitialLoading(false);
+                      return;
+                    }
+
+                    if (missingCombos.length < allCombos.length) {
+                      setSelectedProductCombos(missingCombos);
+                      setCurrentProductComboIndex(0);
+                      setAllProductImages(allImages);
+                      setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+                      setInitialLoading(false);
+                      return;
+                    }
+                  }
+                } catch (e) { console.log('[ResumeManager] getProductImages error:', e); }
+                console.log('[ResumeManager] falling through to PRODUCT_IMAGE_SELECTION');
                 setStep(STEPS.PRODUCT_IMAGE_SELECTION);
               } else {
                 setStep(STEPS.READY_TO_GENERATE);

@@ -1,12 +1,16 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import ButtonIcon from '@/components/ui/button-icon';
 
-export default function Carousel({ images = [], alt = '', onImageClick, singleImage = false, defaultIndex = 0, infiniteScroll = false, placeholder = '', imageClassName = '', imageWidth = '8rem', imageHeight = '12rem', overlayRender }) {
+export default function Carousel({ images = [], alt = '', onImageClick, onImageError, singleImage = false, defaultIndex = 0, infiniteScroll = false, placeholder = '', imageClassName = '', imageWidth = '8rem', imageHeight = '12rem', overlayRender }) {
   const scrollRef = useRef(null);
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
   const [singleIndex, setSingleIndex] = useState(defaultIndex);
+
+  useEffect(() => {
+    setSingleIndex(defaultIndex);
+  }, [images, defaultIndex]);
 
   const updateScrollState = useCallback(() => {
     const el = scrollRef.current;
@@ -58,7 +62,9 @@ export default function Carousel({ images = [], alt = '', onImageClick, singleIm
           <img
             src={images[singleIndex]}
             alt={`${alt} ${singleIndex + 1}`}
-            className={`max-w-full max-h-[70vh] object-contain rounded-lg ${imageClassName}`}
+            className={`max-w-full max-h-[70vh] object-contain rounded-lg cursor-pointer ${imageClassName}`}
+            onClick={() => onImageClick?.(images[singleIndex], singleIndex)}
+            onError={() => onImageError?.(singleIndex)}
           />
         </div>
         {showNav && (
@@ -128,6 +134,7 @@ export default function Carousel({ images = [], alt = '', onImageClick, singleIm
                 style={{ width: '100%', height: '100%' }}
                 onLoad={updateScrollState}
                 onClick={() => onImageClick?.(src, i)}
+                onError={() => onImageError?.(i)}
               />
               {overlayRender?.(i)}
             </div>

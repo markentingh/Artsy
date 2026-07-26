@@ -1,5 +1,6 @@
 using Dapper;
 using System.Data;
+using System.Text.Json;
 using Artsy.Data.Entities;
 using Artsy.Data.Interfaces;
 
@@ -37,14 +38,15 @@ namespace Artsy.Data.Repositories
         public async Task UpsertBatchAsync(IEnumerable<PrintifyBlueprintVariant> variants)
         {
             const string query = @"
-                INSERT INTO public.""PrintifyBlueprintVariants"" (""VariantId"", ""BlueprintId"", ""PrintProviderId"", ""Title"", ""Options"", ""DecorationMethods"", ""DateUpdated"")
-                VALUES (@VariantId, @BlueprintId, @PrintProviderId, @Title, @Options, @DecorationMethods, CURRENT_TIMESTAMP)
+                INSERT INTO public.""PrintifyBlueprintVariants"" (""VariantId"", ""BlueprintId"", ""PrintProviderId"", ""Title"", ""Options"", ""Size"", ""DecorationMethods"", ""DateUpdated"")
+                VALUES (@VariantId, @BlueprintId, @PrintProviderId, @Title, @Options, @Size, @DecorationMethods, CURRENT_TIMESTAMP)
                 ON CONFLICT (""VariantId"")
                 DO UPDATE SET
                     ""BlueprintId"" = @BlueprintId,
                     ""PrintProviderId"" = @PrintProviderId,
                     ""Title"" = @Title,
                     ""Options"" = @Options,
+                    ""Size"" = @Size,
                     ""DecorationMethods"" = @DecorationMethods,
                     ""DateUpdated"" = CURRENT_TIMESTAMP";
             await _dbConnection.ExecuteAsync(query, variants);
@@ -54,6 +56,39 @@ namespace Artsy.Data.Repositories
         {
             const string query = @"DELETE FROM public.""PrintifyBlueprintVariants"" WHERE ""BlueprintId"" = @blueprintId AND ""PrintProviderId"" = @printProviderId";
             await _dbConnection.ExecuteAsync(query, new { blueprintId, printProviderId });
+        }
+
+        public async Task<int> ConvertVariantsAsync()
+        {
+            const string selectQuery = @"SELECT ""VariantId"", ""Options"" FROM public.""PrintifyBlueprintVariants""";
+            var rows = (await _dbConnection.QueryAsync<(int VariantId, string Options)>(selectQuery)).ToList();
+
+            int updated = 0;
+            foreach (var row in rows)
+            {
+                string color = "";
+                string size = "";
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(row.Options))
+                    {
+                        using var doc = JsonDocument.Parse(row.Options);
+                        if (doc.RootElement.TryGetProperty("color", out var colorEl))
+                            color = colorEl.GetString() ?? "";
+                        if (doc.RootElement.TryGetProperty("size", out var sizeEl))
+                            size = sizeEl.GetString() ?? "";
+                    }
+                }
+                catch { }
+
+                const string updateQuery = @"
+                    UPDATE public.""PrintifyBlueprintVariants"" 
+                    SET ""Title"" = @color, ""Size"" = @size 
+                    WHERE ""VariantId"" = @variantId";
+                updated += await _dbConnection.ExecuteAsync(updateQuery, new { color, size, variantId = row.VariantId });
+            }
+
+            return updated;
         }
     }
 }

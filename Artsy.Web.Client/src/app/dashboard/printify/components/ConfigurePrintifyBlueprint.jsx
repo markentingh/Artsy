@@ -110,7 +110,7 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
               (img.variants || [])
                 .map(vid => {
                   const v = loadedVariants.find(va => va.id === vid);
-                  return v?.options?.color || 'Default';
+                  return v?.title || 'Default';
                 })
             )];
             settings[img.imageIndex] = {
@@ -247,10 +247,10 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
   const variantColorOptions = useMemo(() => {
     const colorMap = new Map();
     for (const v of variants) {
-      const color = v.options?.color || 'Default';
+      const color = v.title || 'Default';
       if (!colorMap.has(color)) {
         const allOutOfStock = variants
-          .filter(va => (va.options?.color || 'Default') === color)
+          .filter(va => (va.title || 'Default') === color)
           .every(va => outOfStockIds.has(va.id));
         colorMap.set(color, {
           value: color,
@@ -269,7 +269,7 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
     const sizeOrder = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
     const groups = new Map();
     for (const variant of variants) {
-      const color = variant.options?.color || 'Default';
+      const color = variant.title || 'Default';
       if (!groups.has(color)) {
         groups.set(color, []);
       }
@@ -278,8 +278,8 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
     return Array.from(groups.entries()).map(([color, vars]) => ({
       color,
       variants: vars.sort((a, b) => {
-        const aSize = a.options?.size || '';
-        const bSize = b.options?.size || '';
+        const aSize = a.size || '';
+        const bSize = b.size || '';
         const aIdx = sizeOrder.indexOf(aSize);
         const bIdx = sizeOrder.indexOf(bSize);
         if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
@@ -293,7 +293,7 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
   const colorsToVariantIds = (color) => {
     if (!color) return [];
     return variants
-      .filter(v => (v.options?.color || 'Default') === color)
+      .filter(v => (v.title || 'Default') === color)
       .map(v => v.id);
   };
 
@@ -305,9 +305,18 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
       if (detail?.imageCount > 0) {
         for (let i = 0; i < detail.imageCount; i++) {
           const settings = imageSettings[i] || { variantColor: '', type: '0', position: String(POSITION_FRONT) };
+          const initialSettings = initialImageSettings[i] || { variantColor: '', type: '0', position: String(POSITION_FRONT) };
+
+          const currentVariantIds = new Set(colorsToVariantIds(settings.variantColor || ''));
+          const initialVariantIds = new Set(colorsToVariantIds(initialSettings.variantColor || ''));
+
+          const addedVariants = [...currentVariantIds].filter(id => !initialVariantIds.has(id));
+          const removedVariants = [...initialVariantIds].filter(id => !currentVariantIds.has(id));
+
           images.push({
             imageIndex: i,
-            variants: colorsToVariantIds(settings.variantColor || ''),
+            addedVariants,
+            removedVariants,
             type: parseInt(settings.type) || 0,
             position: parseInt(settings.position) || 0,
           });
@@ -498,7 +507,7 @@ export default function ConfigurePrintifyBlueprint({ show, blueprint, onClose, o
               <div className="grid grid-cols-3 gap-4">
                 {variantsByColor.map((group) => {
                   const options = group.variants.map((v) => {
-                    const size = v.options?.size || v.title;
+                    const size = v.size || v.title;
                     const isOutOfStock = outOfStockIds.has(v.id);
                     return {
                       value: String(v.id),

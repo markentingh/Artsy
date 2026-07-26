@@ -66,13 +66,13 @@ export default function ProductImagePreview() {
 
     const nextIndex = currentProductComboIndex + 1;
     if (nextIndex >= selectedProductCombos.length) {
-      setStep(STEPS.PRODUCT_IMAGE_DONE);
+      setStep(STEPS.PUBLISH);
     } else {
       setCurrentProductComboIndex(nextIndex);
       setCurrentProductImage(null);
       setShowProductImageChanges(false);
       setProductImageChanges('');
-      doGenerateProductImage(selectedProductCombos[nextIndex]);
+      setStep(STEPS.PRODUCT_IMAGE_PROMPT);
     }
   }, [currentProductImage, collectionId, api, currentProductComboIndex, selectedProductCombos, setStep, STEPS, setCurrentProductComboIndex, setCurrentProductImage, setShowProductImageChanges, setProductImageChanges, doGenerateProductImage, setAllProductImages]);
 

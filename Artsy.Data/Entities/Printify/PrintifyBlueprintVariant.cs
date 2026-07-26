@@ -7,6 +7,7 @@ namespace Artsy.Data.Entities
         public int PrintProviderId { get; set; }
         public string Title { get; set; } = "";
         public string Options { get; set; } = "{}";
+        public string Size { get; set; } = "";
         public string DecorationMethods { get; set; } = "[]";
         public DateTime DateUpdated { get; set; }
     }

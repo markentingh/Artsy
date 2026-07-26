@@ -101,8 +101,10 @@ namespace Artsy.API.Controllers
                         active = a.Active,
                         accepted = a.Accepted,
                         fullSize = a.FullSize,
+                        imageModel = a.ImageModel,
                         width = a.Width,
-                        height = a.Height
+                        height = a.Height,
+                        index = a.Index
                     })
                 });
             }
@@ -315,7 +317,8 @@ namespace Artsy.API.Controllers
                     Width = width,
                     Height = height,
                     ImageModel = genModel.Model,
-                    Prompt = finalPrompt
+                    Prompt = finalPrompt,
+                    Index = item.Index
                 };
                 var created = await _projectCollectionArtworkRepository.UpsertAsync(collectionArtwork);
 
@@ -396,6 +399,9 @@ namespace Artsy.API.Controllers
                 var artwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(request.CollectionId, request.ItemId);
                 if (artwork == null || !artwork.Active)
                     return Json(new ApiResponse { success = false, message = "No artwork found to upscale." });
+
+                if (artwork.FullSize)
+                    return Json(new ApiResponse { success = true, data = artwork });
 
                 var previewBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id);
                 if (previewBytes == null || previewBytes.Length == 0)
@@ -480,8 +486,225 @@ namespace Artsy.API.Controllers
             }
         }
 
+        [HttpPost("auto-accept-custom-artwork")]
+        public async Task<IActionResult> AutoAcceptCustomArtwork([FromBody] AutoAcceptCustomArtworkRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.ProjectId == Guid.Empty || request.CollectionId == Guid.Empty || request.ItemId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Project ID, Collection ID, and Item ID are required." });
+
+            try
+            {
+                var project = await _projectRepository.GetByIdAsync(request.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                var artworkList = await _projectItemArtworkRepository.GetByItemIdAsync(request.ItemId);
+                var itemArtwork = artworkList.FirstOrDefault();
+                if (itemArtwork == null || itemArtwork.ArtworkType != "custom" || !itemArtwork.CustomImageId.HasValue)
+                    return Json(new ApiResponse { success = false, message = "Item does not have a custom image artwork." });
+
+                var item = await _projectItemRepository.GetByIdAsync(request.ItemId);
+                if (item == null)
+                    return Json(new ApiResponse { success = false, message = "Item not found." });
+
+                var reference = (await _projectItemReferenceRepository.GetByItemIdAsync(request.ItemId))
+                    .FirstOrDefault(r => r.Id == itemArtwork.CustomImageId.Value);
+                if (reference == null)
+                    return Json(new ApiResponse { success = false, message = "Custom reference image not found." });
+
+                var referenceBytes = await _imageService.GetProjectItemReferenceAsync(reference.ProjectId, reference.Id, reference.Extension);
+                if (referenceBytes == null || referenceBytes.Length == 0)
+                    return Json(new ApiResponse { success = false, message = "Custom reference image data not found." });
+
+                var existing = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(request.CollectionId, request.ItemId);
+                if (existing != null && existing.Accepted && existing.FullSize)
+                {
+                    return Json(new ApiResponse { success = true, data = existing });
+                }
+
+                var collectionArtwork = new ProjectCollectionArtwork
+                {
+                    ProjectId = request.ProjectId,
+                    CollectionId = request.CollectionId,
+                    ItemId = request.ItemId,
+                    Active = true,
+                    Accepted = true,
+                    FullSize = true,
+                    Width = 2048,
+                    Height = 2048,
+                    ImageModel = "custom",
+                    Prompt = "Custom image artwork",
+                    Index = item.Index
+                };
+                var created = await _projectCollectionArtworkRepository.UpsertAsync(collectionArtwork);
+
+                await _imageService.SaveProjectCollectionArtworkAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, referenceBytes);
+                await _imageService.SaveProjectCollectionArtworkFullSizeAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, referenceBytes);
+
+                return Json(new ApiResponse { success = true, data = created });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("delete-collection-artwork")]
+        public async Task<IActionResult> DeleteCollectionArtwork([FromBody] DeleteCollectionArtworkRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.CollectionId == Guid.Empty || request.ItemId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Collection ID and Item ID are required." });
+
+            try
+            {
+                await _projectCollectionArtworkRepository.DeleteAsync(request.CollectionId, request.ItemId);
+                return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("delete-product-image")]
+        public async Task<IActionResult> DeleteProductImage([FromBody] DeleteProductImageRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.CollectionId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Collection ID is required." });
+
+            try
+            {
+                await _projectCollectionProductImageRepository.SetInactiveAsync(
+                    request.CollectionId, request.ProjectBlueprintId, request.Variant, request.Placement);
+                return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("deactivate-product-images")]
+        public async Task<IActionResult> DeactivateProductImages([FromBody] DeactivateProductImagesRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.CollectionId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Collection ID is required." });
+
+            try
+            {
+                foreach (var combo in request.Combos ?? new List<DeleteProductImageRequest>())
+                {
+                    await _projectCollectionProductImageRepository.SetInactiveAsync(
+                        request.CollectionId, combo.ProjectBlueprintId, combo.Variant, combo.Placement);
+                }
+                return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("sync-product-image-selections")]
+        public async Task<IActionResult> SyncProductImageSelections([FromBody] SyncProductImageSelectionsRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.CollectionId == Guid.Empty || request.ProjectId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Collection ID and Project ID are required." });
+
+            try
+            {
+                var allImages = (await _projectCollectionProductImageRepository.GetAllByCollectionIdAsync(request.CollectionId)).ToList();
+
+                var selectedKeys = new HashSet<string>(
+                    request.SelectedCombos.Select(c => $"{c.ProjectBlueprintId}:{c.Variant}:{c.Placement}")
+                );
+
+                foreach (var img in allImages)
+                {
+                    var key = $"{img.ProjectBlueprintId}:{img.Variant}:{img.Placement}";
+                    if (!selectedKeys.Contains(key) && img.Active)
+                    {
+                        await _projectCollectionProductImageRepository.SetInactiveAsync(
+                            request.CollectionId, img.ProjectBlueprintId, img.Variant, img.Placement);
+                    }
+                }
+
+                foreach (var combo in request.SelectedCombos)
+                {
+                    var existing = allImages.FirstOrDefault(img =>
+                        img.ProjectBlueprintId == combo.ProjectBlueprintId &&
+                        img.Variant == combo.Variant &&
+                        img.Placement == combo.Placement);
+
+                    if (existing == null)
+                    {
+                        await _projectCollectionProductImageRepository.CreateAsync(new ProjectCollectionProductImage
+                        {
+                            ProjectId = request.ProjectId,
+                            CollectionId = request.CollectionId,
+                            ProjectBlueprintId = combo.ProjectBlueprintId,
+                            Variant = combo.Variant,
+                            Placement = combo.Placement,
+                            ImageModel = "",
+                            Prompt = "",
+                            Width = 0,
+                            Height = 0,
+                            Accepted = false,
+                            ResponseId = "",
+                            Active = true
+                        });
+                    }
+                    else if (!existing.Active)
+                    {
+                        existing.Active = true;
+                        await _projectCollectionProductImageRepository.UpdateAsync(existing);
+                    }
+                }
+
+                var activeImages = await _projectCollectionProductImageRepository.GetByCollectionIdAsync(request.CollectionId);
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = activeImages.Select(img => new
+                    {
+                        id = img.Id,
+                        projectBlueprintId = img.ProjectBlueprintId,
+                        variant = img.Variant,
+                        placement = img.Placement,
+                        accepted = img.Accepted,
+                        active = img.Active,
+                        imageUrl = $"/api/projects/collection/{request.CollectionId}/product-image/{img.Id}"
+                    })
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
         [HttpGet("collection/{collectionId}/item/{itemId}/artwork/{artworkId}")]
-        public async Task<IActionResult> GetCollectionArtworkImage(Guid collectionId, Guid itemId, Guid artworkId, [FromQuery] bool fullSize = false)
+        public async Task<IActionResult> GetCollectionArtworkImage(Guid collectionId, Guid itemId, Guid artworkId, [FromQuery] bool fullSize = false, [FromQuery] bool thumb = false)
         {
             var userId = GetUserId();
             if (userId == Guid.Empty)
@@ -500,13 +723,46 @@ namespace Artsy.API.Controllers
                 if (project == null)
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
-                var bytes = fullSize
-                    ? await _imageService.GetProjectCollectionArtworkFullSizeAsync(artwork.ProjectId, collectionId, itemId, artworkId)
-                    : await _imageService.GetProjectCollectionArtworkImageAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                byte[]? bytes;
+                if (thumb)
+                    bytes = await _imageService.GetProjectCollectionArtworkThumbAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                else if (fullSize)
+                    bytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                else
+                    bytes = await _imageService.GetProjectCollectionArtworkImageAsync(artwork.ProjectId, collectionId, itemId, artworkId);
                 if (bytes == null || bytes.Length == 0)
                     return NotFound();
 
                 return File(bytes, "image/jpeg");
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("generate-artwork-thumbnail")]
+        public async Task<IActionResult> GenerateArtworkThumbnail([FromBody] GenerateArtworkThumbnailRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.CollectionId == Guid.Empty || request.ItemId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Collection ID and Item ID are required." });
+
+            try
+            {
+                var artwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(request.CollectionId, request.ItemId);
+                if (artwork == null)
+                    return Json(new ApiResponse { success = false, message = "Artwork not found." });
+
+                var project = await _projectRepository.GetByIdAsync(artwork.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                var generated = await _imageService.GenerateProjectCollectionArtworkThumbAsync(artwork.ProjectId, request.CollectionId, request.ItemId, artwork.Id);
+                return Json(new ApiResponse { success = generated });
             }
             catch (Exception ex)
             {
@@ -581,6 +837,9 @@ namespace Artsy.API.Controllers
 
                 var totalTokens = generations.Count * 2;
 
+                var itemIndexMap = aiItems.ToDictionary(i => i.Id, i => i.Index);
+                generations = generations.OrderBy(g => itemIndexMap.TryGetValue(g.ItemId, out var idx) ? idx : int.MaxValue).ToList();
+
                 return Json(new ApiResponse
                 {
                     success = true,
@@ -624,6 +883,11 @@ namespace Artsy.API.Controllers
                 var allImages = printifyBlueprintIds.Count > 0
                     ? (await _printifyBlueprintImageRepository.GetByBlueprintIdsAsync(printifyBlueprintIds)).ToList()
                     : new List<PrintifyBlueprintImage>();
+
+                var allImageVariants = printifyBlueprintIds.Count > 0
+                    ? (await _printifyBlueprintImageVariantRepository.GetByBlueprintIdsAsync(printifyBlueprintIds)).ToList()
+                    : new List<PrintifyBlueprintImageVariant>();
+                var imageVariantsByImageId = allImageVariants.GroupBy(iv => iv.ImageId).ToDictionary(g => g.Key, g => g.Select(iv => iv.VariantId).ToList());
 
                 var variantsByBlueprint = allVariants.GroupBy(v => v.BlueprintId).ToDictionary(g => g.Key, g => g.ToList());
                 var imagesByBlueprint = allImages.GroupBy(i => i.BlueprintId).ToDictionary(g => g.Key, g => g.ToList());
@@ -674,7 +938,6 @@ namespace Artsy.API.Controllers
                     }
 
                     var variantTitles = new Dictionary<int, string>();
-                    var colorsSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     if (printifyBlueprintId > 0 && variantsByBlueprint.TryGetValue(printifyBlueprintId, out var bpVariants))
                     {
                         foreach (var v in bpVariants)
@@ -682,20 +945,7 @@ namespace Artsy.API.Controllers
                             if (selectedVariantIds.Count > 0 && !selectedVariantIds.Contains(v.VariantId))
                                 continue;
 
-                            var color = v.Title;
-                            try
-                            {
-                                if (!string.IsNullOrWhiteSpace(v.Options))
-                                {
-                                    using var optsDoc = JsonDocument.Parse(v.Options);
-                                    if (optsDoc.RootElement.TryGetProperty("color", out var colorEl))
-                                        color = colorEl.GetString() ?? v.Title;
-                                }
-                            }
-                            catch { }
-
-                            if (colorsSeen.Add(color))
-                                variantTitles[v.VariantId] = color;
+                            variantTitles[v.VariantId] = v.Title;
                         }
                     }
 
@@ -717,8 +967,8 @@ namespace Artsy.API.Controllers
 
                                     placementKeys.Add(placementName);
 
-                                    var source = placementObj.TryGetValue("source", out var sVal) ? sVal.ToString() : "";
-                                    var itemId = placementObj.TryGetValue("itemId", out var iVal) ? iVal.ToString() : "";
+                                    var source = placementObj.TryGetValue("source", out var sVal) && sVal != null ? sVal.ToString() : "";
+                                    var itemId = placementObj.TryGetValue("itemId", out var iVal) && iVal != null ? iVal.ToString() : "";
 
                                     Guid? artworkId = null;
                                     string artworkUrl = null;
@@ -762,20 +1012,24 @@ namespace Artsy.API.Controllers
 
                     var variants = new List<object>();
                     var variantIdsAdded = new HashSet<int>();
+                    var colorsAdded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     if (printifyBlueprintId > 0 && imagesByBlueprint.TryGetValue(printifyBlueprintId, out var bpImages))
                     {
                         foreach (var img in bpImages)
                         {
-                            var imgVariants = System.Text.Json.JsonSerializer.Deserialize<int[]>(img.Variants ?? "[]") ?? Array.Empty<int>();
+                            var imgVariants = imageVariantsByImageId.TryGetValue(img.Id, out var ivs) ? ivs : new List<int>();
                             foreach (var v in imgVariants)
                             {
                                 if (!variantTitles.ContainsKey(v))
                                     continue;
                                 if (variantIdsAdded.Add(v))
                                 {
+                                    var color = variantTitles[v];
+                                    if (!colorsAdded.Add(color))
+                                        continue;
                                     var variantImages = bpImages.Where(img2 =>
                                     {
-                                        var img2Variants = System.Text.Json.JsonSerializer.Deserialize<int[]>(img2.Variants ?? "[]") ?? Array.Empty<int>();
+                                        var img2Variants = imageVariantsByImageId.TryGetValue(img2.Id, out var ivs2) ? ivs2 : new List<int>();
                                         return img2Variants.Contains(v);
                                     }).ToList();
 
@@ -985,10 +1239,16 @@ namespace Artsy.API.Controllers
 
                 if (printifyBlueprintId > 0)
                 {
-                    var bpImages = await _printifyBlueprintImageRepository.GetByBlueprintIdAsync(printifyBlueprintId);
+                    var bpImages = (await _printifyBlueprintImageRepository.GetByBlueprintIdAsync(printifyBlueprintId)).ToList();
+                    var bpImageIds = bpImages.Select(img => img.Id).ToList();
+                    var bpImageVariants = bpImageIds.Count > 0
+                        ? (await _printifyBlueprintImageVariantRepository.GetByImageIdsAsync(bpImageIds)).ToList()
+                        : new List<PrintifyBlueprintImageVariant>();
+                    var variantsByImageId = bpImageVariants.GroupBy(iv => iv.ImageId).ToDictionary(g => g.Key, g => g.Select(iv => iv.VariantId).ToList());
+
                     var variantImages = bpImages.Where(img =>
                     {
-                        var imgVariants = System.Text.Json.JsonSerializer.Deserialize<int[]>(img.Variants ?? "[]") ?? Array.Empty<int>();
+                        var imgVariants = variantsByImageId.TryGetValue(img.Id, out var ivs) ? ivs : new List<int>();
                         return imgVariants.Contains(request.Variant);
                     }).ToList();
 
@@ -1076,7 +1336,7 @@ namespace Artsy.API.Controllers
                     Variant = request.Variant,
                     Placement = request.Placement,
                     ImageModel = genModel.Model,
-                    Prompt = finalPrompt,
+                    Prompt = request.Prompt,
                     Width = 2048,
                     Height = 2048,
                     Accepted = false,
@@ -1172,6 +1432,7 @@ namespace Artsy.API.Controllers
                         variant = img.Variant,
                         placement = img.Placement,
                         accepted = img.Accepted,
+                        active = img.Active,
                         imageUrl = $"/api/projects/collection/{collectionId}/product-image/{img.Id}"
                     })
                 });

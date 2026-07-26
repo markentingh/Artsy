@@ -6,6 +6,7 @@ namespace Artsy.Data.Interfaces
     {
         Task<IEnumerable<PrintifyBlueprintImage>> GetByBlueprintIdAsync(int blueprintId);
         Task<IEnumerable<PrintifyBlueprintImage>> GetByBlueprintIdsAsync(IEnumerable<int> blueprintIds);
-        Task UpsertAsync(PrintifyBlueprintImage image);
+        Task<Guid> UpsertAsync(PrintifyBlueprintImage image);
+        Task<int> ConvertImageVariantsAsync();
     }
 }

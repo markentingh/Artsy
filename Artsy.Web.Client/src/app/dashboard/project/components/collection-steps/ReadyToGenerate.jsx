@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState, useRef, useMemo } from 'react';
 import { useCollection } from '@/context/collection';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
@@ -17,12 +17,47 @@ export default function ReadyToGenerate() {
     upscaleComplete, setUpscaleComplete,
     setStep, loadProductImageVariants, loadImageModels,
     ensureCollection, setAllProductImages,
+    setSelectedProductCombos, setCurrentProductComboIndex,
   } = useCollection();
 
-  const acceptedArtworks = collectionArtwork.filter(a => a.active);
+  const acceptedArtworks = collectionArtwork.filter(a => a.active && a.imageModel !== 'custom');
+  const [thumbRetried, setThumbRetried] = useState({});
+  const [thumbFailed, setThumbFailed] = useState({});
+  const retryRef = useRef({});
+
   const artworkImages = acceptedArtworks.map(a =>
-    api.getCollectionArtworkImageUrl(collectionId, a.itemId, a.id, false, a.updatedAt || a.id)
+    api.getCollectionArtworkThumbUrl(collectionId, a.itemId, a.id, a.updatedAt || a.id)
   );
+
+  const handleImageError = useCallback(async (index) => {
+    if (retryRef.current[index]) return;
+    retryRef.current[index] = true;
+
+    const artwork = acceptedArtworks[index];
+    if (!artwork || !collectionId) {
+      setThumbFailed(prev => ({ ...prev, [index]: true }));
+      return;
+    }
+
+    try {
+      const res = await api.generateArtworkThumbnail({ collectionId, itemId: artwork.itemId });
+      if (res.data.success) {
+        setThumbRetried(prev => ({ ...prev, [index]: Date.now() }));
+      } else {
+        setThumbFailed(prev => ({ ...prev, [index]: true }));
+      }
+    } catch {
+      setThumbFailed(prev => ({ ...prev, [index]: true }));
+    }
+  }, [acceptedArtworks, collectionId, api]);
+
+  const displayImages = useMemo(() => {
+    return artworkImages.map((url, i) => {
+      if (thumbFailed[i]) return null;
+      if (thumbRetried[i]) return `${url}&r=${thumbRetried[i]}`;
+      return url;
+    }).filter(Boolean);
+  }, [artworkImages, thumbRetried, thumbFailed]);
 
   const currentItemGenId = currentGeneratingIndex >= 0 && estimate?.generations?.[currentGeneratingIndex]?.itemId;
 
@@ -56,23 +91,69 @@ export default function ReadyToGenerate() {
   const handleNext = useCallback(async () => {
     const colId = collectionId || await ensureCollection();
     if (!colId) return;
-    await Promise.all([loadProductImageVariants(colId), loadImageModels()]);
+    const [variants,] = await Promise.all([loadProductImageVariants(colId), loadImageModels()]);
 
     try {
       const imgRes = await api.getProductImages(colId);
+      console.log('[ReadyToGenerate.handleNext] getProductImages response:', imgRes.data);
       if (imgRes.data.success) {
-        const existing = imgRes.data.data || [];
-        const accepted = existing.filter(img => img.accepted);
-        if (accepted.length > 0) {
-          setAllProductImages(accepted);
-          setStep(STEPS.NEXT_STEP);
+        const allImages = (imgRes.data.data || []).filter(img => img.active);
+        const accepted = allImages.filter(img => img.accepted);
+        const acceptedKeys = new Set(accepted.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
+        console.log('[ReadyToGenerate.handleNext] existing:', allImages.length, 'accepted:', accepted.length, accepted);
+
+        const activeKeys = new Set(allImages.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
+
+        const allCombos = [];
+        for (const bp of variants) {
+          for (const v of (bp.variants || [])) {
+            for (const c of (v.combos || [])) {
+              if (c.hasArtwork) {
+                const key = `${bp.projectBlueprintId}:${v.variant}:${c.placementIndex}`;
+                if (activeKeys.has(key)) {
+                  allCombos.push({
+                    projectBlueprintId: bp.projectBlueprintId,
+                    blueprintName: bp.blueprintName,
+                    variant: v.variant,
+                    variantTitle: v.variantTitle,
+                    placement: c.placementIndex,
+                    placementName: c.placementName,
+                    tokens: c.tokens,
+                  });
+                }
+              }
+            }
+          }
+        }
+
+        const missingCombos = allCombos.filter(c => !acceptedKeys.has(`${c.projectBlueprintId}:${c.variant}:${c.placement}`));
+        console.log('[ReadyToGenerate.handleNext] allCombos:', allCombos.length, 'missing:', missingCombos.length);
+
+        if (allCombos.length === 0) {
+          setAllProductImages(allImages);
+          setStep(STEPS.PRODUCT_IMAGE_SELECTION);
+          return;
+        }
+
+        if (missingCombos.length === 0) {
+          setAllProductImages(allImages);
+          setStep(STEPS.PUBLISH);
+          return;
+        }
+
+        if (missingCombos.length < allCombos.length) {
+          setSelectedProductCombos(missingCombos);
+          setCurrentProductComboIndex(0);
+          setAllProductImages(allImages);
+          setStep(STEPS.PRODUCT_IMAGE_PROMPT);
           return;
         }
       }
-    } catch { /* fall through to selection */ }
+    } catch (e) { console.log('[ReadyToGenerate.handleNext] getProductImages error:', e); }
 
+    console.log('[ReadyToGenerate.handleNext] falling through to PRODUCT_IMAGE_SELECTION');
     setStep(STEPS.PRODUCT_IMAGE_SELECTION);
-  }, [collectionId, ensureCollection, loadProductImageVariants, loadImageModels, setStep, STEPS, api, setAllProductImages]);
+  }, [collectionId, ensureCollection, loadProductImageVariants, loadImageModels, setStep, STEPS, api, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex]);
 
   const renderOverlay = (i) => {
     if (!isGeneratingAll) return null;
@@ -99,21 +180,22 @@ export default function ReadyToGenerate() {
 
   return (
     <div>
-      {artworkImages.length > 0 && (
+      {displayImages.length > 0 && (
         <div className="flex justify-center mb-4">
           <div className="w-full">
             <Carousel
-              images={artworkImages}
+              images={displayImages}
               alt="Accepted artwork"
               infiniteScroll
               onImageClick={(src) => {
                 if (isGeneratingAll) return;
-                const idx = artworkImages.indexOf(src);
+                const idx = displayImages.indexOf(src);
                 setArtworkPreview({
-                  src: artworkImages[idx] || src,
-                  images: artworkImages,
+                  src: displayImages[idx] || src,
+                  images: displayImages,
                 });
               }}
+              onImageError={handleImageError}
               imageClassName="!max-h-none w-[150px] h-[150px] object-contain rounded-lg"
               overlayRender={renderOverlay}
             />

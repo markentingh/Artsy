@@ -1,6 +1,7 @@
-import React, { useCallback, useMemo, useEffect } from 'react';
+import React, { useCallback, useMemo, useEffect, useState } from 'react';
 import { useCollection } from '@/context/collection';
 import ButtonOutline from '@/components/ui/button-outline';
+import Checkbox from '@/components/forms/checkbox';
 import { List, Item } from '@/components/ui/list';
 
 export default function ProductImageSelection() {
@@ -8,10 +9,37 @@ export default function ProductImageSelection() {
     productImageVariants, imageModels, selectedImageModel, setSelectedImageModel,
     selectedProductCombos, setSelectedProductCombos,
     setStep, setMessage, STEPS, onClose,
+    allProductImages, collectionId, api, setAllProductImages,
+    setCurrentProductComboIndex, projectId,
   } = useCollection();
 
+  const [checkedCombos, setCheckedCombos] = useState({});
+  const [imagesLoaded, setImagesLoaded] = useState(false);
+
   useEffect(() => {
-  }, [productImageVariants]);
+    if (collectionId) {
+      setImagesLoaded(false);
+      api.getProductImages(collectionId).then(res => {
+        if (res.data.success) {
+          setAllProductImages((res.data.data || []).filter(img => img.active));
+        }
+        setImagesLoaded(true);
+      }).catch(e => {
+        console.error('getProductImages error:', e);
+        setImagesLoaded(true);
+      });
+    } else {
+      setImagesLoaded(true);
+    }
+  }, [collectionId, api, setAllProductImages]);
+
+  useEffect(() => {
+    const initial = {};
+    for (const img of allProductImages) {
+      initial[`${img.projectBlueprintId}:${img.variant}:${img.placement}`] = true;
+    }
+    setCheckedCombos(initial);
+  }, [allProductImages]);
 
   const handleModelChange = useCallback((e) => {
     const model = imageModels.find(m => m.id === parseInt(e.target.value));
@@ -19,42 +47,95 @@ export default function ProductImageSelection() {
   }, [imageModels, setSelectedImageModel]);
 
   const toggleCombo = useCallback((bp, variant, combo) => {
-    setSelectedProductCombos(prev => {
-      const exists = prev.find(c =>
-        c.projectBlueprintId === bp.projectBlueprintId &&
-        c.variant === variant.variant &&
-        c.placement === combo.placementIndex
-      );
-      if (exists) {
-        return prev.filter(c => !(c.projectBlueprintId === bp.projectBlueprintId && c.variant === variant.variant && c.placement === combo.placementIndex));
+    const key = `${bp.projectBlueprintId}:${variant.variant}:${combo.placementIndex}`;
+    setCheckedCombos(prev => {
+      const next = { ...prev };
+      if (next[key]) {
+        delete next[key];
+      } else {
+        next[key] = true;
       }
-      return [...prev, {
-        projectBlueprintId: bp.projectBlueprintId,
-        variant: variant.variant,
-        placement: combo.placementIndex,
-        blueprintName: bp.blueprintName,
-        variantTitle: variant.variantTitle,
-        placementName: combo.placementName,
-        tokens: combo.tokens,
-      }];
+      return next;
     });
-  }, [setSelectedProductCombos]);
+  }, []);
 
-  const isComboSelected = (bpId, variant, placement) => {
-    return selectedProductCombos.some(c => c.projectBlueprintId === bpId && c.variant === variant && c.placement === placement);
-  };
+  const checkedComboList = useMemo(() => {
+    const result = [];
+    for (const bp of productImageVariants) {
+      for (const v of (bp.variants || [])) {
+        for (const c of (v.combos || [])) {
+          if (c.hasArtwork && checkedCombos[`${bp.projectBlueprintId}:${v.variant}:${c.placementIndex}`]) {
+            result.push({
+              projectBlueprintId: bp.projectBlueprintId,
+              variant: v.variant,
+              placement: c.placementIndex,
+              blueprintName: bp.blueprintName,
+              variantTitle: v.variantTitle,
+              placementName: c.placementName,
+              tokens: c.tokens,
+            });
+          }
+        }
+      }
+    }
+    return result;
+  }, [productImageVariants, checkedCombos]);
 
   const totalTokens = useMemo(() => {
-    return selectedProductCombos.reduce((sum, c) => sum + (c.tokens || 0), 0);
-  }, [selectedProductCombos]);
+    return checkedComboList.reduce((sum, c) => sum + (c.tokens || 0), 0);
+  }, [checkedComboList]);
 
-  const handleNext = useCallback(() => {
-    if (selectedProductCombos.length === 0) {
+  const handleNext = useCallback(async () => {
+    if (checkedComboList.length === 0) {
       setMessage({ type: 'error', text: 'Select at least one variant/placement combination.' });
       return;
     }
+
+    const selectedCombos = checkedComboList.map(c => ({
+      projectBlueprintId: c.projectBlueprintId,
+      variant: c.variant,
+      placement: c.placement,
+    }));
+
+    let syncedImages = allProductImages;
+    if (collectionId && projectId) {
+      try {
+        const res = await api.syncProductImageSelections({
+          collectionId,
+          projectId,
+          selectedCombos,
+        });
+        if (res.data.success) {
+          syncedImages = res.data.data || [];
+          setAllProductImages(syncedImages);
+        } else {
+          setMessage({ type: 'error', text: res.data.message || 'Failed to sync product image selections' });
+          return;
+        }
+      } catch (e) {
+        const errMsg = e?.response?.data?.message || e?.message || 'Failed to sync product image selections';
+        console.error('syncProductImageSelections error:', e?.response?.data || e);
+        setMessage({ type: 'error', text: errMsg });
+        return;
+      }
+    }
+
+    const acceptedKeys = new Set(syncedImages.filter(img => img.accepted).map(img =>
+      `${img.projectBlueprintId}:${img.variant}:${img.placement}`
+    ));
+    const missingCombos = checkedComboList.filter(c =>
+      !acceptedKeys.has(`${c.projectBlueprintId}:${c.variant}:${c.placement}`)
+    );
+
+    if (missingCombos.length === 0) {
+      setStep(STEPS.PUBLISH);
+      return;
+    }
+
+    setSelectedProductCombos(missingCombos);
+    setCurrentProductComboIndex(0);
     setStep(STEPS.PRODUCT_IMAGE_PROMPT);
-  }, [selectedProductCombos, setStep, setMessage, STEPS]);
+  }, [checkedComboList, allProductImages, collectionId, projectId, api, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex, setStep, setMessage, STEPS]);
 
   const sortedVariants = useCallback((bp) => {
     return [...(bp.variants || [])].sort((a, b) => {
@@ -97,24 +178,21 @@ export default function ProductImageSelection() {
               </h3>
               <List>
                 {sortedVariants(bp).map((v) => (
-                  (v.combos || []).map((combo) => (
+                  (v.combos || []).filter(c => c.hasArtwork).map((combo) => (
                     <Item
                       key={`${v.variant}-${combo.placementIndex}`}
                       className="cursor-pointer text-sm"
                     >
-                      <label className="flex items-center gap-2 w-full cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={isComboSelected(bp.projectBlueprintId, v.variant, combo.placementIndex)}
-                          onChange={() => toggleCombo(bp, v, combo)}
-                          className="rounded"
-                        />
-                        <span className="flex-1">{v.variantTitle} - {combo.placementName}</span>
-                        {combo.hasArtwork && (
-                          <span className="text-xs font-medium text-green-600 dark:text-green-400" title="This placement will print an artwork onto it">Artwork</span>
-                        )}
-                        <span className="text-xs text-gray-500 dark:text-gray-400">{combo.tokens} tokens</span>
-                      </label>
+                      <Checkbox
+                        checked={!!checkedCombos[`${bp.projectBlueprintId}:${v.variant}:${combo.placementIndex}`]}
+                        onChange={() => toggleCombo(bp, v, combo)}
+                        label={
+                          <span className="flex items-center gap-2 flex-1">
+                            <span>{v.variantTitle} - {combo.placementName}</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">{combo.tokens} tokens</span>
+                          </span>
+                        }
+                      />
                     </Item>
                   ))
                 ))}
@@ -126,15 +204,17 @@ export default function ProductImageSelection() {
 
       <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-          {selectedProductCombos.length} combination{selectedProductCombos.length !== 1 ? 's' : ''} selected = <strong>{totalTokens} tokens</strong>
+          {checkedComboList.length} combination{checkedComboList.length !== 1 ? 's' : ''} selected = <strong>{totalTokens} tokens</strong>
         </p>
       </div>
 
       <div className="buttons flex justify-end gap-2 mt-4">
         <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
-        <ButtonOutline onClick={handleNext} disabled={selectedProductCombos.length === 0}>
-          Next ({selectedProductCombos.length} selected)
-        </ButtonOutline>
+        {checkedComboList.length > 0 && (
+          <ButtonOutline onClick={handleNext} disabled={!imagesLoaded}>
+            Next ({checkedComboList.length} selected)
+          </ButtonOutline>
+        )}
       </div>
     </div>
   );

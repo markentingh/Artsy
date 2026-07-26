@@ -27,6 +27,7 @@ namespace Artsy.API.Controllers
         readonly IProjectCollectionAnswerRepository _projectCollectionAnswerRepository;
         readonly IPrintifyBlueprintRepository _printifyBlueprintRepository;
         readonly IPrintifyBlueprintImageRepository _printifyBlueprintImageRepository;
+        readonly IPrintifyBlueprintImageVariantRepository _printifyBlueprintImageVariantRepository;
         readonly IProjectItemPreviewRepository _projectItemPreviewRepository;
         readonly IProjectItemReferenceRepository _projectItemReferenceRepository;
         readonly IPrintifyBlueprintVariantRepository _variantRepository;
@@ -51,6 +52,7 @@ namespace Artsy.API.Controllers
             IProjectCollectionAnswerRepository projectCollectionAnswerRepository,
             IPrintifyBlueprintRepository printifyBlueprintRepository,
             IPrintifyBlueprintImageRepository printifyBlueprintImageRepository,
+            IPrintifyBlueprintImageVariantRepository printifyBlueprintImageVariantRepository,
             IProjectItemPreviewRepository projectItemPreviewRepository,
             IProjectItemReferenceRepository projectItemReferenceRepository,
             IPrintifyBlueprintVariantRepository variantRepository,
@@ -74,6 +76,7 @@ namespace Artsy.API.Controllers
             _projectCollectionAnswerRepository = projectCollectionAnswerRepository;
             _printifyBlueprintRepository = printifyBlueprintRepository;
             _printifyBlueprintImageRepository = printifyBlueprintImageRepository;
+            _printifyBlueprintImageVariantRepository = printifyBlueprintImageVariantRepository;
             _projectItemPreviewRepository = projectItemPreviewRepository;
             _projectItemReferenceRepository = projectItemReferenceRepository;
             _variantRepository = variantRepository;
