@@ -4,6 +4,7 @@ import Modal from '@/components/ui/modal';
 import Spinner from '@/components/ui/spinner';
 import Message from '@/components/ui/message';
 import Steps from '@/components/ui/steps';
+import Icon from '@/components/ui/icon';
 import ArtworkPreviewModal from './ProductImagePreview';
 import ProjectQuestions from './collection-steps/ProjectQuestions';
 import ArtworkQuestions from './collection-steps/ArtworkQuestions';
@@ -40,6 +41,8 @@ function CollectionWizard() {
     onClose, STEPS, wizardSteps, stepIndex,
   } = useCollection();
 
+  const [showChecklist, setShowChecklist] = useState(false);
+
   return (
     <Modal
       title={stepTitle(step)}
@@ -60,19 +63,53 @@ function CollectionWizard() {
       ) : (
         <>
           <Steps steps={wizardSteps} currentIndex={stepIndex[step] ?? 0} />
-          <div className="px-2">
-            <CollectionSetupList />
+          <div className="flex items-center gap-2 mb-4">
+            <hr className="flex-1 border-gray-200 dark:border-gray-700" />
+            <button
+              onClick={() => setShowChecklist(prev => !prev)}
+              className="rounded-full p-3 pb-2 transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+              title={showChecklist ? 'Hide' : 'Show'}
+            >
+              <Icon
+                name="expand_more"
+                className={`text-lg leading-none text-gray-500 dark:text-gray-400 transition-transform duration-200`}
+                style={{ display: 'block', transform: showChecklist ? 'rotate(180deg) translateY(4px)' : 'translateY(-2px)' }}
+              />
+            </button>
+            <hr className="flex-1 border-gray-200 dark:border-gray-700" />
           </div>
-          {step === STEPS.PROJECT_QUESTIONS && <ProjectQuestions />}
-          {step === STEPS.ARTWORK_QUESTIONS && <ArtworkQuestions />}
-          {step === STEPS.ARTWORK_PREVIEW && <ArtworkPreview />}
-          {step === STEPS.READY_TO_GENERATE && <ReadyToGenerate />}
-          {step === STEPS.PRODUCT_IMAGE_SELECTION && <ProductImageSelection />}
-          {step === STEPS.PRODUCT_IMAGE_PROMPT && <ProductImagePrompt />}
-          {step === STEPS.PRODUCT_IMAGE_PREVIEW && <ProductImagePreview />}
-          {step === STEPS.CREATE_PRODUCTS && <CreateProducts />}
-          {step === STEPS.PUBLISH_PRODUCTS && <PublishProductsStep />}
-          {step === STEPS.SOCIAL_MEDIA && <PublishProducts />}
+          {showChecklist ? (
+            <div className="flex gap-4 items-stretch">
+              <div className="w-[450px] shrink-0 overflow-y-auto max-h-[60vh]">
+                <CollectionSetupList />
+              </div>
+              <div className="flex-1 min-w-[600px] flex flex-col">
+                {step === STEPS.PROJECT_QUESTIONS && <ProjectQuestions />}
+                {step === STEPS.ARTWORK_QUESTIONS && <ArtworkQuestions />}
+                {step === STEPS.ARTWORK_PREVIEW && <ArtworkPreview />}
+                {step === STEPS.READY_TO_GENERATE && <ReadyToGenerate />}
+                {step === STEPS.PRODUCT_IMAGE_SELECTION && <ProductImageSelection />}
+                {step === STEPS.PRODUCT_IMAGE_PROMPT && <ProductImagePrompt />}
+                {step === STEPS.PRODUCT_IMAGE_PREVIEW && <ProductImagePreview />}
+                {step === STEPS.CREATE_PRODUCTS && <CreateProducts />}
+                {step === STEPS.PUBLISH_PRODUCTS && <PublishProductsStep />}
+                {step === STEPS.SOCIAL_MEDIA && <PublishProducts />}
+              </div>
+            </div>
+          ) : (
+            <div>
+              {step === STEPS.PROJECT_QUESTIONS && <ProjectQuestions />}
+              {step === STEPS.ARTWORK_QUESTIONS && <ArtworkQuestions />}
+              {step === STEPS.ARTWORK_PREVIEW && <ArtworkPreview />}
+              {step === STEPS.READY_TO_GENERATE && <ReadyToGenerate />}
+              {step === STEPS.PRODUCT_IMAGE_SELECTION && <ProductImageSelection />}
+              {step === STEPS.PRODUCT_IMAGE_PROMPT && <ProductImagePrompt />}
+              {step === STEPS.PRODUCT_IMAGE_PREVIEW && <ProductImagePreview />}
+              {step === STEPS.CREATE_PRODUCTS && <CreateProducts />}
+              {step === STEPS.PUBLISH_PRODUCTS && <PublishProductsStep />}
+              {step === STEPS.SOCIAL_MEDIA && <PublishProducts />}
+            </div>
+          )}
         </>
       )}
 

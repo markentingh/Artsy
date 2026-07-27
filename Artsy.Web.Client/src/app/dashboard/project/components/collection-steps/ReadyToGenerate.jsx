@@ -175,7 +175,7 @@ export default function ReadyToGenerate() {
   };
 
   return (
-    <div>
+    <div className="flex flex-col h-full">
       {displayImages.length > 0 && (
         <div className="flex justify-center mb-4">
           <div className="w-full">
@@ -248,7 +248,7 @@ export default function ReadyToGenerate() {
           <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-6">
             This will cost {estimate?.totalTokens || 0} tokens.
           </p>
-          <div className="buttons flex justify-end gap-2">
+          <div className="buttons flex justify-end gap-2 mt-auto">
             <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
             <ButtonOutline onClick={handleSaveDraft}>Save Draft</ButtonOutline>
             <ButtonOutline onClick={handleGenerateArtworks}>Upscale Artworks</ButtonOutline>

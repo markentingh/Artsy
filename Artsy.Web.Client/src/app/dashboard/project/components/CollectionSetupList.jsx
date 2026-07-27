@@ -305,6 +305,6 @@ export default function CollectionSetupList() {
   ];
 
   return (
-    <Accordion inModal items={accordionItems} className="-mt-4 mb-2 -mx-6" />
+    <Accordion inModal items={accordionItems} className="mb-2" />
   );
 }

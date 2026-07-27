@@ -37,7 +37,7 @@ export default function ProjectQuestions() {
   }, [ensureCollection, saveAnswers, collectionArtwork, aiItems, blueprintItemIds, fetchEstimate, loadItemData, setStep, setCurrentItemIndex, STEPS]);
 
   return (
-    <div>
+    <div className="flex flex-col h-full">
       <div className="max-h-[50vh] overflow-y-auto">
         {projectQuestions.length === 0 ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">No project questions.</p>
@@ -58,7 +58,7 @@ export default function ProjectQuestions() {
           </div>
         )}
       </div>
-      <div className="buttons flex justify-end gap-2 mt-4">
+      <div className="buttons flex justify-end gap-2 mt-4 mt-auto">
         <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         <ButtonOutline onClick={handleNext}>Next</ButtonOutline>
       </div>

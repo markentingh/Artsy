@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import Icon from '@/components/ui/icon';
 
-export function Accordion({ items, inModal = false, defaultExpanded = false, className = '' }) {
-  const [listExpanded, setListExpanded] = useState(defaultExpanded);
+export function Accordion({ items, inModal = false, className = '' }) {
   const bgClass = inModal
     ? 'bg-gray-100 dark:bg-gray-700/50'
     : 'bg-gray-50 dark:bg-gray-800';
@@ -12,26 +11,7 @@ export function Accordion({ items, inModal = false, defaultExpanded = false, cla
 
   return (
     <div className={className}>
-      <div className="flex items-center gap-2">
-        <hr className="flex-1 border-gray-200 dark:border-gray-700 mt-[-8px]" />
-        <button
-          onClick={() => setListExpanded(!listExpanded)}
-          className="rounded-full p-3 pb-2 transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-          title={listExpanded ? 'Hide' : 'Show'}
-        >
-          <Icon
-            name="expand_more"
-            className={`text-lg leading-none text-gray-500 dark:text-gray-400 transition-transform duration-200 ${listExpanded ? 'rotate-180' : ''}`}
-            style={{ display: 'block', transform: listExpanded ? 'rotate(180deg) translateY(4px)' : 'translateY(-2px)' }}
-          />
-        </button>
-        <hr className="flex-1 border-gray-200 dark:border-gray-700 mt-[-8px]" />
-      </div>
-
-      <div
-        className="overflow-hidden transition-all duration-300 ease-in-out"
-        style={{ maxHeight: listExpanded ? 'none' : '0px', opacity: listExpanded ? 1 : 0 }}
-      >
+      <div>
         <div className="mt-3 space-y-2">
           {items.map((item, i) => (
             <AccordionItem
@@ -44,7 +24,6 @@ export function Accordion({ items, inModal = false, defaultExpanded = false, cla
             />
           ))}
         </div>
-        <hr className="border-gray-200 dark:border-gray-700 my-5" />
       </div>
     </div>
   );

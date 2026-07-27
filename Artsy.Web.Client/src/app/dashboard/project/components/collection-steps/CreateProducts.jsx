@@ -193,7 +193,7 @@ export default function CreateProducts() {
   }, [allImagesUploaded, creating, allCreated, handleCreateProducts]);
 
   return (
-    <div>
+    <div className="flex flex-col h-full">
       <p className="text-center text-lg mb-4">
         The following product images will be uploaded to Printify, then products will be created.
       </p>
@@ -266,7 +266,7 @@ export default function CreateProducts() {
         </div>
       )}
 
-      <div className="buttons flex justify-end gap-2">
+      <div className="buttons flex justify-end gap-2 mt-auto">
         <ButtonOutline className="cancel" onClick={handleSaveDraft}>Save Draft</ButtonOutline>
         <Button
           onClick={handleStart}

@@ -125,7 +125,7 @@ export default function PublishProducts() {
   }, [collectionId, project, blueprintsWithImages, variantCountByBlueprint, allProductImages, printifyApi, setMessage]);
 
   return (
-    <div>
+    <div className="flex flex-col h-full">
       <p className="text-center text-lg mb-4">
         The following products will be created on Printify.
       </p>
@@ -150,7 +150,7 @@ export default function PublishProducts() {
           })}
         </List>
       </div>
-      <div className="buttons flex justify-end gap-2">
+      <div className="buttons flex justify-end gap-2 mt-auto">
         <ButtonOutline className="cancel" onClick={handleSaveDraft}>Save Draft</ButtonOutline>
         <Button onClick={handleCreateProducts} disabled={creating || !project?.printifyStoreId}>
           {creating ? (

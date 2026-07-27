@@ -165,7 +165,7 @@ export default function ProductImagePrompt() {
   const tokenCost = combo ? (combo.tokens || 2) : 0;
 
   return (
-    <div>
+    <div className="flex flex-col h-full">
       <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-4">
         {selectedProductCombos.length} combination{selectedProductCombos.length !== 1 ? 's' : ''} selected for product image generation.
       </p>
@@ -211,7 +211,7 @@ export default function ProductImagePrompt() {
         />
       </div>
 
-      <div className="buttons flex justify-end gap-2">
+      <div className="buttons flex justify-end gap-2 mt-auto">
         <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         <ButtonOutline onClick={handleSkip}>
           Skip

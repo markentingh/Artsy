@@ -91,7 +91,7 @@ export default function ProductImagePreview() {
     : null;
 
   return (
-    <div>
+    <div className="flex flex-col h-full">
       <h3 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
         Product Image {currentProductComboIndex + 1} of {selectedProductCombos.length}
         {combo && ` — ${combo.blueprintName} - ${combo.variantTitle} - ${combo.placementName}`}
@@ -136,7 +136,7 @@ export default function ProductImagePreview() {
           </div>
         )}
       </div>
-      <div className="buttons flex justify-end gap-2 mt-4">
+      <div className="buttons flex justify-end gap-2 mt-4 mt-auto">
         <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
       </div>
     </div>

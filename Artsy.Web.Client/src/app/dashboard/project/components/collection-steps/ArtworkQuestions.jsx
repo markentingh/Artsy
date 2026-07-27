@@ -40,7 +40,7 @@ export default function ArtworkQuestions() {
   const fullImages = useMemo(() => existingArtworks.map(a => a.fullUrl), [existingArtworks]);
 
   return (
-    <div>
+    <div className="flex flex-col h-full">
       <h3 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
         Artwork {currentItemIndex + 1} of {aiItems.length}: {currentItem?.title || 'Untitled'}
       </h3>
@@ -77,7 +77,7 @@ export default function ArtworkQuestions() {
           </div>
         )}
       </div>
-      <div className="buttons flex justify-end gap-2 mt-4">
+      <div className="buttons flex justify-end gap-2 mt-4 mt-auto">
         <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         <ButtonOutline onClick={handleNext}>Next</ButtonOutline>
       </div>

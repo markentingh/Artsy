@@ -146,7 +146,7 @@ export default function ProductImageSelection() {
   }, []);
 
   return (
-    <div>
+    <div className="flex flex-col h-full">
       <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-4">
         Select the product variant placements you wish to generate images for.
       </p>
@@ -208,7 +208,7 @@ export default function ProductImageSelection() {
         </p>
       </div>
 
-      <div className="buttons flex justify-end gap-2 mt-4">
+      <div className="buttons flex justify-end gap-2 mt-4 mt-auto">
         <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         {checkedComboList.length > 0 && (
           <ButtonOutline onClick={handleNext} disabled={!imagesLoaded}>

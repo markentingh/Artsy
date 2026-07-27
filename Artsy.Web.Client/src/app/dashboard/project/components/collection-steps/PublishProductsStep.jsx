@@ -95,7 +95,7 @@ export default function PublishProductsStep() {
   }, [printifyProducts]);
 
   return (
-    <div>
+    <div className="flex flex-col h-full">
       <p className="text-center text-lg mb-4">
         The following products will be published on Printify.
       </p>
@@ -130,7 +130,7 @@ export default function PublishProductsStep() {
           <Button onClick={handleNext}>Next</Button>
         </div>
       )}
-      <div className="buttons flex justify-end gap-2">
+      <div className="buttons flex justify-end gap-2 mt-auto">
         <ButtonOutline className="cancel" onClick={handleSaveDraft}>Save Draft</ButtonOutline>
         <Button onClick={handlePublishProducts} disabled={publishing || !project?.printifyStoreId || allPublished || printifyProducts.length === 0}>
           {publishing ? (
