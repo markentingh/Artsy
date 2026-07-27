@@ -156,7 +156,7 @@ export default function ProductImagePrompt() {
       ? selectedProductCombos.length - 1
       : currentProductComboIndex;
     if (nextIndex >= selectedProductCombos.length - 1) {
-      setStep(STEPS.PUBLISH);
+      setStep(STEPS.CREATE_PRODUCTS);
     } else {
       setCurrentProductComboIndex(nextIndex + 1);
     }

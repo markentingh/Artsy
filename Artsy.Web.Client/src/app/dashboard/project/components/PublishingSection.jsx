@@ -7,6 +7,7 @@ import Checked from '@/components/ui/checked';
 import Tooltip from '@/components/ui/tooltip';
 import Message from '@/components/ui/message';
 import Button from '@/components/ui/button';
+import Select from '@/components/forms/select';
 
 const platforms = [
   { key: 'printify', name: 'Printify', color: 'bg-green-500' }
@@ -22,6 +23,8 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
   const [connecting, setConnecting] = useState({});
   const [toggling, setToggling] = useState(false);
   const [message, setMessage] = useState(null);
+  const [shops, setShops] = useState([]);
+  const [selectedShopId, setSelectedShopId] = useState('');
 
   const apiMap = {
     printify: { getStatus: getPrintifyStatus, connect: connectPrintify }
@@ -33,13 +36,17 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
     try {
       const response = await getStatus();
       if (response.data.success) {
+        const data = response.data.data;
         setConnectionStatus((prev) => ({
           ...prev,
           [key]: {
-            connected: response.data.data.connected,
-            viaApiToken: response.data.data.viaApiToken || false
+            connected: data.connected,
+            viaApiToken: data.viaApiToken || false
           }
         }));
+        if (data.shops && data.shops.length > 0) {
+          setShops(data.shops);
+        }
       }
     } catch (error) {
       setMessage({
@@ -54,6 +61,12 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
   useEffect(() => {
     platforms.forEach((p) => fetchStatus(p.key));
   }, []);
+
+  useEffect(() => {
+    if (project?.printifyStoreId != null) {
+      setSelectedShopId(String(project.printifyStoreId));
+    }
+  }, [project?.printifyStoreId]);
 
   const handleConnect = async (key) => {
     setConnecting((prev) => ({ ...prev, [key]: true }));
@@ -78,6 +91,25 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
       });
     } finally {
       setConnecting((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const handleShopChange = async (value) => {
+    setSelectedShopId(value);
+    const storeId = value ? parseInt(value, 10) : null;
+    try {
+      const response = await updatePublishToPrintify({
+        id: projectId,
+        publishToPrintify: project?.publishToPrintify ?? true,
+        printifyStoreId: storeId
+      });
+      if (response.data.success) {
+        if (onProjectUpdated) onProjectUpdated(response.data.data);
+      } else {
+        setMessage({ type: 'error', text: response.data.message || 'Failed to update store' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to update store' });
     }
   };
 
@@ -128,6 +160,18 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
           </Button>
         ) : (
           <>
+            {platform.key === 'printify' && shops.length > 0 && (
+              <div className="w-full mb-3">
+                <Select
+                  name="printifyStore"
+                  value={selectedShopId}
+                  onChange={(e) => handleShopChange(e.target.value)}
+                  placeholder="[Select Shop]"
+                  options={shops.map((shop) => ({ value: String(shop.id), label: shop.title }))}
+                  className="w-full"
+                />
+              </div>
+            )}
             <p
               className={`text-sm mb-3 px-3 py-1.5 rounded ${isChecked ? 'text-gray-600 dark:text-gray-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'}`}
             >

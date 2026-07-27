@@ -1433,6 +1433,7 @@ namespace Artsy.API.Controllers
                         placement = img.Placement,
                         accepted = img.Accepted,
                         active = img.Active,
+                        printifyImageId = img.PrintifyImageId,
                         imageUrl = $"/api/projects/collection/{collectionId}/product-image/{img.Id}"
                     })
                 });

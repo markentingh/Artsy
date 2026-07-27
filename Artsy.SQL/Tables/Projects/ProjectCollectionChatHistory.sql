@@ -6,6 +6,10 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionChatHistory"
     "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "IsUser" BOOLEAN NOT NULL DEFAULT FALSE,
     "ItemId" UUID NULL REFERENCES public."ProjectItems"("Id"),
+    "Platform" INT NOT NULL DEFAULT 0,
     "QuestionId" UUID NULL,
     "Text" VARCHAR(64) NOT NULL DEFAULT ''
 );
+
+ALTER TABLE public."ProjectCollectionChatHistory" ADD COLUMN IF NOT EXISTS "Platform" INT NOT NULL DEFAULT 0;
+

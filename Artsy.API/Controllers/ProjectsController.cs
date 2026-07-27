@@ -38,6 +38,7 @@ namespace Artsy.API.Controllers
         readonly IImageGenerationModelRepository _imageGenerationModelRepository;
         readonly IProjectImageGenerationRepository _projectImageGenerationRepository;
         readonly IProjectImageUpscaleRepository _projectImageUpscaleRepository;
+        readonly IPrintifyService _printifyService;
 
         public ProjectsController(
             IProjectRepository projectRepository,
@@ -62,7 +63,8 @@ namespace Artsy.API.Controllers
             IImageUpscaler imageUpscaler,
             IImageGenerationModelRepository imageGenerationModelRepository,
             IProjectImageGenerationRepository projectImageGenerationRepository,
-            IProjectImageUpscaleRepository projectImageUpscaleRepository)
+            IProjectImageUpscaleRepository projectImageUpscaleRepository,
+            IPrintifyService printifyService)
         {
             _projectRepository = projectRepository;
             _projectCollectionRepository = projectCollectionRepository;
@@ -87,6 +89,7 @@ namespace Artsy.API.Controllers
             _imageGenerationModelRepository = imageGenerationModelRepository;
             _projectImageGenerationRepository = projectImageGenerationRepository;
             _projectImageUpscaleRepository = projectImageUpscaleRepository;
+            _printifyService = printifyService;
         }
 
         [HttpGet("get-by-id")]
@@ -125,9 +128,11 @@ namespace Artsy.API.Controllers
                 var projects = await _projectRepository.GetAllAsync(userId);
                 var projectIds = projects.Select(p => p.Id).ToArray();
 
+                var productImages = await _projectCollectionProductImageRepository.FilterByProjectIdsAsync(projectIds, 5);
                 var artwork = await _projectCollectionArtworkRepository.FilterByProjectIdsAsync(projectIds, 5);
                 var previews = await _projectItemPreviewRepository.GetThumbnailsByProjectIdsAsync(projectIds, 5);
 
+                var productImagesByProject = productImages.ToLookup(p => p.ProjectId);
                 var artworkByProject = artwork.ToLookup(a => a.ProjectId);
                 var previewsByProject = previews.ToLookup(p => p.ProjectId);
 
@@ -135,11 +140,34 @@ namespace Artsy.API.Controllers
                 {
                     var images = new List<string>();
 
-                    foreach (var a in artworkByProject[p.Id])
+                    foreach (var pi in productImagesByProject[p.Id])
                     {
-                        if (a.Active && images.Count < 5)
-                            images.Add($"/api/projects/collection/{a.CollectionId}/item/{a.ItemId}/artwork/{a.Id}");
                         if (images.Count >= 5) break;
+                        images.Add($"/api/projects/collection/{pi.CollectionId}/product-image/{pi.Id}");
+                    }
+
+                    if (images.Count < 5)
+                    {
+                        var seenItemIds = new HashSet<Guid>();
+                        var aiArtworks = artworkByProject[p.Id].Where(a => a.Active && a.ImageModel != "custom");
+                        var customArtworks = artworkByProject[p.Id].Where(a => a.Active && a.ImageModel == "custom");
+
+                        foreach (var a in aiArtworks)
+                        {
+                            if (images.Count >= 5) break;
+                            images.Add($"/api/projects/collection/{a.CollectionId}/item/{a.ItemId}/artwork/{a.Id}");
+                        }
+
+                        if (images.Count < 5)
+                        {
+                            foreach (var a in customArtworks)
+                            {
+                                if (images.Count >= 5) break;
+                                if (seenItemIds.Contains(a.ItemId)) continue;
+                                seenItemIds.Add(a.ItemId);
+                                images.Add($"/api/projects/collection/{a.CollectionId}/item/{a.ItemId}/artwork/{a.Id}");
+                            }
+                        }
                     }
 
                     if (images.Count < 5)
@@ -371,7 +399,30 @@ namespace Artsy.API.Controllers
 
                 project.PublishToPrintify = request.PublishToPrintify;
                 await _projectRepository.UpdateAsync(project);
+                if (request.PrintifyStoreId.HasValue)
+                {
+                    await _projectRepository.UpdatePrintifyStoreIdAsync(request.Id, userId, request.PrintifyStoreId);
+                    project.PrintifyStoreId = request.PrintifyStoreId;
+                }
                 return Json(new ApiResponse { success = true, data = project });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("get-printify-shops")]
+        public async Task<IActionResult> GetPrintifyShops()
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            try
+            {
+                var shops = await _printifyService.GetShopsAsync(userId);
+                return Json(new ApiResponse { success = true, data = shops });
             }
             catch (Exception ex)
             {
@@ -478,28 +529,7 @@ namespace Artsy.API.Controllers
                 });
                 var imageGenerationSetup = aiItems.Count > 0 && imageGenerationSetupCompleted == aiItems.Count;
 
-                var productBlueprintsAddedCompleted = blueprints.Count(b =>
-                {
-                    if (string.IsNullOrWhiteSpace(b.BlueprintJson)) return false;
-                    if (string.IsNullOrWhiteSpace(b.PlacementJson)) return false;
-                    try
-                    {
-                        var placements = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(b.PlacementJson);
-                        if (placements == null || placements.Count == 0) return false;
-                        return placements.Any(p =>
-                        {
-                            if (!p.Value.TryGetProperty("source", out var srcEl)) return false;
-                            var source = srcEl.GetString() ?? "";
-                            if (string.IsNullOrWhiteSpace(source)) return false;
-                            if (source == "item" && p.Value.TryGetProperty("itemId", out var itemEl) && itemEl.ValueKind != JsonValueKind.Null)
-                                return true;
-                            if (source == "custom" && p.Value.TryGetProperty("customImageId", out var imgEl) && imgEl.ValueKind != JsonValueKind.Null)
-                                return true;
-                            return false;
-                        });
-                    }
-                    catch { return false; }
-                });
+                var productBlueprintsAddedCompleted = blueprints.Count(b => IsBlueprintConfigured(b.Name, b.Description, b.BlueprintJson, b.PlacementJson, b.PricingJson));
                 var productBlueprintsAdded = productBlueprintsAddedCompleted > 0;
 
                 var validItemQuestions = itemQuestions.Where(q => !string.IsNullOrWhiteSpace(q.Question)).ToList();

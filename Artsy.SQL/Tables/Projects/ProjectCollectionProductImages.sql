@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionProductImages"
     "Active" BOOLEAN NOT NULL DEFAULT TRUE
 );
 ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "Active" BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "PrintifyImageId" VARCHAR(32) NOT NULL DEFAULT '';
 
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_ProjectCollectionProductImages_CollectionId_BlueprintId_Variant_Placement"
     ON public."ProjectCollectionProductImages" ("CollectionId", "ProjectBlueprintId", "Variant", "Placement");

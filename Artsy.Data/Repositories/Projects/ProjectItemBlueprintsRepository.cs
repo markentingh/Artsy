@@ -24,6 +24,7 @@ namespace Artsy.Data.Repositories.Projects
         {
             const string query = @"
                 SELECT b.""Id"", b.""BlueprintId"", b.""Name"", b.""BlueprintJson"", b.""PlacementJson"", b.""Prompt"",
+                    b.""Description"", b.""SafetyInfo"", b.""PricingJson"", b.""PrintProviderId"",
                     COALESCE(p.""ImageCount"", 0) AS ""ImageCount""
                 FROM public.""ProjectBlueprints"" b
                 LEFT JOIN public.""PrintifyBlueprints"" p ON p.""BlueprintId"" = b.""BlueprintId""
@@ -42,8 +43,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             blueprint.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectBlueprints"" (""Id"", ""ProjectId"", ""BlueprintId"", ""Name"", ""BlueprintJson"", ""PlacementJson"", ""Prompt"")
-                VALUES (@Id, @ProjectId, @BlueprintId, @Name, @BlueprintJson, @PlacementJson, @Prompt)
+                INSERT INTO public.""ProjectBlueprints"" (""Id"", ""ProjectId"", ""BlueprintId"", ""Name"", ""BlueprintJson"", ""PlacementJson"", ""Prompt"", ""Description"", ""SafetyInfo"", ""PricingJson"", ""PrintProviderId"")
+                VALUES (@Id, @ProjectId, @BlueprintId, @Name, @BlueprintJson, @PlacementJson, @Prompt, @Description, @SafetyInfo, @PricingJson, @PrintProviderId)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectBlueprints>(query, blueprint);
         }
@@ -52,7 +53,7 @@ namespace Artsy.Data.Repositories.Projects
         {
             const string query = @"
                 UPDATE public.""ProjectBlueprints""
-                SET ""BlueprintId"" = @BlueprintId, ""Name"" = @Name, ""BlueprintJson"" = @BlueprintJson, ""PlacementJson"" = @PlacementJson, ""Prompt"" = @Prompt
+                SET ""BlueprintId"" = @BlueprintId, ""Name"" = @Name, ""BlueprintJson"" = @BlueprintJson, ""PlacementJson"" = @PlacementJson, ""Prompt"" = @Prompt, ""Description"" = @Description, ""SafetyInfo"" = @SafetyInfo, ""PricingJson"" = @PricingJson, ""PrintProviderId"" = @PrintProviderId
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, blueprint);
         }

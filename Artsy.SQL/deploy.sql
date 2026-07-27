@@ -24,10 +24,14 @@ SELECT 'CREATE DATABASE artsy' WHERE NOT EXISTS (SELECT FROM pg_database WHERE d
 \i Tables/Projects/ProjectBlueprints.sql
 \i Tables/Projects/ProjectCollections.sql
 \i Tables/Projects/ProjectCollectionProductImages.sql
+\i Tables/Projects/ProjectCollectionProducts.sql
+\i Tables/Projects/ProjectCollectionPrintifyProducts.sql
+\i Tables/Projects/ProjectCollectionProductVariants.sql
 \i Tables/Projects/ProjectItems.sql
 \i Tables/Projects/ProjectCollectionAnswers.sql
 \i Tables/Projects/ProjectCollectionArtwork.sql
 \i Tables/Projects/ProjectCollectionChatHistory.sql
+\i Tables/Projects/ProjectCollectionProductPlacements.sql
 \i Tables/Projects/ProjectImageGenerations.sql
 \i Tables/Projects/ProjectImageUpscales.sql
 \i Tables/Projects/ProjectItemArtwork.sql

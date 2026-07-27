@@ -15,7 +15,7 @@ import ConfigureProductBlueprint from './ConfigureProductBlueprint';
 
 export default function ProductsSection({ projectId, onProductsChanged }) {
   const session = useSession();
-  const { getBlueprints, createBlueprint, deleteBlueprint, updateBlueprint, getItems, getItemPreviews, getItemPreviewUrl } = Projects(session);
+  const { getBlueprints, getBlueprintsList, createBlueprint, deleteBlueprint, updateBlueprint, getItems, getItemPreviews, getItemPreviewUrl } = Projects(session);
   const { getBlueprintImageUrl, getBlueprintImages } = Printify(session);
 
   const [blueprints, setBlueprints] = useState([]);
@@ -29,7 +29,7 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
 
   const fetchBlueprints = async () => {
     try {
-      const response = await getBlueprints(projectId);
+      const response = await getBlueprintsList(projectId);
       if (response.data.success) {
         const bps = response.data.data || [];
         setBlueprints(bps);
@@ -64,8 +64,18 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
     setEditingBlueprint(null);
   };
 
-  const handleEditBlueprint = (bp) => {
-    setEditingBlueprint(bp);
+  const handleEditBlueprint = async (bp) => {
+    try {
+      const resp = await getBlueprints(projectId);
+      if (resp.data.success) {
+        const fullBp = (resp.data.data || []).find(b => b.id === bp.id);
+        setEditingBlueprint(fullBp || bp);
+      } else {
+        setEditingBlueprint(bp);
+      }
+    } catch {
+      setEditingBlueprint(bp);
+    }
     setConfigBlueprint({ id: bp.blueprintId, title: bp.name });
   };
 
@@ -101,6 +111,10 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
           blueprintJson: config.blueprintJson,
           placementJson: config.placementJson || '',
           prompt: config.prompt || '',
+          description: config.description || '',
+          safetyInfo: config.safetyInfo || '',
+          pricingJson: config.pricingJson || '[]',
+          printProviderId: config.printProviderId || 0,
         });
         if (resp.data.success) {
           await fetchBlueprints();
@@ -122,6 +136,10 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
           blueprintJson: config.blueprintJson,
           placementJson: config.placementJson || '',
           prompt: config.prompt || '',
+          description: config.description || '',
+          safetyInfo: config.safetyInfo || '',
+          pricingJson: config.pricingJson || '[]',
+          printProviderId: config.printProviderId || 0,
         });
         if (resp.data.success) {
           await fetchBlueprints();
@@ -134,20 +152,6 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
         setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save product' });
       }
     }
-  };
-
-  const isProductComplete = (bp) => {
-    if (!bp.placementJson) return false;
-    try {
-      const placements = JSON.parse(bp.placementJson);
-      if (!placements || Object.keys(placements).length === 0) return false;
-      return Object.values(placements).some(p => {
-        if (!p.source) return false;
-        if (p.source === 'item' && p.itemId) return true;
-        if (p.source === 'custom' && p.customImageId) return true;
-        return false;
-      });
-    } catch { return false; }
   };
 
   if (!mount) {
@@ -168,7 +172,7 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
       )}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-1">
-          <h2 className="text-xl font-semibold">Products</h2>
+          <h2 className="text-xl font-semibold">Product Blueprints</h2>
           <Tooltip text="Products are the physical items you'll sell, sourced from print-on-demand providers. Find a product blueprint, configure its variants and placements, and assign artworks to each print area." />
         </div>
         <ButtonOutline onClick={() => setShowFindBlueprint(true)}>
@@ -211,7 +215,7 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
                   imageClassName="!max-h-none w-full h-full object-cover"
                 />
                 <div className="absolute bottom-2 right-2">
-                  <Checked checked={isProductComplete(bp)} />
+                  <Checked checked={bp.configured} />
                 </div>
               </div>
               <div className="p-3">

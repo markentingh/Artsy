@@ -7,9 +7,9 @@ import Accordion from '@/components/ui/accordion';
 
 export default function CollectionSetupList() {
   const {
-    aiItems, collectionArtwork, step, STEPS, upscaleComplete,
+    aiItems, collectionArtwork, step, STEPS,
     allProductImages, selectedProductCombos, productImageVariants, project,
-    collectionId, api, projectId, setStep, setCollectionArtwork,
+    collectionId, api, setStep, setCollectionArtwork,
     setAllProductImages, setSelectedProductCombos,
     currentProductComboIndex, setCurrentProductComboIndex,
     loadItemData, currentItemIndex,
@@ -61,8 +61,9 @@ export default function CollectionSetupList() {
     [STEPS.PRODUCT_IMAGE_SELECTION]: hasPQ ? 4 : 3,
     [STEPS.PRODUCT_IMAGE_PROMPT]: hasPQ ? 5 : 4,
     [STEPS.PRODUCT_IMAGE_PREVIEW]: hasPQ ? 5 : 4,
-    [STEPS.PUBLISH]: hasPQ ? 6 : 5,
-    [STEPS.SOCIAL_MEDIA]: hasPQ ? 7 : 6,
+    [STEPS.CREATE_PRODUCTS]: hasPQ ? 6 : 5,
+    [STEPS.PUBLISH_PRODUCTS]: hasPQ ? 7 : 6,
+    [STEPS.SOCIAL_MEDIA]: hasPQ ? 8 : 7,
   };
 
   const isComplete = (itemStep) => {
@@ -225,16 +226,16 @@ export default function CollectionSetupList() {
                 {combo.blueprintName} - {combo.variantTitle} ({combo.placementName})
               </span>
             </div>
-            {isAccepted && (
-              <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 ml-auto">
+              {isAccepted && (
                 <ButtonOutline size="small" color="gray" onClick={() => handleSkipProductImage(combo)}>
                   Skip
                 </ButtonOutline>
-                <ButtonOutline size="small" color="blue" onClick={() => handleReviewProductImage(combo)}>
-                  Review
-                </ButtonOutline>
-              </div>
-            )}
+              )}
+              <ButtonOutline size="small" color="blue" onClick={() => handleReviewProductImage(combo)}>
+                Review
+              </ButtonOutline>
+            </div>
           </Item>
         );
       })}
@@ -280,10 +281,19 @@ export default function CollectionSetupList() {
       content: productImageContent,
     },
     {
-      title: renderTitle(`Publish to ${platforms.join(', ') || 'Platform'}`, false, null, isCurrent(STEPS.PUBLISH)),
+      title: renderTitle(`Create Products on ${platforms.join(', ') || 'Platform'}`, false, null, isCurrent(STEPS.CREATE_PRODUCTS)),
       content: null,
-      action: totalProductImages > 0 && acceptedProductImages === totalProductImages && !isCurrent(STEPS.PUBLISH) ? (
-        <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.PUBLISH)}>
+      action: totalProductImages > 0 && acceptedProductImages === totalProductImages && !isCurrent(STEPS.CREATE_PRODUCTS) ? (
+        <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.CREATE_PRODUCTS)}>
+          Review
+        </ButtonOutline>
+      ) : null,
+    },
+    {
+      title: renderTitle(`Publish Products on ${platforms.join(', ') || 'Platform'}`, false, null, isCurrent(STEPS.PUBLISH_PRODUCTS)),
+      content: null,
+      action: isComplete(STEPS.CREATE_PRODUCTS) && !isCurrent(STEPS.PUBLISH_PRODUCTS) ? (
+        <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.PUBLISH_PRODUCTS)}>
           Review
         </ButtonOutline>
       ) : null,

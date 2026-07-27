@@ -1,16 +1,15 @@
-namespace Artsy.API.Models.Projects
+namespace Artsy.Data.Entities.Projects
 {
-    public class CreateProjectBlueprintRequest
+    public class ProjectCollectionProduct
     {
+        public Guid Id { get; set; }
         public Guid ProjectId { get; set; }
+        public Guid CollectionId { get; set; }
+        public Guid ProjectBlueprintId { get; set; }
         public int BlueprintId { get; set; }
         public string Name { get; set; } = "";
-        public string BlueprintJson { get; set; } = "";
-        public string PlacementJson { get; set; } = "";
-        public string Prompt { get; set; } = "";
         public string Description { get; set; } = "";
         public string SafetyInfo { get; set; } = "";
         public string PricingJson { get; set; } = "[]";
-        public int PrintProviderId { get; set; }
     }
 }

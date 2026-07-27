@@ -10,6 +10,7 @@ namespace Artsy.Data.Interfaces.Projects
         Task<Project?> GetByKeyAsync(string key);
         Task<Project> CreateAsync(Project project);
         Task UpdateAsync(Project project);
+        Task UpdatePrintifyStoreIdAsync(Guid id, Guid appUserId, int? printifyStoreId);
         Task DeleteAsync(Guid id, Guid appUserId);
         Task UnarchiveAsync(Guid id, Guid appUserId);
     }

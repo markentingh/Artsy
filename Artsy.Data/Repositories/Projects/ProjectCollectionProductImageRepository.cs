@@ -20,6 +20,19 @@ namespace Artsy.Data.Repositories.Projects
             return await _dbConnection.QueryFirstOrDefaultAsync<ProjectCollectionProductImage>(query, new { id });
         }
 
+        public async Task<IEnumerable<ProjectCollectionProductImage>> FilterByProjectIdsAsync(Guid[] projectIds, int length = 5)
+        {
+            const string query = @"
+                WITH ranked AS (
+                    SELECT p.*, ROW_NUMBER() OVER (PARTITION BY p.""ProjectId"" ORDER BY c.""Created"" DESC, p.""Id"") AS rn
+                    FROM public.""ProjectCollectionProductImages"" p
+                    INNER JOIN public.""ProjectCollections"" c ON c.""Id"" = p.""CollectionId""
+                    WHERE p.""ProjectId"" = ANY(@projectIds) AND p.""Active"" = TRUE AND c.""Status"" = 1
+                )
+                SELECT * FROM ranked WHERE rn <= @length";
+            return await _dbConnection.QueryAsync<ProjectCollectionProductImage>(query, new { projectIds, length });
+        }
+
         public async Task<ProjectCollectionProductImage?> GetByCollectionBlueprintVariantPlacementAsync(Guid collectionId, Guid projectBlueprintId, int variant, int placement)
         {
             const string query = @"SELECT * FROM public.""ProjectCollectionProductImages"" WHERE ""CollectionId"" = @collectionId AND ""ProjectBlueprintId"" = @projectBlueprintId AND ""Variant"" = @variant AND ""Placement"" = @placement AND ""Active"" = TRUE";
@@ -68,6 +81,12 @@ namespace Artsy.Data.Repositories.Projects
         {
             const string query = @"UPDATE public.""ProjectCollectionProductImages"" SET ""Active"" = FALSE WHERE ""CollectionId"" = @collectionId AND ""ProjectBlueprintId"" = @projectBlueprintId AND ""Variant"" = @variant AND ""Placement"" = @placement";
             await _dbConnection.ExecuteAsync(query, new { collectionId, projectBlueprintId, variant, placement });
+        }
+
+        public async Task SetPrintifyImageIdAsync(Guid id, string printifyImageId)
+        {
+            const string query = @"UPDATE public.""ProjectCollectionProductImages"" SET ""PrintifyImageId"" = @printifyImageId WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, printifyImageId });
         }
 
         public async Task DeleteAsync(Guid id)

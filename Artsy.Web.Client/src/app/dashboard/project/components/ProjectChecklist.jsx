@@ -11,7 +11,7 @@ export default function ProjectChecklist({ checklist }) {
       total: checklist?.imageGenerationSetupTotal ?? 0,
     },
     {
-      label: 'Add one or more Product Blueprints to your Project',
+      label: 'Configure one or more Product Blueprints',
       key: 'productBlueprintsAdded',
       completed: (checklist?.productBlueprintsAddedCompleted ?? 0) > 0 ? 1 : 0,
       total: 1,

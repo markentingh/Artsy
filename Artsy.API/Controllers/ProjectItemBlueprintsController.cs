@@ -11,6 +11,47 @@ namespace Artsy.API.Controllers
     [Authorize]
     public partial class ProjectsController
     {
+        private static bool IsBlueprintConfigured(string name, string description, string blueprintJson, string placementJson, string pricingJson)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            if (string.IsNullOrWhiteSpace(description)) return false;
+            if (string.IsNullOrWhiteSpace(blueprintJson)) return false;
+            if (string.IsNullOrWhiteSpace(placementJson)) return false;
+            try
+            {
+                var cfg = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(blueprintJson);
+                if (cfg == null || !cfg.TryGetValue("variantIds", out var variantEl) || variantEl.ValueKind != JsonValueKind.Array)
+                    return false;
+                var variantIds = variantEl.EnumerateArray().Select(v => v.GetInt32()).ToList();
+                if (variantIds.Count == 0) return false;
+
+                var pricing = string.IsNullOrWhiteSpace(pricingJson) ? new List<JsonElement>() : JsonSerializer.Deserialize<List<JsonElement>>(pricingJson) ?? new List<JsonElement>();
+                var priceMap = new Dictionary<int, decimal>();
+                foreach (var p in pricing)
+                {
+                    if (p.TryGetProperty("variantId", out var vidEl) && p.TryGetProperty("price", out var priceEl))
+                        priceMap[vidEl.GetInt32()] = priceEl.GetDecimal();
+                }
+                if (!variantIds.All(vid => priceMap.TryGetValue(vid, out var price) && price > 0))
+                    return false;
+
+                var placements = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(placementJson);
+                if (placements == null || placements.Count == 0) return false;
+                return placements.Any(p =>
+                {
+                    if (!p.Value.TryGetProperty("source", out var srcEl)) return false;
+                    var source = srcEl.GetString() ?? "";
+                    if (string.IsNullOrWhiteSpace(source)) return false;
+                    if (source == "item" && p.Value.TryGetProperty("itemId", out var itemEl) && itemEl.ValueKind != JsonValueKind.Null)
+                        return true;
+                    if (source == "custom" && p.Value.TryGetProperty("customImageId", out var imgEl) && imgEl.ValueKind != JsonValueKind.Null)
+                        return true;
+                    return false;
+                });
+            }
+            catch { return false; }
+        }
+
         [HttpGet("get-blueprints")]
         public async Task<IActionResult> GetBlueprints([FromQuery] Guid projectId)
         {
@@ -28,7 +69,43 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
                 var blueprints = await _projectBlueprintRepository.GetListByProjectIdAsync(projectId);
+                foreach (var b in blueprints)
+                    b.Configured = IsBlueprintConfigured(b.Name, b.Description, b.BlueprintJson, b.PlacementJson, b.PricingJson);
                 return Json(new ApiResponse { success = true, data = blueprints });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("get-blueprints-list")]
+        public async Task<IActionResult> GetBlueprintsList([FromQuery] Guid projectId)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (projectId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Project ID is required." });
+
+            try
+            {
+                var project = await _projectRepository.GetByIdAsync(projectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                var blueprints = await _projectBlueprintRepository.GetListByProjectIdAsync(projectId);
+                var result = blueprints.Select(b => new ProjectBlueprintListResponse
+                {
+                    Id = b.Id,
+                    BlueprintId = b.BlueprintId,
+                    Name = b.Name,
+                    BlueprintJson = b.BlueprintJson,
+                    Configured = IsBlueprintConfigured(b.Name, b.Description, b.BlueprintJson, b.PlacementJson, b.PricingJson),
+                    ImageCount = b.ImageCount
+                });
+                return Json(new ApiResponse { success = true, data = result });
             }
             catch (Exception ex)
             {
@@ -62,7 +139,11 @@ namespace Artsy.API.Controllers
                     Name = request.Name.Trim(),
                     BlueprintJson = request.BlueprintJson ?? "",
                     PlacementJson = request.PlacementJson ?? "",
-                    Prompt = request.Prompt ?? ""
+                    Prompt = request.Prompt ?? "",
+                    Description = request.Description ?? "",
+                    SafetyInfo = request.SafetyInfo ?? "",
+                    PricingJson = request.PricingJson ?? "[]",
+                    PrintProviderId = request.PrintProviderId
                 };
                 var created = await _projectBlueprintRepository.CreateAsync(blueprint);
                 return Json(new ApiResponse { success = true, data = created });
@@ -130,6 +211,10 @@ namespace Artsy.API.Controllers
                 blueprint.BlueprintJson = request.BlueprintJson ?? "";
                 blueprint.PlacementJson = request.PlacementJson ?? "";
                 blueprint.Prompt = request.Prompt ?? "";
+                blueprint.Description = request.Description ?? "";
+                blueprint.SafetyInfo = request.SafetyInfo ?? "";
+                blueprint.PricingJson = request.PricingJson ?? "[]";
+                blueprint.PrintProviderId = request.PrintProviderId;
                 await _projectBlueprintRepository.UpdateAsync(blueprint);
                 return Json(new ApiResponse { success = true, data = blueprint });
             }

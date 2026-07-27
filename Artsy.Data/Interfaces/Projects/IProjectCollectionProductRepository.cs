@@ -1,0 +1,14 @@
+using Artsy.Data.Entities.Projects;
+
+namespace Artsy.Data.Interfaces.Projects
+{
+    public interface IProjectCollectionProductRepository
+    {
+        Task<ProjectCollectionProduct?> GetByIdAsync(Guid id);
+        Task<ProjectCollectionProduct?> GetByCollectionAndBlueprintIdAsync(Guid collectionId, Guid projectBlueprintId);
+        Task<IEnumerable<ProjectCollectionProduct>> GetByCollectionIdAsync(Guid collectionId);
+        Task<ProjectCollectionProduct> CreateAsync(ProjectCollectionProduct product);
+        Task UpdateAsync(ProjectCollectionProduct product);
+        Task DeleteAsync(Guid id);
+    }
+}

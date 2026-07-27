@@ -95,12 +95,10 @@ export default function ReadyToGenerate() {
 
     try {
       const imgRes = await api.getProductImages(colId);
-      console.log('[ReadyToGenerate.handleNext] getProductImages response:', imgRes.data);
       if (imgRes.data.success) {
         const allImages = (imgRes.data.data || []).filter(img => img.active);
         const accepted = allImages.filter(img => img.accepted);
         const acceptedKeys = new Set(accepted.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
-        console.log('[ReadyToGenerate.handleNext] existing:', allImages.length, 'accepted:', accepted.length, accepted);
 
         const activeKeys = new Set(allImages.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
 
@@ -127,7 +125,6 @@ export default function ReadyToGenerate() {
         }
 
         const missingCombos = allCombos.filter(c => !acceptedKeys.has(`${c.projectBlueprintId}:${c.variant}:${c.placement}`));
-        console.log('[ReadyToGenerate.handleNext] allCombos:', allCombos.length, 'missing:', missingCombos.length);
 
         if (allCombos.length === 0) {
           setAllProductImages(allImages);
@@ -137,7 +134,7 @@ export default function ReadyToGenerate() {
 
         if (missingCombos.length === 0) {
           setAllProductImages(allImages);
-          setStep(STEPS.PUBLISH);
+          setStep(STEPS.CREATE_PRODUCTS);
           return;
         }
 
@@ -149,9 +146,8 @@ export default function ReadyToGenerate() {
           return;
         }
       }
-    } catch (e) { console.log('[ReadyToGenerate.handleNext] getProductImages error:', e); }
+    } catch (e) { }
 
-    console.log('[ReadyToGenerate.handleNext] falling through to PRODUCT_IMAGE_SELECTION');
     setStep(STEPS.PRODUCT_IMAGE_SELECTION);
   }, [collectionId, ensureCollection, loadProductImageVariants, loadImageModels, setStep, STEPS, api, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex]);
 

@@ -89,8 +89,9 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "User not found" });
 
                 var hasApiToken = !string.IsNullOrEmpty(ConnectionSettings.PrintifyApiToken);
-                var shops = hasApiToken ? await GetAccountInfo() : [];
-                var connected = hasApiToken || !string.IsNullOrEmpty(user.PrintifyAccessToken);
+                var hasUserToken = !string.IsNullOrEmpty(user.PrintifyAccessToken);
+                var connected = hasApiToken || hasUserToken;
+                var shops = connected ? await GetAccountInfo(hasApiToken ? null : user.PrintifyAccessToken) : [];
 
                 return Json(new ApiResponse
                 {

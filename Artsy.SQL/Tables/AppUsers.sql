@@ -12,7 +12,19 @@ CREATE TABLE IF NOT EXISTS public."AppUsers" (
     "PasswordResetTime" TIMESTAMP NULL,
     "NewEmail" VARCHAR(255) NULL,
     "Status" INTEGER NOT NULL DEFAULT 1,
-    "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "PrintifyAccessToken" TEXT NULL,
+    "PrintifyRefreshToken" TEXT NULL,
+    "PrintifyTokensExpireAtUtc" TIMESTAMP NULL,
+    "PrintifyShopId" VARCHAR(255) NULL,
+    "MetaAccessToken" TEXT NULL,
+    "MetaTokenExpiresAtUtc" TIMESTAMP NULL,
+    "MetaUserId" VARCHAR(255) NULL,
+    "InstagramBusinessAccountId" VARCHAR(255) NULL,
+    "TelegramUserId" VARCHAR(255) NULL,
+    "TelegramChatId" VARCHAR(255) NULL,
+    "TelegramConnectionToken" VARCHAR(255) NULL,
+    "OAuthState" VARCHAR(255) NULL
 );
 
 -- Ensure connection columns exist for databases created before these fields were added

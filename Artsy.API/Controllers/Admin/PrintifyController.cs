@@ -431,7 +431,8 @@ namespace Artsy.API.Controllers.Admin
                             description = cached.Description,
                             imageCount = cached.ImageCount,
                             published = cached.Published,
-                            imagePrompt = cached.ImagePrompt ?? ""
+                            imagePrompt = cached.ImagePrompt ?? "",
+                            printProviderId = printProviders.Count > 0 ? printProviders[0].id : 0
                         },
                         printProviders
                     }

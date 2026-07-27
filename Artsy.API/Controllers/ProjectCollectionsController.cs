@@ -36,13 +36,15 @@ namespace Artsy.API.Controllers
                     var collection = collections[i];
                     var artwork = await _projectCollectionArtworkRepository.GetByCollectionIdAsync(collection.Id);
                     var artworkList = artwork.OrderBy(a => a.Index).ToList();
+                    var productImages = await _projectCollectionProductImageRepository.GetByCollectionIdAsync(collection.Id);
+                    var productImageList = productImages.Where(p => p.Active).ToList();
                     result.Add(new
                     {
                         id = collection.Id,
                         projectId = collection.ProjectId,
                         title = collection.Title,
                         created = collection.Created,
-                        sequence = collections.Count - i,
+                        sequence = i + 1,
                         artwork = artworkList.Select(a => new
                         {
                             id = a.Id,
@@ -53,6 +55,15 @@ namespace Artsy.API.Controllers
                             accepted = a.Accepted,
                             imageModel = a.ImageModel,
                             index = a.Index
+                        }),
+                        productImages = productImageList.Select(p => new
+                        {
+                            id = p.Id,
+                            projectBlueprintId = p.ProjectBlueprintId,
+                            variant = p.Variant,
+                            placement = p.Placement,
+                            accepted = p.Accepted,
+                            active = p.Active
                         })
                     });
                 }

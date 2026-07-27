@@ -10,6 +10,8 @@ import ArtworkQuestions from './collection-steps/ArtworkQuestions';
 import ArtworkPreview from './collection-steps/ArtworkPreview';
 import ReadyToGenerate from './collection-steps/ReadyToGenerate';
 import PublishProducts from './collection-steps/PublishProducts';
+import CreateProducts from './collection-steps/CreateProducts';
+import PublishProductsStep from './collection-steps/PublishProductsStep';
 import ProductImageSelection from './collection-steps/ProductImageSelection';
 import ProductImagePrompt from './collection-steps/ProductImagePrompt';
 import ProductImagePreview from './collection-steps/ProductImagePreview';
@@ -24,7 +26,8 @@ const stepTitle = (step) => {
     case STEPS.PRODUCT_IMAGE_SELECTION: return 'New Collection - Product Image Selection';
     case STEPS.PRODUCT_IMAGE_PROMPT: return 'New Collection - Product Image Prompt';
     case STEPS.PRODUCT_IMAGE_PREVIEW: return 'New Collection - Product Images';
-    case STEPS.PUBLISH: return 'New Collection - Publish';
+    case STEPS.CREATE_PRODUCTS: return 'New Collection - Create Products';
+    case STEPS.PUBLISH_PRODUCTS: return 'New Collection - Publish Products';
     case STEPS.SOCIAL_MEDIA: return 'New Collection - Social Media';
     default: return 'New Collection';
   }
@@ -36,8 +39,6 @@ function CollectionWizard() {
     initialLoading, artworkPreview, setArtworkPreview,
     onClose, STEPS, wizardSteps, stepIndex,
   } = useCollection();
-
-  console.log('[CollectionWizard] wizardSteps:', wizardSteps, 'stepIndex:', stepIndex, 'step:', step);
 
   return (
     <Modal
@@ -69,7 +70,8 @@ function CollectionWizard() {
           {step === STEPS.PRODUCT_IMAGE_SELECTION && <ProductImageSelection />}
           {step === STEPS.PRODUCT_IMAGE_PROMPT && <ProductImagePrompt />}
           {step === STEPS.PRODUCT_IMAGE_PREVIEW && <ProductImagePreview />}
-          {step === STEPS.PUBLISH && <PublishProducts />}
+          {step === STEPS.CREATE_PRODUCTS && <CreateProducts />}
+          {step === STEPS.PUBLISH_PRODUCTS && <PublishProductsStep />}
           {step === STEPS.SOCIAL_MEDIA && <PublishProducts />}
         </>
       )}
@@ -170,12 +172,10 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
                 const [variants,] = await Promise.all([loadProductImageVariants(colId), loadImageModels()]);
                 try {
                   const imgRes = await api.getProductImages(colId);
-                  console.log('[ResumeManager] getProductImages response:', imgRes.data);
                   if (imgRes.data.success) {
                     const allImages = (imgRes.data.data || []).filter(img => img.active);
                     const accepted = allImages.filter(img => img.accepted);
                     const acceptedKeys = new Set(accepted.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
-                    console.log('[ResumeManager] existing:', allImages.length, 'accepted:', accepted.length, accepted);
 
                     const activeKeys = new Set(allImages.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
 
@@ -202,7 +202,6 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
                     }
 
                     const missingCombos = allCombos.filter(c => !acceptedKeys.has(`${c.projectBlueprintId}:${c.variant}:${c.placement}`));
-                    console.log('[ResumeManager] allCombos:', allCombos.length, 'missing:', missingCombos.length);
 
                     if (allCombos.length === 0) {
                       setAllProductImages(allImages);
@@ -213,7 +212,10 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
 
                     if (missingCombos.length === 0) {
                       setAllProductImages(allImages);
-                      setStep(STEPS.PUBLISH);
+                      try {
+                        await api.ensurePrintifyProducts({ collectionId: colId });
+                      } catch (e) { /* non-critical */ }
+                      setStep(STEPS.CREATE_PRODUCTS);
                       setInitialLoading(false);
                       return;
                     }
@@ -227,8 +229,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
                       return;
                     }
                   }
-                } catch (e) { console.log('[ResumeManager] getProductImages error:', e); }
-                console.log('[ResumeManager] falling through to PRODUCT_IMAGE_SELECTION');
+                } catch (e) {  }
                 setStep(STEPS.PRODUCT_IMAGE_SELECTION);
               } else {
                 setStep(STEPS.READY_TO_GENERATE);

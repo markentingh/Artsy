@@ -8,5 +8,9 @@ namespace Artsy.API.Models.Projects
         public string BlueprintJson { get; set; } = "";
         public string PlacementJson { get; set; } = "";
         public string Prompt { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string SafetyInfo { get; set; } = "";
+        public string PricingJson { get; set; } = "[]";
+        public int PrintProviderId { get; set; }
     }
 }

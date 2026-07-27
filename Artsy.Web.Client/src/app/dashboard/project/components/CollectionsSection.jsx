@@ -12,7 +12,7 @@ import CollectionModal from './CollectionModal';
 
 export default function CollectionsSection({ projectId, project, showNewButton = true }) {
   const session = useSession();
-  const { getCollections, getCollectionArtworkImageUrl, deleteCollection } = Projects(session);
+  const { getCollections, getCollectionArtworkThumbUrl, getProductImageUrl, deleteCollection } = Projects(session);
   const [collections, setCollections] = useState([]);
   const [mount, setMount] = useState(false);
   const [message, setMessage] = useState(null);
@@ -87,7 +87,7 @@ export default function CollectionsSection({ projectId, project, showNewButton =
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-1">
           <h2 className="text-xl font-semibold">Collections</h2>
-          <Tooltip text="Collections are how you publish products to your online shop. Each collection combines your artworks with your selected products to generate the final designs that will be listed and sold." />
+          <Tooltip text="Create a new collection to publish products to your online shop and post the artworks to your social media accounts. Each collection combines your artworks with your selected products to generate the final designs that will be listed and sold." />
         </div>
         {showNewButton && (
           <ButtonOutline onClick={handleNewCollection}>
@@ -108,9 +108,13 @@ export default function CollectionsSection({ projectId, project, showNewButton =
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,300px)] gap-4">
           {collections.map((collection) => {
-            const images = (collection.artwork || [])
+            const artworkImages = (collection.artwork || [])
               .filter(a => a.active)
-              .map(a => getCollectionArtworkImageUrl(collection.id, a.itemId, a.id));
+              .map(a => getCollectionArtworkThumbUrl(collection.id, a.itemId, a.id));
+            const productImages = (collection.productImages || [])
+              .filter(p => p.active)
+              .map(p => getProductImageUrl(collection.id, p.id));
+            const images = [...productImages, ...artworkImages];
             return (
               <div
                 key={collection.id}

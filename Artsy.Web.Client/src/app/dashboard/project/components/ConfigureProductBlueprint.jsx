@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useSession } from '@/context/session';
 import { Printify } from '@/api/admin/printify';
 import { Printify as PrintifyPublic } from '@/api/user/printify';
@@ -8,6 +8,8 @@ import Carousel from '@/components/ui/carousel';
 import Tooltip from '@/components/ui/tooltip';
 import Select from '@/components/forms/select';
 import TextArea from '@/components/forms/textarea';
+import Input from '@/components/forms/input';
+import { List, Item } from '@/components/ui/list';
 import SelectChecklist from '@/components/ui/select-checklist';
 import ButtonOutline from '@/components/ui/button-outline';
 import Spinner from '@/components/ui/spinner';
@@ -49,8 +51,10 @@ export default function ConfigureProductBlueprint({
   const [outOfStockIds, setOutOfStockIds] = useState(new Set());
   const [blueprintImages, setBlueprintImages] = useState([]);
   const [prompt, setPrompt] = useState('');
-  const scrollRef = useRef(null);
-  const [scrollMaxHeight, setScrollMaxHeight] = useState('none');
+  const [productName, setProductName] = useState('');
+  const [productDescription, setProductDescription] = useState('');
+  const [safetyInfo, setSafetyInfo] = useState('');
+  const [variantPrices, setVariantPrices] = useState({});
 
   const isEditing = !!existingConfig;
 
@@ -114,9 +118,9 @@ export default function ConfigureProductBlueprint({
 
           if (existingConfig) {
             const cfg = JSON.parse(existingConfig.blueprintJson || '{}');
-            if (cfg.printProviderId) {
-              setSelectedProvider(String(cfg.printProviderId));
-              await loadVariants(blueprint.id, cfg.printProviderId);
+            if (existingConfig.printProviderId) {
+              setSelectedProvider(String(existingConfig.printProviderId));
+              await loadVariants(blueprint.id, existingConfig.printProviderId);
               if (cfg.variantIds) {
                 setSelectedVariants(cfg.variantIds);
               }
@@ -126,6 +130,18 @@ export default function ConfigureProductBlueprint({
               setPlacementSettings(placement);
             } catch { /* ignore */ }
             setPrompt(existingConfig.prompt || '');
+            setProductName(existingConfig.name || detail?.title || '');
+            setProductDescription(existingConfig.description || '');
+            setSafetyInfo(existingConfig.safetyInfo || '');
+            try {
+              const pricing = JSON.parse(existingConfig.pricingJson || '[]');
+              const priceMap = {};
+              pricing.forEach(p => { priceMap[p.variantId] = parseFloat(p.price).toFixed(2); });
+              setVariantPrices(priceMap);
+            } catch { /* ignore */ }
+          } else if (data.blueprint?.printProviderId) {
+            setSelectedProvider(String(data.blueprint.printProviderId));
+            await loadVariants(blueprint.id, data.blueprint.printProviderId);
           } else if (data.printProviders?.length > 0) {
             const firstProvider = String(data.printProviders[0].id);
             setSelectedProvider(firstProvider);
@@ -157,7 +173,7 @@ export default function ConfigureProductBlueprint({
               setOutOfStockIds(outOfStock);
             }
           })
-          .catch(() => {});
+          .catch(() => { });
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to load variants' });
@@ -208,12 +224,21 @@ export default function ConfigureProductBlueprint({
     };
 
     if (onSave) {
+      const pricingJson = JSON.stringify(
+        Object.entries(variantPrices)
+          .filter(([_, price]) => price !== '')
+          .map(([variantId, price]) => ({ variantId: parseInt(variantId), price: parseFloat(price) || 0 }))
+      );
       onSave({
         blueprintId: blueprint.id,
-        name: detail?.title || blueprint.title,
+        name: productName || detail?.title || blueprint.title,
         blueprintJson: JSON.stringify(config),
         placementJson: JSON.stringify(placementSettings),
         prompt,
+        description: productDescription,
+        safetyInfo: safetyInfo,
+        pricingJson,
+        printProviderId: parseInt(selectedProvider),
       });
     }
     setSaving(false);
@@ -431,19 +456,6 @@ export default function ConfigureProductBlueprint({
   }, [variantsByColor, blueprintImages, blueprint, detail, getBlueprintImageUrl]);
 
 
-  useEffect(() => {
-    const updateMaxHeight = () => {
-      if (scrollRef.current) {
-        const rect = scrollRef.current.getBoundingClientRect();
-        setScrollMaxHeight(`calc(100vh - ${rect.top + 80}px)`);
-      }
-    };
-    updateMaxHeight();
-    window.addEventListener('resize', updateMaxHeight);
-    setTimeout(updateMaxHeight, 10);
-    return () => window.removeEventListener('resize', updateMaxHeight);
-  }, [show, loading]);
-
   if (!show) return null;
 
   const providerOptions = printProviders.map((p) => ({
@@ -469,9 +481,19 @@ export default function ConfigureProductBlueprint({
           <Spinner className="text-4xl" />
         </div>
       ) : detail ? (
-        <div ref={scrollRef} className="overflow-y-auto space-y-4 px-[1em]" style={{ maxHeight: scrollMaxHeight }}>
+        <div className="space-y-4 px-[1em]">
           <div className="space-y-1">
-            <h3 className="text-lg font-medium">{detail.title}</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium">{detail.title}</h3>
+              <a
+                href={`https://printify.com/app/products/${blueprint.id}/${(detail.brand || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}/${(detail.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
+              >
+                View on Printify
+              </a>
+            </div>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               {detail.brand} {detail.model ? `· ${detail.model}` : ''}
             </p>
@@ -492,36 +514,63 @@ export default function ConfigureProductBlueprint({
             )}
           </div>
 
-          <hr className="border-gray-200 dark:border-gray-700" />
-
-          <div className="max-w-xs">
-            <div className="flex items-center gap-1 mb-1">
-              <label htmlFor="printProvider" className="block text-sm font-medium">Print Provider</label>
-              <Tooltip marginTop={2} text="Select the company that will manufacture and ship this product. Different providers may offer different print methods, materials, and shipping regions." />
-            </div>
-            <Select
-              name="printProvider"
-              options={providerOptions}
-              value={selectedProvider}
-              onChange={handleProviderChange}
-              className="mb-0"
-            />
-          </div>
-
-          <hr className="border-gray-200 dark:border-gray-700" />
-
           <Tabs tabs={[
+            {
+              id: 'info',
+              label: 'Info',
+              content: (
+                <div>
+                  <Input
+                    name="productName"
+                    label="Name"
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    placeholder="Enter product name"
+                  />
+                  <TextArea
+                    name="productDescription"
+                    label="Description"
+                    value={productDescription}
+                    onChange={(e) => setProductDescription(e.target.value)}
+                    placeholder="Enter product description"
+                    rows={5}
+                  />
+                  <TextArea
+                    name="safetyInfo"
+                    label="Safety Information"
+                    value={safetyInfo}
+                    onChange={(e) => setSafetyInfo(e.target.value)}
+                    placeholder="Enter safety information"
+                    rows={5}
+                  />
+                </div>
+              ),
+            },
             {
               id: 'variants',
               label: 'Variants',
               content: variantsByColor.length > 0 ? (
                 <div>
+                  <div className="max-w-xs mb-4">
+                    <div className="flex items-center gap-1 mb-1">
+                      <label htmlFor="printProvider" className="block text-sm font-medium">Print Provider</label>
+                      <Tooltip marginTop={2} text="Select the company that will manufacture and ship this product. Different providers may offer different print methods, materials, and shipping regions." />
+                    </div>
+                    <Select
+                      name="printProvider"
+                      options={providerOptions}
+                      value={selectedProvider}
+                      onChange={handleProviderChange}
+                      className="mb-0"
+                    />
+                  </div>
+
                   <div className="flex items-center gap-1 mb-2">
                     <label className="block text-sm font-medium">Variants</label>
-                    <Tooltip marginTop={2} text="Choose which sizes and colors of this product you want to offer. Only selected variants will be available for sale. Out-of-stock variants cannot be selected." />
+                    <Tooltip marginTop={2} text="Choose which sizes and colors of this product you want to offer. Only selected variants will be available for sale. Out-of-stock variants can be selected but will not be available for sale in your online shop until they are back in stock." />
                   </div>
                   <div className="grid grid-cols-[repeat(auto-fill,250px)] gap-4">
-                    {variantsByColor.map((group) => {
+                    {variantsByColor.filter(group => (imagesByColor.get(group.color) || []).length > 0).map((group) => {
                       const options = group.variants.map((v) => {
                         const size = v.size || v.title;
                         const isOutOfStock = outOfStockIds.has(v.id);
@@ -568,6 +617,86 @@ export default function ConfigureProductBlueprint({
                       );
                     })}
                   </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400">No variants available. Select a print provider to load variants.</p>
+              ),
+            },
+            {
+              id: 'pricing',
+              label: 'Pricing',
+              content: variantsByColor.length > 0 ? (
+                <div className="pb-4">
+                  <div className="flex items-center gap-1 mb-1">
+                    <label className="block text-sm font-medium">Variant Pricing</label>
+                    <Tooltip marginTop={2} text="Each variant can be configured to have its own price. Take into account that these prices do not include shipping costs. If you provide free shipping within your online shop, you may want to include shipping costs within the variant price itself." />
+                  </div>
+
+                  <List inModal>
+                    <Item bg={false} hover={false}>
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-sm font-medium"></span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-sm text-gray-500 mr-5">Change All Variants</span>
+                          <span className="text-sm text-gray-500">$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            className="w-24 px-2 py-1 text-right border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const newPrices = {};
+                              variants.forEach(v => { newPrices[v.id] = val; });
+                              setVariantPrices(newPrices);
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </Item>
+                    {[...variants]
+                      .filter(v => selectedVariants.includes(v.id))
+                      .sort((a, b) => {
+                        const aColor = a.title || 'Default';
+                        const bColor = b.title || 'Default';
+                        if (aColor !== bColor) return aColor.localeCompare(bColor);
+                        const sizeOrder = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
+                        const aSize = a.size || '';
+                        const bSize = b.size || '';
+                        const aIdx = sizeOrder.indexOf(aSize);
+                        const bIdx = sizeOrder.indexOf(bSize);
+                        if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+                        if (aIdx !== -1) return -1;
+                        if (bIdx !== -1) return 1;
+                        return aSize.localeCompare(bSize);
+                      })
+                      .map((v) => {
+                        const color = v.title || 'Default';
+                        const size = v.size || v.title;
+                        return (
+                          <Item key={v.id}>
+                            <div className="flex items-center justify-between w-full">
+                              <span className="text-sm">{color} - {size}</span>
+                              <div className="flex items-center gap-1">
+                                <span className="text-sm text-gray-500">$</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  placeholder="0.00"
+                                  value={variantPrices[v.id] || ''}
+                                  onChange={(e) => {
+                                    setVariantPrices(prev => ({ ...prev, [v.id]: e.target.value }));
+                                  }}
+                                  className="w-24 px-2 py-1 text-right border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                />
+                              </div>
+                            </div>
+                          </Item>
+                        );
+                      })}
+                  </List>
                 </div>
               ) : (
                 <p className="text-sm text-gray-500 dark:text-gray-400">No variants available. Select a print provider to load variants.</p>

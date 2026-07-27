@@ -61,7 +61,7 @@ namespace Artsy.API.Services
             var relativePath = Path.Combine("projects", projectId.ToString(), "previews", itemId.ToString(), fileName);
             var thumbFileName = $"{previewId}_thumb.jpg";
             var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "previews", itemId.ToString(), thumbFileName);
-            var thumbImageData = await GenerateThumbnailAsync(imageData, 250);
+            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
 
             if (_activeStorage == "azure")
             {
@@ -99,7 +99,7 @@ namespace Artsy.API.Services
             var thumbFileName = $"{imageIndex}_thumb.jpg";
             var relativePath = Path.Combine("Printify", "catalog", blueprintId.ToString(), fileName);
             var thumbRelativePath = Path.Combine("Printify", "catalog", blueprintId.ToString(), thumbFileName);
-            var thumbImageData = await GenerateThumbnailAsync(imageData, 250);
+            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
 
             if (_activeStorage == "azure")
             {
@@ -147,7 +147,7 @@ namespace Artsy.API.Services
             var relativePath = Path.Combine("projects", projectId.ToString(), "references", fileName);
             var thumbFileName = $"{referenceId}_thumb.jpg";
             var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "references", thumbFileName);
-            var thumbImageData = await GenerateThumbnailAsync(imageData, 250);
+            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
 
             if (_activeStorage == "azure")
             {
@@ -302,7 +302,7 @@ namespace Artsy.API.Services
             var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
             var thumbFileName = $"{artworkId}_thumb.jpg";
             var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
-            var thumbImageData = await GenerateThumbnailAsync(imageData, 250);
+            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
 
             if (_activeStorage == "azure")
             {
@@ -331,9 +331,19 @@ namespace Artsy.API.Services
             var thumbFileName = $"{artworkId}_thumb.jpg";
             var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
 
+            byte[] thumbBytes;
+            if (_activeStorage == "azure")
+                thumbBytes = await GetFromAzureBlobAsync(thumbRelativePath);
+            else
+                thumbBytes = await GetFromFileSystemAsync(thumbRelativePath);
+
+            if (thumbBytes != null && thumbBytes.Length > 0)
+                return thumbBytes;
+
+            await GenerateProjectCollectionArtworkThumbAsync(projectId, collectionId, itemId, artworkId);
+
             if (_activeStorage == "azure")
                 return await GetFromAzureBlobAsync(thumbRelativePath);
-
             return await GetFromFileSystemAsync(thumbRelativePath);
         }
 
@@ -349,7 +359,7 @@ namespace Artsy.API.Services
 
             var thumbFileName = $"{artworkId}_thumb.jpg";
             var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
-            var thumbImageData = await GenerateThumbnailAsync(imageData, 250);
+            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
 
             if (_activeStorage == "azure")
             {

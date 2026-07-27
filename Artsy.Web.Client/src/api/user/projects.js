@@ -15,6 +15,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     deleteItem: (request) => api.post(`${apiPath}/delete-item`, request),
     reorderItems: (request) => api.post(`${apiPath}/reorder-items`, request),
     getBlueprints: (projectId) => api.get(`${apiPath}/get-blueprints?projectId=${projectId}`),
+    getBlueprintsList: (projectId) => api.get(`${apiPath}/get-blueprints-list?projectId=${projectId}`),
     createBlueprint: (request) => api.post(`${apiPath}/create-blueprint`, request),
     deleteBlueprint: (request) => api.post(`${apiPath}/delete-blueprint`, request),
     updateBlueprint: (request) => api.post(`${apiPath}/update-blueprint`, request),
@@ -60,6 +61,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     updateTitle: (request) => api.post(`${apiPath}/update-title`, request),
     updateKey: (request) => api.post(`${apiPath}/update-key`, request),
     updatePublishToPrintify: (request) => api.post(`${apiPath}/update-publish-to-printify`, request),
+    getPrintifyShops: () => api.get(`${apiPath}/get-printify-shops`),
     createCollection: (request) => api.post(`${apiPath}/create-collection`, request),
     getCollectionAnswers: (collectionId) => api.get(`${apiPath}/get-collection-answers?collectionId=${collectionId}`),
     getCollectionArtwork: (collectionId) => api.get(`${apiPath}/get-collection-artwork?collectionId=${collectionId}`),
@@ -91,7 +93,16 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     acceptProductImage: (request) => api.post(`${apiPath}/accept-product-image`, request),
     getProductImages: (collectionId) => api.get(`${apiPath}/collection/${collectionId}/product-images`),
     getProductImageUrl: (collectionId, productImageId) => `${apiPath}/collection/${collectionId}/product-image/${productImageId}`,
-    getActiveImageModels: () => api.get('/api/image-generation/active-models')
+    getActiveImageModels: () => api.get('/api/image-generation/active-models'),
+    createPrintifyProduct: (request) => api.post('/api/printify-products/create', request),
+    uploadPrintifyProductImage: (request) => api.post('/api/printify-products/upload-image', request),
+    updatePrintifyProduct: (request) => api.post('/api/printify-products/update', request),
+    publishPrintifyProduct: (request) => api.post('/api/printify-products/publish', request),
+    unpublishPrintifyProduct: (request) => api.post('/api/printify-products/unpublish', request),
+    deletePrintifyProduct: (request) => api.post('/api/printify-products/delete', request),
+    getPrintifyProductsByCollection: (collectionId) => api.get(`/api/printify-products/get-by-collection?collectionId=${collectionId}`),
+    ensurePrintifyProducts: (request) => api.post('/api/printify-products/ensure-products', request),
+    getProductsByCollection: (collectionId) => api.get(`/api/printify-products/get-products?collectionId=${collectionId}`)
   };
 });
 

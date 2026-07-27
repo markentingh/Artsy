@@ -50,6 +50,7 @@ builder.Services.AddScoped<Artsy.API.Services.IEmailService, Artsy.API.Services.
 builder.Services.AddScoped<Artsy.API.Services.ITelegramService, Artsy.API.Services.TelegramService>();
 builder.Services.AddScoped<Artsy.API.Services.IImageService, Artsy.API.Services.ImageService>();
 builder.Services.AddScoped<Artsy.API.Services.ITrendResearchService, Artsy.API.Services.TrendResearchService>();
+builder.Services.AddScoped<Artsy.API.Services.IPrintifyService, Artsy.API.Services.PrintifyService>();
 
 builder.Services.AddSwaggerGen(e =>
 {

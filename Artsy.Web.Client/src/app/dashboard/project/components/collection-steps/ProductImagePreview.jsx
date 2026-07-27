@@ -59,14 +59,14 @@ export default function ProductImagePreview() {
     if (!currentProductImage) return;
     try {
       await api.acceptProductImage({ collectionId, productImageId: currentProductImage.id });
-      setAllProductImages(prev => [...prev, currentProductImage]);
+      setAllProductImages(prev => [...prev, { ...currentProductImage, accepted: true }]);
     } catch (error) {
       console.error('acceptProductImage error:', error?.response?.data || error);
     }
 
     const nextIndex = currentProductComboIndex + 1;
     if (nextIndex >= selectedProductCombos.length) {
-      setStep(STEPS.PUBLISH);
+      setStep(STEPS.CREATE_PRODUCTS);
     } else {
       setCurrentProductComboIndex(nextIndex);
       setCurrentProductImage(null);

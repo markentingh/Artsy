@@ -32,6 +32,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const [title, setTitle] = useState('');
   const [initialTitle, setInitialTitle] = useState('');
   const [socialMedia, setSocialMedia] = useState(false);
+  const [initialSocialMedia, setInitialSocialMedia] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [initialPrompt, setInitialPrompt] = useState('');
   const [imageModel, setImageModel] = useState('');
@@ -70,6 +71,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setInitialTitle(itemTitle);
     const itemSocialMedia = item?.socialMedia || false;
     setSocialMedia(itemSocialMedia);
+    setInitialSocialMedia(itemSocialMedia);
     setPrompt('');
     setInitialPrompt('');
     setImageModel('');
@@ -181,39 +183,34 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show, item]);
 
-  const handleSaveTitle = async () => {
+  const handleSaveChanges = async () => {
     if (!item) return;
     try {
-      const response = await updateItemTitle({ id: item.id, title: title.trim() });
-      if (response.data.success) {
-        setMessage(null);
+      if (titleDirty) {
+        const response = await updateItemTitle({ id: item.id, title: title.trim() });
+        if (!response.data.success) {
+          setMessage({ type: 'error', text: response.data.message || 'Failed to save title' });
+          return;
+        }
         setInitialTitle(title.trim());
-        if (onChanged) onChanged(item.id);
-      } else {
-        setMessage({ type: 'error', text: response.data.message || 'Failed to save title' });
       }
+      if (socialMedia !== initialSocialMedia) {
+        const response = await updateItemSocialMedia({ id: item.id, socialMedia });
+        if (!response.data.success) {
+          setMessage({ type: 'error', text: response.data.message || 'Failed to update social media setting' });
+          return;
+        }
+        setInitialSocialMedia(socialMedia);
+      }
+      setMessage(null);
+      if (onChanged) onChanged(item.id);
     } catch (error) {
-      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save title' });
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save changes' });
     }
   };
 
-  const handleSocialMediaChange = async (e) => {
-    const checked = e.target.checked;
-    setSocialMedia(checked);
-    if (!item) return;
-    try {
-      const response = await updateItemSocialMedia({ id: item.id, socialMedia: checked });
-      if (response.data.success) {
-        setMessage(null);
-        if (onChanged) onChanged(item.id);
-      } else {
-        setSocialMedia(!checked);
-        setMessage({ type: 'error', text: response.data.message || 'Failed to update social media setting' });
-      }
-    } catch (error) {
-      setSocialMedia(!checked);
-      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to update social media setting' });
-    }
+  const handleSocialMediaChange = (e) => {
+    setSocialMedia(e.target.checked);
   };
 
   const handleImageModelChange = (value) => {
@@ -510,11 +507,6 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Enter artwork title"
           />
-          {titleDirty && (
-            <ButtonOutline onClick={handleSaveTitle}>
-              Save Changes
-            </ButtonOutline>
-          )}
         </div>
         <div className="w-1/3">
           <Select
@@ -560,11 +552,13 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
             checked={socialMedia}
             onChange={handleSocialMediaChange}
           />
-          {estimatedCost && (
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              {estimating ? 'Estimating...' : `Estimated Cost: ${estimatedCost.textInputTokens + estimatedCost.imageInputTokens + estimatedCost.imageOutputTokens} tokens`}
-            </span>
-          )}
+        </div>
+      )}
+      {(titleDirty || socialMedia !== initialSocialMedia) && (
+        <div className="flex justify-end mt-4">
+          <ButtonOutline onClick={handleSaveChanges}>
+            Save Changes
+          </ButtonOutline>
         </div>
       )}
     </div>
@@ -611,15 +605,15 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
 
   const previewTabContent = (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-4">
-          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300">Preview</h3>
-          {previewEstimatedCost && (
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              Estimated Cost: {previewEstimatedCost.textInputTokens + previewEstimatedCost.imageInputTokens + previewEstimatedCost.imageOutputTokens} tokens
-            </span>
-          )}
-        </div>
+      <div className="flex items-center gap-4 mb-4">
+        <Select
+          name="imageModel"
+          label="Image Model"
+          options={imageModels.map(m => ({ value: m.modelKey, label: m.name }))}
+          value={imageModel}
+          onChange={(e) => handleImageModelChange(e.target.value)}
+          className="flex-1"
+        />
         <ButtonOutline onClick={handleGeneratePreview}>
           {isGenerating ? (
             <Icon name="progress_activity" spin className="mr-2" />
@@ -629,6 +623,20 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
           <span>Generate Preview</span>
         </ButtonOutline>
       </div>
+      {imageModelDirty && (
+        <div className="mb-4">
+          <ButtonOutline onClick={handleSaveImageModel}>
+            Save Changes
+          </ButtonOutline>
+        </div>
+      )}
+      {previewEstimatedCost && (
+        <div className="mb-4">
+          <span className="text-sm text-gray-600 dark:text-gray-400">
+            Estimated Cost: {previewEstimatedCost.textInputTokens + previewEstimatedCost.imageInputTokens + previewEstimatedCost.imageOutputTokens} tokens
+          </span>
+        </div>
+      )}
       {previews.length > 0 || isGenerating ? (
         <div className="grid grid-cols-[repeat(auto-fill,150px)] gap-2">
           {isGenerating && (
@@ -661,23 +669,6 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       label: 'Prompt',
       content: (
         <div>
-          <div className="mb-4">
-            <div className="flex items-end gap-4">
-              <Select
-                name="imageModel"
-                label="Image Model"
-                options={imageModels.map(m => ({ value: m.modelKey, label: m.name }))}
-                value={imageModel}
-                onChange={(e) => handleImageModelChange(e.target.value)}
-                className="flex-1"
-              />
-            </div>
-            {imageModelDirty && (
-              <ButtonOutline onClick={handleSaveImageModel}>
-                Save Changes
-              </ButtonOutline>
-            )}
-          </div>
           <TextArea
             name="prompt"
             label="Image Prompt"

@@ -12,7 +12,8 @@ export const STEPS = {
   PRODUCT_IMAGE_SELECTION: 'product_image_selection',
   PRODUCT_IMAGE_PROMPT: 'product_image_prompt',
   PRODUCT_IMAGE_PREVIEW: 'product_image_preview',
-  PUBLISH: 'publish',
+  CREATE_PRODUCTS: 'create_products',
+  PUBLISH_PRODUCTS: 'publish_products',
   SOCIAL_MEDIA: 'social_media',
 };
 
@@ -22,6 +23,7 @@ export const WIZARD_STEPS = [
   'Artwork Preview',
   'Ready to Upscale',
   'Product Images',
+  'Create Products',
   'Publish Products',
   'Social Media',
 ];
@@ -42,14 +44,15 @@ export const STEP_INDEX = {
   product_image_selection: 4,
   product_image_prompt: 4,
   product_image_preview: 5,
-  publish: 6,
-  social_media: 7,
+  create_products: 6,
+  publish_products: 7,
+  social_media: 8,
 };
 
 export function buildWizardSteps(hasProjectQuestions) {
   const steps = [];
   if (hasProjectQuestions) steps.push('Project Questions');
-  steps.push('Artwork Questions', 'Artwork Preview', 'Ready to Upscale', 'Select Variations', 'Generate Images', 'Publish Products', 'Social Media');
+  steps.push('Artwork Questions', 'Artwork Preview', 'Ready to Upscale', 'Select Variations', 'Generate Images', 'Create Products', 'Publish Products', 'Social Media');
   return steps;
 }
 
@@ -63,8 +66,9 @@ export function buildStepIndex(hasProjectQuestions) {
     product_image_selection: 4 + offset,
     product_image_prompt: 5 + offset,
     product_image_preview: 5 + offset,
-    publish: 6 + offset,
-    social_media: 7 + offset,
+    create_products: 6 + offset,
+    publish_products: 7 + offset,
+    social_media: 8 + offset,
   };
 }
 
@@ -403,12 +407,10 @@ export function CollectionProvider({ children, projectId, project, collectionId:
             const [variants,] = await Promise.all([loadProductImageVariants(colId), loadImageModels()]);
             try {
               const imgRes = await api.getProductImages(colId);
-              console.log('[advanceToNextItem] getProductImages response:', imgRes.data);
               if (imgRes.data.success) {
                 const allImages = (imgRes.data.data || []).filter(img => img.active);
                 const accepted = allImages.filter(img => img.accepted);
                 const acceptedKeys = new Set(accepted.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
-                console.log('[advanceToNextItem] existing:', allImages.length, 'accepted:', accepted.length, accepted);
 
                 const activeKeys = new Set(allImages.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
 
@@ -435,7 +437,6 @@ export function CollectionProvider({ children, projectId, project, collectionId:
                 }
 
                 const missingCombos = allCombos.filter(c => !acceptedKeys.has(`${c.projectBlueprintId}:${c.variant}:${c.placement}`));
-                console.log('[advanceToNextItem] allCombos:', allCombos.length, 'missing:', missingCombos.length);
 
                 if (allCombos.length === 0) {
                   setAllProductImages(allImages);
@@ -445,7 +446,10 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
                 if (missingCombos.length === 0) {
                   setAllProductImages(allImages);
-                  setStep(STEPS.PUBLISH);
+                  try {
+                    await api.ensurePrintifyProducts({ collectionId: colId });
+                  } catch (e) { /* non-critical */ }
+                  setStep(STEPS.CREATE_PRODUCTS);
                   return;
                 }
 
@@ -457,8 +461,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
                   return;
                 }
               }
-            } catch (e) { console.log('[advanceToNextItem] getProductImages error:', e); }
-            console.log('[advanceToNextItem] falling through to PRODUCT_IMAGE_SELECTION');
+            } catch (e) {  }
             setStep(STEPS.PRODUCT_IMAGE_SELECTION);
           } else {
             setStep(STEPS.READY_TO_GENERATE);
@@ -585,7 +588,6 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
       if (qRes.data.success) {
         setProjectQuestions(qRes.data.data || []);
-        console.log('[loadData] projectQuestions loaded:', (qRes.data.data || []).length, 'items');
       }
       if (itemsRes.data.success) {
         const allItems = itemsRes.data.data || [];
@@ -593,19 +595,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       }
       if (bpRes.data.success) {
         const allBps = bpRes.data.data || [];
-        const completeBps = allBps.filter(bp => {
-          if (!bp.placementJson) return false;
-          try {
-            const placements = JSON.parse(bp.placementJson);
-            if (!placements || Object.keys(placements).length === 0) return false;
-            return Object.values(placements).some(p => {
-              if (!p.source) return false;
-              if (p.source === 'item' && p.itemId) return true;
-              if (p.source === 'custom' && p.customImageId) return true;
-              return false;
-            });
-          } catch { return false; }
-        });
+        const completeBps = allBps.filter(bp => bp.configured === true);
         setBlueprints(completeBps);
       }
 

@@ -4,5 +4,6 @@ namespace Artsy.API.Models.Projects
     {
         public Guid Id { get; set; }
         public bool PublishToPrintify { get; set; }
+        public int? PrintifyStoreId { get; set; }
     }
 }
