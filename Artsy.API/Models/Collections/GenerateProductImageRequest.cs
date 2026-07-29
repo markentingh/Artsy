@@ -13,11 +13,8 @@ namespace Artsy.API.Models.Collections
         [JsonPropertyName("projectBlueprintId")]
         public Guid ProjectBlueprintId { get; set; }
 
-        [JsonPropertyName("variant")]
-        public int Variant { get; set; }
-
-        [JsonPropertyName("placement")]
-        public int Placement { get; set; }
+        [JsonPropertyName("productImageId")]
+        public Guid ProductImageId { get; set; }
 
         [JsonPropertyName("prompt")]
         public string Prompt { get; set; } = "";
@@ -73,11 +70,8 @@ namespace Artsy.API.Models.Collections
         [JsonPropertyName("projectBlueprintId")]
         public Guid ProjectBlueprintId { get; set; }
 
-        [JsonPropertyName("variant")]
-        public int Variant { get; set; }
-
-        [JsonPropertyName("placement")]
-        public int Placement { get; set; }
+        [JsonPropertyName("productImageId")]
+        public Guid ProductImageId { get; set; }
     }
 
     public class GenerateArtworkThumbnailRequest
@@ -115,10 +109,7 @@ namespace Artsy.API.Models.Collections
         [JsonPropertyName("projectBlueprintId")]
         public Guid ProjectBlueprintId { get; set; }
 
-        [JsonPropertyName("variant")]
-        public int Variant { get; set; }
-
-        [JsonPropertyName("placement")]
-        public int Placement { get; set; }
+        [JsonPropertyName("productImageId")]
+        public Guid ProductImageId { get; set; }
     }
 }

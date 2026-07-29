@@ -225,7 +225,7 @@ namespace Artsy.API.Controllers.Admin
                             VariantId = variantId,
                             BlueprintId = blueprintId,
                             PrintProviderId = printProviderId,
-                            Title = v.TryGetProperty("title", out var vt) ? vt.GetString() ?? "" : "",
+                            Color = v.TryGetProperty("title", out var vt) ? vt.GetString() ?? "" : "",
                             Options = options,
                             DecorationMethods = vDecorationMethods
                         });
@@ -471,7 +471,7 @@ namespace Artsy.API.Controllers.Admin
                 var variants = cachedVariants.Select(v => new
                 {
                     id = v.VariantId,
-                    title = v.Title,
+                    color = v.Color,
                     size = v.Size ?? "",
                     placeholders = allPlaceholders.TryGetValue(v.VariantId, out var phs) ? phs : new List<object>(),
                     decoration_methods = JsonSerializer.Deserialize<string[]>(v.DecorationMethods) ?? Array.Empty<string>()
@@ -491,10 +491,9 @@ namespace Artsy.API.Controllers.Admin
             {
                 var images = (await _imageRepo.GetByBlueprintIdAsync(blueprintId)).ToList();
                 var imageIds = images.Select(img => img.Id).ToList();
-                var imageVariants = imageIds.Count > 0
-                    ? (await _imageVariantRepo.GetByImageIdsAsync(imageIds)).ToList()
-                    : new List<PrintifyBlueprintImageVariant>();
-                var variantsByImageId = imageVariants.GroupBy(iv => iv.ImageId).ToDictionary(g => g.Key, g => g.Select(iv => iv.VariantId).ToList());
+                var variants = (await _imageVariantRepo.GetByBlueprintImageIdsAsync(imageIds)).ToList();
+                var variantsByImageId = variants.GroupBy(v => v.BlueprintImageId)
+                    .ToDictionary(g => g.Key, g => g.Select(v => v.VariantColor).ToList());
 
                 return Json(new ApiResponse
                 {
@@ -504,7 +503,7 @@ namespace Artsy.API.Controllers.Admin
                         id = img.Id,
                         blueprintId = img.BlueprintId,
                         imageIndex = img.ImageIndex,
-                        variants = variantsByImageId.TryGetValue(img.Id, out var ivs) ? ivs : new List<int>(),
+                        variantColors = variantsByImageId.TryGetValue(img.Id, out var colors) ? colors : new List<string>(),
                         type = img.Type,
                         position = img.Position
                     })
@@ -529,46 +528,36 @@ namespace Artsy.API.Controllers.Admin
                         var type = img.TryGetProperty("type", out var tp) ? tp.GetInt32() : 0;
                         var position = img.TryGetProperty("position", out var pos) ? pos.GetInt32() : 0;
 
-                        var addedVariants = new List<int>();
-                        if (img.TryGetProperty("addedVariants", out var addArr) && addArr.ValueKind == JsonValueKind.Array)
+                        var variantColors = new List<string>();
+                        if (img.TryGetProperty("variantColors", out var vcArr) && vcArr.ValueKind == JsonValueKind.Array)
                         {
-                            foreach (var v in addArr.EnumerateArray())
-                                addedVariants.Add(v.GetInt32());
+                            foreach (var vc in vcArr.EnumerateArray())
+                                variantColors.Add(vc.GetString() ?? "");
                         }
-
-                        var removedVariants = new List<int>();
-                        if (img.TryGetProperty("removedVariants", out var remArr) && remArr.ValueKind == JsonValueKind.Array)
+                        else if (img.TryGetProperty("variantColor", out var vcSingle))
                         {
-                            foreach (var v in remArr.EnumerateArray())
-                                removedVariants.Add(v.GetInt32());
+                            variantColors.Add(vcSingle.GetString() ?? "");
                         }
 
                         var imageId = await _imageRepo.UpsertAsync(new PrintifyBlueprintImage
                         {
                             BlueprintId = blueprintId,
                             ImageIndex = imageIndex,
-                            Variants = "[]",
                             Type = type,
                             Position = position
                         });
 
-                        if (imageId != Guid.Empty)
-                        {
-                            if (addedVariants.Count > 0)
-                            {
-                                var toAdd = addedVariants.Select(vid => new PrintifyBlueprintImageVariant
-                                {
-                                    ImageId = imageId,
-                                    VariantId = vid
-                                });
-                                await _imageVariantRepo.InsertBatchAsync(toAdd);
-                            }
+                        var existingVariants = (await _imageVariantRepo.GetByBlueprintImageIdAsync(imageId)).ToList();
+                        var existingColors = existingVariants.Select(v => v.VariantColor).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                        var newColors = variantColors.Where(c => !string.IsNullOrWhiteSpace(c)).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                            if (removedVariants.Count > 0)
-                            {
-                                await _imageVariantRepo.DeleteByImageAndVariantIdsAsync(imageId, removedVariants);
-                            }
-                        }
+                        var colorsToDelete = existingColors.Except(newColors).ToList();
+                        var colorsToAdd = newColors.Except(existingColors).ToList();
+
+                        if (colorsToDelete.Count > 0)
+                            await _imageVariantRepo.DeleteAsync(imageId, colorsToDelete);
+                        if (colorsToAdd.Count > 0)
+                            await _imageVariantRepo.UpsertAsync(imageId, colorsToAdd);
                     }
                 }
 
@@ -599,20 +588,6 @@ namespace Artsy.API.Controllers.Admin
             {
                 var updated = await _variantRepo.ConvertVariantsAsync();
                 return Json(new ApiResponse { success = true, data = new { updated } });
-            }
-            catch (Exception ex)
-            {
-                return Json(new ApiResponse { success = false, message = ex.Message });
-            }
-        }
-
-        [HttpPost("convert-image-variants")]
-        public async Task<IActionResult> ConvertImageVariants()
-        {
-            try
-            {
-                var inserted = await _imageRepo.ConvertImageVariantsAsync();
-                return Json(new ApiResponse { success = true, data = new { inserted } });
             }
             catch (Exception ex)
             {

@@ -10,6 +10,9 @@ namespace Artsy.Data.Interfaces.Projects
         Task<ProjectBlueprints> CreateAsync(ProjectBlueprints blueprint);
         Task UpdateAsync(ProjectBlueprints blueprint);
         Task UpdatePlacementAsync(Guid id, string placementJson);
+        Task UpdateVariantsAsync(Guid id, string blueprintJson, int printProviderId);
+        Task UpdatePricingAsync(Guid id, string pricingJson);
+        Task UpdateDetailsAsync(Guid id, string name, string description, string prompt, string safetyInfo);
         Task DeleteAsync(Guid id);
     }
 }

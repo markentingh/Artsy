@@ -1,12 +1,13 @@
-import React, { useCallback, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import { useCollection } from '@/context/collection';
 import TextArea from '@/components/forms/textarea';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
+import Spinner from '@/components/ui/spinner';
 
 export default function ProductImagePrompt() {
   const {
-    productImageVariants, productImagePrompt, setProductImagePrompt,
+    productImagePrompt, setProductImagePrompt,
     selectedProductCombos,
     currentProductComboIndex,
     setStep, setMessage, STEPS, onClose,
@@ -21,15 +22,9 @@ export default function ProductImagePrompt() {
   const [thumbRetried, setThumbRetried] = useState({});
   const [thumbFailed, setThumbFailed] = useState({});
   const retryRef = useRef({});
-
-  const variantImages = useMemo(() => {
-    if (!combo) return [];
-    const bp = productImageVariants.find(b => b.projectBlueprintId === combo.projectBlueprintId);
-    if (!bp || !bp.variants) return [];
-    const variant = bp.variants.find(v => v.variant === combo.variant);
-    if (!variant) return [];
-    return [variant.imageUrl].filter(Boolean);
-  }, [combo, productImageVariants]);
+  const [tokenEstimate, setTokenEstimate] = useState(null);
+  const [estimatingTokens, setEstimatingTokens] = useState(false);
+  const estimateTimerRef = useRef(null);
 
   const placementItemId = useMemo(() => {
     if (!combo) return null;
@@ -39,9 +34,8 @@ export default function ProductImagePrompt() {
       const placementDict = JSON.parse(bp.placementJson);
       if (!placementDict) return null;
       const placementKeys = Object.keys(placementDict);
-      if (combo.placement < 0 || combo.placement >= placementKeys.length) return null;
-      const placementKey = placementKeys[combo.placement];
-      const placement = placementDict[placementKey];
+      if (placementKeys.length === 0) return null;
+      const placement = placementDict[placementKeys[0]];
       if (placement && placement.source === 'item' && placement.itemId) return String(placement.itemId);
     } catch { /* skip */ }
     return null;
@@ -63,8 +57,7 @@ export default function ProductImagePrompt() {
     if (!combo || !collectionId) return null;
     const img = allProductImages.find(i =>
       i.projectBlueprintId === combo.projectBlueprintId &&
-      i.variant === combo.variant &&
-      i.placement === combo.placement
+      i.productImageId === combo.productImageId
     );
     if (!img || !img.accepted) return null;
     return `/api/projects/collection/${collectionId}/product-image/${img.id}`;
@@ -72,20 +65,23 @@ export default function ProductImagePrompt() {
 
   const allImages = useMemo(() => {
     const productImg = existingProductImage ? [existingProductImage] : [];
-    return [...productImg, ...variantImages, ...artworkImages.map(a => a.thumbUrl)];
-  }, [existingProductImage, artworkImages, variantImages]);
+    const printifyImg = combo?.printifyImageUrl ? [combo.printifyImageUrl] : [];
+    return [...productImg, ...printifyImg, ...artworkImages.map(a => a.thumbUrl)];
+  }, [existingProductImage, combo, artworkImages]);
 
   const fullSizeImages = useMemo(() => {
     const productImg = existingProductImage ? [existingProductImage] : [];
-    return [...productImg, ...variantImages, ...artworkImages.map(a => a.url)];
-  }, [existingProductImage, artworkImages, variantImages]);
+    const printifyImg = combo?.printifyImageUrl ? [combo.printifyImageUrl] : [];
+    return [...productImg, ...printifyImg, ...artworkImages.map(a => a.url)];
+  }, [existingProductImage, combo, artworkImages]);
 
   const handleImageError = useCallback(async (index) => {
     if (retryRef.current[index]) return;
     retryRef.current[index] = true;
 
     const productImgCount = existingProductImage ? 1 : 0;
-    const artworkIndex = index - productImgCount - variantImages.length;
+    const printifyImgCount = combo?.printifyImageUrl ? 1 : 0;
+    const artworkIndex = index - productImgCount - printifyImgCount;
     const artwork = artworkImages[artworkIndex];
     if (!artwork || !collectionId) {
       setThumbFailed(prev => ({ ...prev, [index]: true }));
@@ -102,7 +98,7 @@ export default function ProductImagePrompt() {
     } catch {
       setThumbFailed(prev => ({ ...prev, [index]: true }));
     }
-  }, [artworkImages, variantImages, existingProductImage, collectionId, api]);
+  }, [artworkImages, existingProductImage, combo, collectionId, api]);
 
   const imagesWithRetry = useMemo(() => {
     return allImages.map((url, i) => {
@@ -116,6 +112,33 @@ export default function ProductImagePrompt() {
   const displayImages = failedCount > 0 && imagesWithRetry.length === 0
     ? []
     : imagesWithRetry;
+
+  useEffect(() => {
+    if (!combo || !collectionId || !projectId) return;
+    if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current);
+    estimateTimerRef.current = setTimeout(async () => {
+      setEstimatingTokens(true);
+      try {
+        const res = await api.estimateProductImageTokens({
+          projectId,
+          collectionId,
+          projectBlueprintId: combo.projectBlueprintId,
+          productImageId: combo.productImageId,
+          prompt: productImagePrompt,
+        });
+        if (res.data.success) {
+          setTokenEstimate(res.data.data);
+        } else {
+          setTokenEstimate(null);
+        }
+      } catch {
+        setTokenEstimate(null);
+      } finally {
+        setEstimatingTokens(false);
+      }
+    }, 2000);
+    return () => { if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current); };
+  }, [combo, collectionId, projectId, api, productImagePrompt]);
 
   const handleNext = useCallback(() => {
     if (!productImagePrompt.trim()) {
@@ -132,16 +155,14 @@ export default function ProductImagePrompt() {
     }
     const existing = allProductImages.find(img =>
       img.projectBlueprintId === combo.projectBlueprintId &&
-      img.variant === combo.variant &&
-      img.placement === combo.placement
+      img.productImageId === combo.productImageId
     );
     if (!existing || !existing.accepted) {
       try {
         await api.deleteProductImage({
           collectionId,
           projectBlueprintId: combo.projectBlueprintId,
-          variant: combo.variant,
-          placement: combo.placement,
+          productImageId: combo.productImageId,
         });
       } catch (e) {
         console.error('deleteProductImage error:', e?.response?.data || e);
@@ -162,18 +183,16 @@ export default function ProductImagePrompt() {
     }
   }, [currentProductComboIndex, selectedProductCombos.length, setStep, STEPS, setCurrentProductComboIndex]);
 
-  const tokenCost = combo ? (combo.tokens || 2) : 0;
-
   return (
     <div className="flex flex-col h-full">
       <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-4">
-        {selectedProductCombos.length} combination{selectedProductCombos.length !== 1 ? 's' : ''} selected for product image generation.
+        {selectedProductCombos.length} product image{selectedProductCombos.length !== 1 ? 's' : ''} to generate.
       </p>
 
       {combo && (
         <div className="flex flex-col items-center mb-4">
           <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            {combo.blueprintName} — {combo.variantTitle} - {combo.placementName}
+            {combo.blueprintName} — {combo.title} - {combo.variantColor}
           </h4>
           {displayImages.length > 0 && (
             <div className="w-full max-w-[300px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 mb-2">
@@ -194,9 +213,6 @@ export default function ProductImagePrompt() {
               <span className="text-sm text-gray-500 dark:text-gray-400">No Thumbnail</span>
             </div>
           )}
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Token cost: {tokenCost}
-          </p>
         </div>
       )}
 
@@ -209,6 +225,24 @@ export default function ProductImagePrompt() {
           placeholder="Describe how the product should be presented..."
           rows={4}
         />
+        {estimatingTokens ? (
+          <div className="flex items-center gap-2 mt-2 text-sm text-gray-500 dark:text-gray-400">
+            <Spinner className="text-sm" />
+            <span>Estimating token cost...</span>
+          </div>
+        ) : tokenEstimate ? (
+          <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 space-y-1">
+            <div>
+              <span className="font-medium">{tokenEstimate.totalTokens.toLocaleString()}</span> tokens
+              {tokenEstimate.estimatedCostUSD > 0 && (
+                <span> · est. ${tokenEstimate.estimatedCostUSD.toFixed(4)} USD</span>
+              )}
+            </div>
+            <div className="text-xs">
+              {tokenEstimate.textInputTokens.toLocaleString()} text input · {tokenEstimate.imageInputTokens.toLocaleString()} image input · {tokenEstimate.imageOutputTokens.toLocaleString()} output · {tokenEstimate.inputImageCount} reference image{tokenEstimate.inputImageCount !== 1 ? 's' : ''}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="buttons flex justify-end gap-2 mt-auto">

@@ -13,7 +13,6 @@ import ReadyToGenerate from './collection-steps/ReadyToGenerate';
 import PublishProducts from './collection-steps/PublishProducts';
 import CreateProducts from './collection-steps/CreateProducts';
 import PublishProductsStep from './collection-steps/PublishProductsStep';
-import ProductImageSelection from './collection-steps/ProductImageSelection';
 import ProductImagePrompt from './collection-steps/ProductImagePrompt';
 import ProductImagePreview from './collection-steps/ProductImagePreview';
 import CollectionSetupList from './CollectionSetupList';
@@ -24,7 +23,6 @@ const stepTitle = (step) => {
     case STEPS.ARTWORK_QUESTIONS: return 'New Collection - Artwork Questions';
     case STEPS.ARTWORK_PREVIEW: return 'New Collection - Artwork Preview';
     case STEPS.READY_TO_GENERATE: return 'New Collection - Ready to Upscale';
-    case STEPS.PRODUCT_IMAGE_SELECTION: return 'New Collection - Product Image Selection';
     case STEPS.PRODUCT_IMAGE_PROMPT: return 'New Collection - Product Image Prompt';
     case STEPS.PRODUCT_IMAGE_PREVIEW: return 'New Collection - Product Images';
     case STEPS.CREATE_PRODUCTS: return 'New Collection - Create Products';
@@ -88,7 +86,6 @@ function CollectionWizard() {
                 {step === STEPS.ARTWORK_QUESTIONS && <ArtworkQuestions />}
                 {step === STEPS.ARTWORK_PREVIEW && <ArtworkPreview />}
                 {step === STEPS.READY_TO_GENERATE && <ReadyToGenerate />}
-                {step === STEPS.PRODUCT_IMAGE_SELECTION && <ProductImageSelection />}
                 {step === STEPS.PRODUCT_IMAGE_PROMPT && <ProductImagePrompt />}
                 {step === STEPS.PRODUCT_IMAGE_PREVIEW && <ProductImagePreview />}
                 {step === STEPS.CREATE_PRODUCTS && <CreateProducts />}
@@ -102,7 +99,6 @@ function CollectionWizard() {
               {step === STEPS.ARTWORK_QUESTIONS && <ArtworkQuestions />}
               {step === STEPS.ARTWORK_PREVIEW && <ArtworkPreview />}
               {step === STEPS.READY_TO_GENERATE && <ReadyToGenerate />}
-              {step === STEPS.PRODUCT_IMAGE_SELECTION && <ProductImageSelection />}
               {step === STEPS.PRODUCT_IMAGE_PROMPT && <ProductImagePrompt />}
               {step === STEPS.PRODUCT_IMAGE_PREVIEW && <ProductImagePreview />}
               {step === STEPS.CREATE_PRODUCTS && <CreateProducts />}
@@ -132,8 +128,10 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
     setStep, setCurrentItemIndex, loadItemData,
     fetchEstimate, setInitialLoading,
     STEPS, reset, loadData,
-    loadProductImageVariants, loadImageModels, ensureCollection,
+    loadImageModels, ensureCollection,
     api, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex,
+    blueprints, setProductBlueprintImages, setProductImagePrompt,
+    printifyImageIndexByColor,
   } = useCollection();
 
   const [aiItemsLoaded, setAiItemsLoaded] = useState(false);
@@ -206,49 +204,30 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
             (async () => {
               const colId = initialCollectionId || await ensureCollection();
               if (colId) {
-                const [variants,] = await Promise.all([loadProductImageVariants(colId), loadImageModels()]);
+                await loadImageModels();
                 try {
+                  const pbImgRes = await api.getAllProductBlueprintImages(projectId);
+                  const allPbImages = pbImgRes.data.success ? (pbImgRes.data.data || []) : [];
+                  setProductBlueprintImages(allPbImages);
+
                   const imgRes = await api.getProductImages(colId);
                   if (imgRes.data.success) {
                     const allImages = (imgRes.data.data || []).filter(img => img.active);
-                    const accepted = allImages.filter(img => img.accepted);
-                    const acceptedKeys = new Set(accepted.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
+                    setAllProductImages(allImages);
 
-                    const activeKeys = new Set(allImages.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
+                    const acceptedProductImageIds = new Set(
+                      allImages.filter(img => img.accepted).map(img => img.productImageId)
+                    );
 
-                    const allCombos = [];
-                    for (const bp of variants) {
-                      for (const v of (bp.variants || [])) {
-                        for (const c of (v.combos || [])) {
-                          if (c.hasArtwork) {
-                            const key = `${bp.projectBlueprintId}:${v.variant}:${c.placementIndex}`;
-                            if (activeKeys.has(key)) {
-                              allCombos.push({
-                                projectBlueprintId: bp.projectBlueprintId,
-                                blueprintName: bp.blueprintName,
-                                variant: v.variant,
-                                variantTitle: v.variantTitle,
-                                placement: c.placementIndex,
-                                placementName: c.placementName,
-                                tokens: c.tokens,
-                              });
-                            }
-                          }
-                        }
-                      }
-                    }
+                    const missing = allPbImages.filter(pbi => !acceptedProductImageIds.has(pbi.id));
 
-                    const missingCombos = allCombos.filter(c => !acceptedKeys.has(`${c.projectBlueprintId}:${c.variant}:${c.placement}`));
-
-                    if (allCombos.length === 0) {
-                      setAllProductImages(allImages);
-                      setStep(STEPS.PRODUCT_IMAGE_SELECTION);
+                    if (allPbImages.length === 0) {
+                      setStep(STEPS.CREATE_PRODUCTS);
                       setInitialLoading(false);
                       return;
                     }
 
-                    if (missingCombos.length === 0) {
-                      setAllProductImages(allImages);
+                    if (missing.length === 0) {
                       try {
                         await api.ensurePrintifyProducts({ collectionId: colId });
                       } catch (e) { /* non-critical */ }
@@ -257,17 +236,33 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
                       return;
                     }
 
-                    if (missingCombos.length < allCombos.length) {
-                      setSelectedProductCombos(missingCombos);
-                      setCurrentProductComboIndex(0);
-                      setAllProductImages(allImages);
-                      setStep(STEPS.PRODUCT_IMAGE_PROMPT);
-                      setInitialLoading(false);
-                      return;
-                    }
+                    const combos = missing.map(pbi => {
+                      const bp = blueprints.find(b => b.id === pbi.projectBlueprintId);
+                      const colorMap = printifyImageIndexByColor[pbi.projectBlueprintId] || {};
+                      const imageIndex = colorMap[pbi.variantColor];
+                      const printifyImageUrl = (bp && imageIndex !== undefined)
+                        ? `/api/printify/blueprint-image?blueprintId=${bp.blueprintId}&index=${imageIndex}&thumb=true`
+                        : null;
+                      return {
+                        productImageId: pbi.id,
+                        projectBlueprintId: pbi.projectBlueprintId,
+                        blueprintName: pbi.blueprintName,
+                        title: pbi.title,
+                        variantColor: pbi.variantColor,
+                        prompt: pbi.prompt || '',
+                        printifyImageUrl,
+                      };
+                    });
+                    setSelectedProductCombos(combos);
+                    setCurrentProductComboIndex(0);
+                    setProductImagePrompt(combos[0]?.prompt || '');
+                    setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+                    setInitialLoading(false);
+                    return;
                   }
                 } catch (e) {  }
-                setStep(STEPS.PRODUCT_IMAGE_SELECTION);
+                setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+                setInitialLoading(false);
               } else {
                 setStep(STEPS.READY_TO_GENERATE);
                 fetchEstimate();

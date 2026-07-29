@@ -64,6 +64,24 @@ namespace Artsy.Data.Repositories.Projects
             await _dbConnection.ExecuteAsync(query, new { id, placementJson });
         }
 
+        public async Task UpdateVariantsAsync(Guid id, string blueprintJson, int printProviderId)
+        {
+            const string query = @"UPDATE public.""ProjectBlueprints"" SET ""BlueprintJson"" = @blueprintJson, ""PrintProviderId"" = @printProviderId WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, blueprintJson, printProviderId });
+        }
+
+        public async Task UpdatePricingAsync(Guid id, string pricingJson)
+        {
+            const string query = @"UPDATE public.""ProjectBlueprints"" SET ""PricingJson"" = @pricingJson WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, pricingJson });
+        }
+
+        public async Task UpdateDetailsAsync(Guid id, string name, string description, string prompt, string safetyInfo)
+        {
+            const string query = @"UPDATE public.""ProjectBlueprints"" SET ""Name"" = @name, ""Description"" = @description, ""Prompt"" = @prompt, ""SafetyInfo"" = @safetyInfo WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, name, description, prompt, safetyInfo });
+        }
+
         public async Task DeleteAsync(Guid id)
         {
             const string query = @"UPDATE public.""ProjectBlueprints"" SET ""Status"" = 0 WHERE ""Id"" = @id";

@@ -60,8 +60,8 @@ namespace Artsy.API.Controllers
                         {
                             id = p.Id,
                             projectBlueprintId = p.ProjectBlueprintId,
-                            variant = p.Variant,
-                            placement = p.Placement,
+                            productImageId = p.ProductImageId,
+                            prompt = p.Prompt,
                             accepted = p.Accepted,
                             active = p.Active
                         })

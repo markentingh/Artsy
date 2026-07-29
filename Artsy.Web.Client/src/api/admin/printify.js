@@ -34,8 +34,6 @@ const Printify = (args) => Api({ ...args, useToken: true }).endpoints(({ api }) 
       api.post(`${apiPath}/blueprints/${blueprintId}/images`, data),
     convertVariants: () =>
       api.post(`${apiPath}/convert-variants`),
-    convertImageVariants: () =>
-      api.post(`${apiPath}/convert-image-variants`),
   };
 });
 

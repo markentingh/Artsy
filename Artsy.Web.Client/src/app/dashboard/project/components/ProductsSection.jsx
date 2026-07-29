@@ -15,7 +15,7 @@ import ConfigureProductBlueprint from './ConfigureProductBlueprint';
 
 export default function ProductsSection({ projectId, onProductsChanged }) {
   const session = useSession();
-  const { getBlueprints, getBlueprintsList, createBlueprint, deleteBlueprint, updateBlueprint, getItems, getItemPreviews, getItemPreviewUrl } = Projects(session);
+  const { getBlueprints, getBlueprintsList, deleteBlueprint, getItems, getItemPreviews, getItemPreviewUrl } = Projects(session);
   const { getBlueprintImageUrl, getBlueprintImages } = Printify(session);
 
   const [blueprints, setBlueprints] = useState([]);
@@ -101,57 +101,11 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
     }
   };
 
-  const handleSaveBlueprintConfig = async (config) => {
-    if (editingBlueprint) {
-      try {
-        const resp = await updateBlueprint({
-          id: editingBlueprint.id,
-          blueprintId: config.blueprintId,
-          name: config.name,
-          blueprintJson: config.blueprintJson,
-          placementJson: config.placementJson || '',
-          prompt: config.prompt || '',
-          description: config.description || '',
-          safetyInfo: config.safetyInfo || '',
-          pricingJson: config.pricingJson || '[]',
-          printProviderId: config.printProviderId || 0,
-        });
-        if (resp.data.success) {
-          await fetchBlueprints();
-          setConfigBlueprint(null);
-          setEditingBlueprint(null);
-          if (onProductsChanged) onProductsChanged();
-        } else {
-          setMessage({ type: 'error', text: resp.data.message || 'Failed to update product' });
-        }
-      } catch (error) {
-        setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to update product' });
-      }
-    } else {
-      try {
-        const resp = await createBlueprint({
-          projectId,
-          blueprintId: config.blueprintId,
-          name: config.name,
-          blueprintJson: config.blueprintJson,
-          placementJson: config.placementJson || '',
-          prompt: config.prompt || '',
-          description: config.description || '',
-          safetyInfo: config.safetyInfo || '',
-          pricingJson: config.pricingJson || '[]',
-          printProviderId: config.printProviderId || 0,
-        });
-        if (resp.data.success) {
-          await fetchBlueprints();
-          setConfigBlueprint(null);
-          if (onProductsChanged) onProductsChanged();
-        } else {
-          setMessage({ type: 'error', text: resp.data.message || 'Failed to save product' });
-        }
-      } catch (error) {
-        setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save product' });
-      }
-    }
+  const handleSaveBlueprintConfig = async () => {
+    await fetchBlueprints();
+    setConfigBlueprint(null);
+    setEditingBlueprint(null);
+    if (onProductsChanged) onProductsChanged();
   };
 
   if (!mount) {
@@ -198,15 +152,12 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
                     const cfg = (() => {
                       try { return JSON.parse(bp.blueprintJson || '{}'); } catch { return {}; }
                     })();
-                    const selectedVariantIds = new Set((cfg.variantIds || []).map(String));
+                    const selectedColors = new Set((cfg.variantColors || []).map(String));
                     const imgData = blueprintImageMap[bp.blueprintId] || [];
                     const matchingIndices = imgData
-                      .filter(img => (img.variants || []).some(vId => selectedVariantIds.has(String(vId))))
+                      .filter(img => (img.variantColors || []).some(c => selectedColors.has(String(c))))
                       .map(img => img.imageIndex);
-                    const indices = matchingIndices.length > 0
-                      ? matchingIndices
-                      : Array.from({ length: bp.imageCount }, (_, i) => i);
-                    return indices.map(i => getBlueprintImageUrl(bp.blueprintId, i, true));
+                    return matchingIndices.map(i => getBlueprintImageUrl(bp.blueprintId, i, true));
                   })()}
                   alt={bp.name}
                   singleImage

@@ -14,53 +14,68 @@ namespace Artsy.Data.Repositories
             _dbConnection = dbConnection;
         }
 
-        public async Task<IEnumerable<PrintifyBlueprintImageVariant>> GetByImageIdAsync(Guid imageId)
+        public async Task<IEnumerable<PrintifyBlueprintImageVariant>> GetByBlueprintImageIdAsync(Guid blueprintImageId)
         {
-            const string query = @"SELECT * FROM public.""PrintifyBlueprintImageVariants"" WHERE ""ImageId"" = @imageId";
-            return await _dbConnection.QueryAsync<PrintifyBlueprintImageVariant>(query, new { imageId });
+            const string query = @"SELECT * FROM public.""PrintifyBlueprintImageVariants"" WHERE ""BlueprintImageId"" = @blueprintImageId ORDER BY ""VariantColor""";
+            return await _dbConnection.QueryAsync<PrintifyBlueprintImageVariant>(query, new { blueprintImageId });
         }
 
-        public async Task<IEnumerable<PrintifyBlueprintImageVariant>> GetByImageIdsAsync(IEnumerable<Guid> imageIds)
+        public async Task<IEnumerable<PrintifyBlueprintImageVariant>> GetByBlueprintImageIdsAsync(IEnumerable<Guid> blueprintImageIds)
         {
-            var ids = imageIds.ToList();
+            var ids = blueprintImageIds.ToList();
             if (ids.Count == 0) return Enumerable.Empty<PrintifyBlueprintImageVariant>();
-            const string query = @"SELECT * FROM public.""PrintifyBlueprintImageVariants"" WHERE ""ImageId"" = ANY(@imageIds)";
-            return await _dbConnection.QueryAsync<PrintifyBlueprintImageVariant>(query, new { imageIds = ids.ToArray() });
+            const string query = @"SELECT * FROM public.""PrintifyBlueprintImageVariants"" WHERE ""BlueprintImageId"" = ANY(@blueprintImageIds) ORDER BY ""BlueprintImageId"", ""VariantColor""";
+            return await _dbConnection.QueryAsync<PrintifyBlueprintImageVariant>(query, new { blueprintImageIds = ids.ToArray() });
         }
 
-        public async Task<IEnumerable<PrintifyBlueprintImageVariant>> GetByBlueprintIdsAsync(IEnumerable<int> blueprintIds)
+        public async Task UpsertAsync(Guid blueprintImageId, string variantColor)
         {
-            var ids = blueprintIds.ToList();
-            if (ids.Count == 0) return Enumerable.Empty<PrintifyBlueprintImageVariant>();
             const string query = @"
-                SELECT piv.* 
-                FROM public.""PrintifyBlueprintImageVariants"" piv
-                INNER JOIN public.""PrintifyBlueprintImages"" pbi ON piv.""ImageId"" = pbi.""Id""
-                WHERE pbi.""BlueprintId"" = ANY(@blueprintIds)";
-            return await _dbConnection.QueryAsync<PrintifyBlueprintImageVariant>(query, new { blueprintIds = ids.ToArray() });
+                INSERT INTO public.""PrintifyBlueprintImageVariants"" (""BlueprintImageId"", ""VariantColor"", ""DateCreated"", ""DateUpdated"")
+                VALUES (@blueprintImageId, @variantColor, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT (""BlueprintImageId"", ""VariantColor"")
+                DO NOTHING";
+            await _dbConnection.ExecuteAsync(query, new { blueprintImageId, variantColor });
         }
 
-        public async Task DeleteByImageIdAsync(Guid imageId)
+        public async Task DeleteByBlueprintImageIdAsync(Guid blueprintImageId)
         {
-            const string query = @"DELETE FROM public.""PrintifyBlueprintImageVariants"" WHERE ""ImageId"" = @imageId";
-            await _dbConnection.ExecuteAsync(query, new { imageId });
+            const string query = @"DELETE FROM public.""PrintifyBlueprintImageVariants"" WHERE ""BlueprintImageId"" = @blueprintImageId";
+            await _dbConnection.ExecuteAsync(query, new { blueprintImageId });
         }
 
-        public async Task DeleteByImageAndVariantIdsAsync(Guid imageId, IEnumerable<int> variantIds)
+        public async Task DeleteByBlueprintImageIdsAsync(IEnumerable<Guid> blueprintImageIds)
         {
-            var ids = variantIds.ToList();
+            var ids = blueprintImageIds.ToList();
             if (ids.Count == 0) return;
-            const string query = @"DELETE FROM public.""PrintifyBlueprintImageVariants"" WHERE ""ImageId"" = @imageId AND ""VariantId"" = ANY(@variantIds)";
-            await _dbConnection.ExecuteAsync(query, new { imageId, variantIds = ids.ToArray() });
+            const string query = @"DELETE FROM public.""PrintifyBlueprintImageVariants"" WHERE ""BlueprintImageId"" = ANY(@blueprintImageIds)";
+            await _dbConnection.ExecuteAsync(query, new { blueprintImageIds = ids.ToArray() });
         }
 
-        public async Task InsertBatchAsync(IEnumerable<PrintifyBlueprintImageVariant> imageVariants)
+        public async Task DeleteAsync(Guid blueprintImageId, string variantColor)
         {
+            const string query = @"DELETE FROM public.""PrintifyBlueprintImageVariants"" WHERE ""BlueprintImageId"" = @blueprintImageId AND ""VariantColor"" = @variantColor";
+            await _dbConnection.ExecuteAsync(query, new { blueprintImageId, variantColor });
+        }
+
+        public async Task UpsertAsync(Guid blueprintImageId, IEnumerable<string> variantColors)
+        {
+            var colors = variantColors.ToList();
+            if (colors.Count == 0) return;
             const string query = @"
-                INSERT INTO public.""PrintifyBlueprintImageVariants"" (""ImageId"", ""VariantId"")
-                VALUES (@ImageId, @VariantId)
-                ON CONFLICT (""ImageId"", ""VariantId"") DO NOTHING";
-            await _dbConnection.ExecuteAsync(query, imageVariants);
+                INSERT INTO public.""PrintifyBlueprintImageVariants"" (""BlueprintImageId"", ""VariantColor"", ""DateCreated"", ""DateUpdated"")
+                VALUES (@blueprintImageId, @variantColor, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT (""BlueprintImageId"", ""VariantColor"")
+                DO NOTHING";
+            await _dbConnection.ExecuteAsync(query, colors.Select(c => new { blueprintImageId, variantColor = c }));
+        }
+
+        public async Task DeleteAsync(Guid blueprintImageId, IEnumerable<string> variantColors)
+        {
+            var colors = variantColors.ToList();
+            if (colors.Count == 0) return;
+            const string query = @"DELETE FROM public.""PrintifyBlueprintImageVariants"" WHERE ""BlueprintImageId"" = @blueprintImageId AND ""VariantColor"" = ANY(@variantColors)";
+            await _dbConnection.ExecuteAsync(query, new { blueprintImageId, variantColors = colors.ToArray() });
         }
     }
 }

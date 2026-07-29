@@ -330,7 +330,7 @@ namespace Artsy.API.Controllers
                 var variants = cachedVariants.Select(v => new
                 {
                     id = v.VariantId,
-                    title = v.Title,
+                    color = v.Color,
                     size = v.Size ?? "",
                     placeholders = allPlaceholders.TryGetValue(v.VariantId, out var phs) ? phs : new List<object>(),
                     decoration_methods = JsonSerializer.Deserialize<string[]>(v.DecorationMethods) ?? Array.Empty<string>()
@@ -401,10 +401,9 @@ namespace Artsy.API.Controllers
             {
                 var images = (await _imageRepo.GetByBlueprintIdAsync(blueprintId)).ToList();
                 var imageIds = images.Select(img => img.Id).ToList();
-                var imageVariants = imageIds.Count > 0
-                    ? (await _imageVariantRepo.GetByImageIdsAsync(imageIds)).ToList()
-                    : new List<PrintifyBlueprintImageVariant>();
-                var variantsByImageId = imageVariants.GroupBy(iv => iv.ImageId).ToDictionary(g => g.Key, g => g.Select(iv => iv.VariantId).ToList());
+                var variants = (await _imageVariantRepo.GetByBlueprintImageIdsAsync(imageIds)).ToList();
+                var variantsByImageId = variants.GroupBy(v => v.BlueprintImageId)
+                    .ToDictionary(g => g.Key, g => g.Select(v => v.VariantColor).ToList());
 
                 return Json(new ApiResponse
                 {
@@ -414,7 +413,7 @@ namespace Artsy.API.Controllers
                         id = img.Id,
                         blueprintId = img.BlueprintId,
                         imageIndex = img.ImageIndex,
-                        variants = variantsByImageId.TryGetValue(img.Id, out var ivs) ? ivs : new List<int>(),
+                        variantColors = variantsByImageId.TryGetValue(img.Id, out var colors) ? colors : new List<string>(),
                         type = img.Type,
                         position = img.Position
                     })

@@ -11,7 +11,7 @@ namespace Artsy.API.Controllers
     [Authorize]
     public partial class ProjectsController
     {
-        private static bool IsBlueprintConfigured(string name, string description, string blueprintJson, string placementJson, string pricingJson)
+        private static bool IsBlueprintConfigured(string name, string description, string blueprintJson, string placementJson, string pricingJson, IEnumerable<ProjectBlueprintProductImage>? productImages = null)
         {
             if (string.IsNullOrWhiteSpace(name)) return false;
             if (string.IsNullOrWhiteSpace(description)) return false;
@@ -37,7 +37,7 @@ namespace Artsy.API.Controllers
 
                 var placements = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(placementJson);
                 if (placements == null || placements.Count == 0) return false;
-                return placements.Any(p =>
+                var hasPlacements = placements.Any(p =>
                 {
                     if (!p.Value.TryGetProperty("source", out var srcEl)) return false;
                     var source = srcEl.GetString() ?? "";
@@ -48,6 +48,12 @@ namespace Artsy.API.Controllers
                         return true;
                     return false;
                 });
+                if (!hasPlacements) return false;
+
+                if (productImages == null || !productImages.Any())
+                    return false;
+
+                return productImages.All(img => !string.IsNullOrWhiteSpace(img.Prompt));
             }
             catch { return false; }
         }
@@ -69,9 +75,25 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
                 var blueprints = await _projectBlueprintRepository.GetListByProjectIdAsync(projectId);
+                var blueprintIds = blueprints.Select(b => b.Id).ToList();
+                var productImages = await _projectBlueprintProductImageRepository.GetByBlueprintIdsAsync(blueprintIds);
+                var imagesByBlueprint = productImages.GroupBy(img => img.ProjectBlueprintId).ToDictionary(g => g.Key, g => g.ToList());
+                
+                var printifyBlueprintIds = blueprints.Select(b => b.BlueprintId).Distinct().ToList();
+                var printifyImages = await _printifyBlueprintImageRepository.GetByBlueprintIdsAsync(printifyBlueprintIds);
+                var printifyImagesByBlueprint = printifyImages.GroupBy(img => img.BlueprintId).ToDictionary(g => g.Key, g => g.ToList());
+                var printifyImageVariants = await _printifyBlueprintImageVariantRepository.GetByBlueprintImageIdsAsync(printifyImages.Select(img => img.Id));
+                var printifyImageVariantsByImageId = printifyImageVariants.GroupBy(v => v.BlueprintImageId).ToDictionary(g => g.Key, g => g.Select(v => v.VariantColor).ToList());
+
                 foreach (var b in blueprints)
-                    b.Configured = IsBlueprintConfigured(b.Name, b.Description, b.BlueprintJson, b.PlacementJson, b.PricingJson);
-                return Json(new ApiResponse { success = true, data = blueprints });
+                {
+                    var bpImages = imagesByBlueprint.TryGetValue(b.Id, out var imgs) ? imgs : null;
+                    b.Configured = IsBlueprintConfigured(b.Name, b.Description, b.BlueprintJson, b.PlacementJson, b.PricingJson, bpImages);
+                }
+                return Json(new ApiResponse { success = true, data = blueprints.Select(b => new {
+                    b.Id, b.BlueprintId, b.Name, b.BlueprintJson, b.PlacementJson, b.Prompt, b.Description, b.SafetyInfo, b.PricingJson, b.PrintProviderId, b.Configured, b.ImageCount,
+                    printifyImages = printifyImagesByBlueprint.TryGetValue(b.BlueprintId, out var pImgs) ? pImgs.Select(img => new { variantColors = printifyImageVariantsByImageId.TryGetValue(img.Id, out var colors) ? colors : new List<string>(), img.ImageIndex }).Cast<object>() : Enumerable.Empty<object>()
+                }) });
             }
             catch (Exception ex)
             {
@@ -96,13 +118,16 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
                 var blueprints = await _projectBlueprintRepository.GetListByProjectIdAsync(projectId);
+                var blueprintIds = blueprints.Select(b => b.Id).ToList();
+                var productImages = await _projectBlueprintProductImageRepository.GetByBlueprintIdsAsync(blueprintIds);
+                var imagesByBlueprint = productImages.GroupBy(img => img.ProjectBlueprintId).ToDictionary(g => g.Key, g => g.ToList());
                 var result = blueprints.Select(b => new ProjectBlueprintListResponse
                 {
                     Id = b.Id,
                     BlueprintId = b.BlueprintId,
                     Name = b.Name,
                     BlueprintJson = b.BlueprintJson,
-                    Configured = IsBlueprintConfigured(b.Name, b.Description, b.BlueprintJson, b.PlacementJson, b.PricingJson),
+                    Configured = IsBlueprintConfigured(b.Name, b.Description, b.BlueprintJson, b.PlacementJson, b.PricingJson, imagesByBlueprint.TryGetValue(b.Id, out var imgs) ? imgs : null),
                     ImageCount = b.ImageCount
                 });
                 return Json(new ApiResponse { success = true, data = result });
@@ -266,7 +291,7 @@ namespace Artsy.API.Controllers
                             placeholderList.Add(new
                             {
                                 variantId = v.VariantId,
-                                variantTitle = v.Title,
+                                variantColor = v.Color,
                                 position = ph.Position,
                                 decorationMethod = ph.DecorationMethod,
                                 height = ph.Height,
@@ -314,6 +339,96 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
                 await _projectBlueprintRepository.UpdatePlacementAsync(request.Id, request.PlacementJson ?? "");
+                return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("update-blueprint-variants")]
+        public async Task<IActionResult> UpdateBlueprintVariants([FromBody] UpdateBlueprintVariantsRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.Id == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Blueprint ID is required." });
+
+            try
+            {
+                var blueprint = await _projectBlueprintRepository.GetByIdAsync(request.Id);
+                if (blueprint == null)
+                    return Json(new ApiResponse { success = false, message = "Blueprint not found." });
+
+                var project = await _projectRepository.GetByIdAsync(blueprint.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                await _projectBlueprintRepository.UpdateVariantsAsync(request.Id, request.BlueprintJson ?? "", request.PrintProviderId);
+                return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("update-blueprint-pricing")]
+        public async Task<IActionResult> UpdateBlueprintPricing([FromBody] UpdateBlueprintPricingRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.Id == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Blueprint ID is required." });
+
+            try
+            {
+                var blueprint = await _projectBlueprintRepository.GetByIdAsync(request.Id);
+                if (blueprint == null)
+                    return Json(new ApiResponse { success = false, message = "Blueprint not found." });
+
+                var project = await _projectRepository.GetByIdAsync(blueprint.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                await _projectBlueprintRepository.UpdatePricingAsync(request.Id, request.PricingJson ?? "[]");
+                return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("update-blueprint-details")]
+        public async Task<IActionResult> UpdateBlueprintDetails([FromBody] UpdateBlueprintDetailsRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.Id == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Blueprint ID is required." });
+
+            if (string.IsNullOrWhiteSpace(request.Name))
+                return Json(new ApiResponse { success = false, message = "Name is required." });
+
+            try
+            {
+                var blueprint = await _projectBlueprintRepository.GetByIdAsync(request.Id);
+                if (blueprint == null)
+                    return Json(new ApiResponse { success = false, message = "Blueprint not found." });
+
+                var project = await _projectRepository.GetByIdAsync(blueprint.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                await _projectBlueprintRepository.UpdateDetailsAsync(request.Id, request.Name.Trim(), request.Description ?? "", request.Prompt ?? "", request.SafetyInfo ?? "");
                 return Json(new ApiResponse { success = true });
             }
             catch (Exception ex)

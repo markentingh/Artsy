@@ -13,11 +13,12 @@ export default function Input({
   note,
   placeholder,
   disabled = false,
+  formPadding = true,
   className = '',
   ...args
 }) {
   return (
-    <div className={`mb-4 ${className}`}>
+    <div className={`${formPadding ? 'mb-4 ' : ''}${className}`}>
       {(label || labelAction) && (
         <div className="flex items-center justify-between mb-1">
           {label && (

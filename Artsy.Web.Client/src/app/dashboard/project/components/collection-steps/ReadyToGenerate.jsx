@@ -15,9 +15,10 @@ export default function ReadyToGenerate() {
     setArtworkPreview, onClose, api,
     projectId, cancelRef, STEPS,
     upscaleComplete, setUpscaleComplete,
-    setStep, loadProductImageVariants, loadImageModels,
+    setStep, loadImageModels,
     ensureCollection, setAllProductImages,
     setSelectedProductCombos, setCurrentProductComboIndex,
+    setProductBlueprintImages, setProductImagePrompt,
   } = useCollection();
 
   const acceptedArtworks = collectionArtwork.filter(a => a.active && a.imageModel !== 'custom');
@@ -91,65 +92,65 @@ export default function ReadyToGenerate() {
   const handleNext = useCallback(async () => {
     const colId = collectionId || await ensureCollection();
     if (!colId) return;
-    const [variants,] = await Promise.all([loadProductImageVariants(colId), loadImageModels()]);
+    await loadImageModels();
 
     try {
+      // Load product blueprint images for each blueprint
+      const allPbImages = [];
+      for (const bp of blueprints) {
+        try {
+          const pbiResp = await api.getProductBlueprintImages(bp.id);
+          if (pbiResp.data.success) {
+            const imgs = (pbiResp.data.data || []).map(img => ({
+              ...img,
+              projectBlueprintId: bp.id,
+              blueprintName: bp.name,
+            }));
+            allPbImages.push(...imgs);
+          }
+        } catch { /* ignore */ }
+      }
+      setProductBlueprintImages(allPbImages);
+
       const imgRes = await api.getProductImages(colId);
       if (imgRes.data.success) {
         const allImages = (imgRes.data.data || []).filter(img => img.active);
-        const accepted = allImages.filter(img => img.accepted);
-        const acceptedKeys = new Set(accepted.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
+        setAllProductImages(allImages);
 
-        const activeKeys = new Set(allImages.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
+        const acceptedProductImageIds = new Set(
+          allImages.filter(img => img.accepted).map(img => img.productImageId)
+        );
 
-        const allCombos = [];
-        for (const bp of variants) {
-          for (const v of (bp.variants || [])) {
-            for (const c of (v.combos || [])) {
-              if (c.hasArtwork) {
-                const key = `${bp.projectBlueprintId}:${v.variant}:${c.placementIndex}`;
-                if (activeKeys.has(key)) {
-                  allCombos.push({
-                    projectBlueprintId: bp.projectBlueprintId,
-                    blueprintName: bp.blueprintName,
-                    variant: v.variant,
-                    variantTitle: v.variantTitle,
-                    placement: c.placementIndex,
-                    placementName: c.placementName,
-                    tokens: c.tokens,
-                  });
-                }
-              }
-            }
-          }
-        }
+        const missing = allPbImages.filter(pbi => !acceptedProductImageIds.has(pbi.id));
 
-        const missingCombos = allCombos.filter(c => !acceptedKeys.has(`${c.projectBlueprintId}:${c.variant}:${c.placement}`));
-
-        if (allCombos.length === 0) {
-          setAllProductImages(allImages);
-          setStep(STEPS.PRODUCT_IMAGE_SELECTION);
-          return;
-        }
-
-        if (missingCombos.length === 0) {
-          setAllProductImages(allImages);
+        if (allPbImages.length === 0) {
           setStep(STEPS.CREATE_PRODUCTS);
           return;
         }
 
-        if (missingCombos.length < allCombos.length) {
-          setSelectedProductCombos(missingCombos);
-          setCurrentProductComboIndex(0);
-          setAllProductImages(allImages);
-          setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+        if (missing.length === 0) {
+          setStep(STEPS.CREATE_PRODUCTS);
           return;
         }
+
+        const combos = missing.map(pbi => ({
+          productImageId: pbi.id,
+          projectBlueprintId: pbi.projectBlueprintId,
+          blueprintName: pbi.blueprintName,
+          title: pbi.title,
+          variantColor: pbi.variantColor,
+          prompt: pbi.prompt || '',
+        }));
+        setSelectedProductCombos(combos);
+        setCurrentProductComboIndex(0);
+        setProductImagePrompt(combos[0]?.prompt || '');
+        setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+        return;
       }
     } catch (e) { }
 
-    setStep(STEPS.PRODUCT_IMAGE_SELECTION);
-  }, [collectionId, ensureCollection, loadProductImageVariants, loadImageModels, setStep, STEPS, api, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex]);
+    setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+  }, [collectionId, ensureCollection, loadImageModels, setStep, STEPS, api, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex, blueprints, setProductBlueprintImages, setProductImagePrompt]);
 
   const renderOverlay = (i) => {
     if (!isGeneratingAll) return null;

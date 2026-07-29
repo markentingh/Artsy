@@ -30,6 +30,7 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<IProjectQuestionRepository, ProjectQuestionRepository>();
             builder.Services.AddTransient<IProjectCollectionArtworkRepository, ProjectCollectionArtworkRepository>();
             builder.Services.AddTransient<IProjectCollectionProductImageRepository, ProjectCollectionProductImageRepository>();
+            builder.Services.AddTransient<IProjectBlueprintProductImageRepository, ProjectBlueprintProductImageRepository>();
             builder.Services.AddTransient<IProjectCollectionPrintifyProductRepository, ProjectCollectionPrintifyProductRepository>();
             builder.Services.AddTransient<IProjectCollectionProductRepository, ProjectCollectionProductRepository>();
             builder.Services.AddTransient<IProjectImageGenerationRepository, ProjectImageGenerationRepository>();
@@ -46,6 +47,7 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<IPrintifyBlueprintShippingRepository, PrintifyBlueprintShippingRepository>();
             builder.Services.AddTransient<IPrintifyBlueprintImageRepository, PrintifyBlueprintImageRepository>();
             builder.Services.AddTransient<IPrintifyBlueprintImageVariantRepository, PrintifyBlueprintImageVariantRepository>();
+            builder.Services.AddTransient<IProjectBlueprintProductImageRepository, ProjectBlueprintProductImageRepository>();
             builder.Services.AddTransient<ITrendRepository, TrendRepository>();
         }
     }

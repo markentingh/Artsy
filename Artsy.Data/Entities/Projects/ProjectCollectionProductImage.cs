@@ -6,8 +6,7 @@ namespace Artsy.Data.Entities.Projects
         public Guid ProjectId { get; set; }
         public Guid CollectionId { get; set; }
         public Guid ProjectBlueprintId { get; set; }
-        public int Variant { get; set; }
-        public int Placement { get; set; }
+        public Guid ProductImageId { get; set; }
         public string ImageModel { get; set; } = "";
         public string Prompt { get; set; } = "";
         public int Width { get; set; }

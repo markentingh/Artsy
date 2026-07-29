@@ -39,6 +39,7 @@ namespace Artsy.API.Controllers
         readonly IProjectImageGenerationRepository _projectImageGenerationRepository;
         readonly IProjectImageUpscaleRepository _projectImageUpscaleRepository;
         readonly IPrintifyService _printifyService;
+        readonly IProjectBlueprintProductImageRepository _projectBlueprintProductImageRepository;
 
         public ProjectsController(
             IProjectRepository projectRepository,
@@ -64,7 +65,8 @@ namespace Artsy.API.Controllers
             IImageGenerationModelRepository imageGenerationModelRepository,
             IProjectImageGenerationRepository projectImageGenerationRepository,
             IProjectImageUpscaleRepository projectImageUpscaleRepository,
-            IPrintifyService printifyService)
+            IPrintifyService printifyService,
+            IProjectBlueprintProductImageRepository projectBlueprintProductImageRepository)
         {
             _projectRepository = projectRepository;
             _projectCollectionRepository = projectCollectionRepository;
@@ -90,6 +92,7 @@ namespace Artsy.API.Controllers
             _projectImageGenerationRepository = projectImageGenerationRepository;
             _projectImageUpscaleRepository = projectImageUpscaleRepository;
             _printifyService = printifyService;
+            _projectBlueprintProductImageRepository = projectBlueprintProductImageRepository;
         }
 
         [HttpGet("get-by-id")]
@@ -513,6 +516,9 @@ namespace Artsy.API.Controllers
                 var itemIds = items.Select(i => i.Id).ToList();
                 var artwork = await _projectItemArtworkRepository.GetByProjectIdAsync(projectId);
                 var blueprints = await _projectBlueprintRepository.GetByProjectIdAsync(projectId);
+                var blueprintIds = blueprints.Select(b => b.Id).ToList();
+                var productImages = await _projectBlueprintProductImageRepository.GetByBlueprintIdsAsync(blueprintIds);
+                var imagesByBlueprint = productImages.GroupBy(img => img.ProjectBlueprintId).ToDictionary(g => g.Key, g => g.ToList());
                 var itemQuestions = await _projectItemQuestionRepository.GetByProjectIdAsync(projectId);
                 var questions = await _projectQuestionRepository.GetByProjectIdAsync(projectId);
                 var collections = (await _projectCollectionRepository.GetByProjectIdAsync(projectId)).ToList();
@@ -529,7 +535,7 @@ namespace Artsy.API.Controllers
                 });
                 var imageGenerationSetup = aiItems.Count > 0 && imageGenerationSetupCompleted == aiItems.Count;
 
-                var productBlueprintsAddedCompleted = blueprints.Count(b => IsBlueprintConfigured(b.Name, b.Description, b.BlueprintJson, b.PlacementJson, b.PricingJson));
+                var productBlueprintsAddedCompleted = blueprints.Count(b => IsBlueprintConfigured(b.Name, b.Description, b.BlueprintJson, b.PlacementJson, b.PricingJson, imagesByBlueprint.TryGetValue(b.Id, out var imgs) ? imgs : null));
                 var productBlueprintsAdded = productBlueprintsAddedCompleted > 0;
 
                 var validItemQuestions = itemQuestions.Where(q => !string.IsNullOrWhiteSpace(q.Question)).ToList();

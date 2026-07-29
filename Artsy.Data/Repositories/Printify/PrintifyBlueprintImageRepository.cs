@@ -1,6 +1,5 @@
 using Dapper;
 using System.Data;
-using System.Text.Json;
 using Artsy.Data.Entities;
 using Artsy.Data.Interfaces;
 
@@ -9,12 +8,10 @@ namespace Artsy.Data.Repositories
     public class PrintifyBlueprintImageRepository : IPrintifyBlueprintImageRepository
     {
         readonly IDbConnection _dbConnection;
-        readonly IPrintifyBlueprintImageVariantRepository _imageVariantRepo;
 
-        public PrintifyBlueprintImageRepository(IDbConnection dbConnection, IPrintifyBlueprintImageVariantRepository imageVariantRepo)
+        public PrintifyBlueprintImageRepository(IDbConnection dbConnection)
         {
             _dbConnection = dbConnection;
-            _imageVariantRepo = imageVariantRepo;
         }
 
         public async Task<IEnumerable<PrintifyBlueprintImage>> GetByBlueprintIdAsync(int blueprintId)
@@ -34,11 +31,10 @@ namespace Artsy.Data.Repositories
         public async Task<Guid> UpsertAsync(PrintifyBlueprintImage image)
         {
             const string query = @"
-                INSERT INTO public.""PrintifyBlueprintImages"" (""BlueprintId"", ""ImageIndex"", ""Variants"", ""Type"", ""Position"", ""DateCreated"", ""DateUpdated"")
-                VALUES (@BlueprintId, @ImageIndex, @Variants, @Type, @Position, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                INSERT INTO public.""PrintifyBlueprintImages"" (""BlueprintId"", ""ImageIndex"", ""Type"", ""Position"", ""DateCreated"", ""DateUpdated"")
+                VALUES (@BlueprintId, @ImageIndex, @Type, @Position, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT (""BlueprintId"", ""ImageIndex"")
                 DO UPDATE SET
-                    ""Variants"" = @Variants,
                     ""Type"" = @Type,
                     ""Position"" = @Position,
                     ""DateUpdated"" = CURRENT_TIMESTAMP
@@ -46,32 +42,10 @@ namespace Artsy.Data.Repositories
             return await _dbConnection.ExecuteScalarAsync<Guid>(query, image);
         }
 
-        public async Task<int> ConvertImageVariantsAsync()
+        public async Task DeleteByBlueprintIdAsync(int blueprintId)
         {
-            const string selectQuery = @"SELECT ""Id"", ""Variants"" FROM public.""PrintifyBlueprintImages"" WHERE ""Variants"" != '[]'";
-            var rows = (await _dbConnection.QueryAsync<(Guid Id, string Variants)>(selectQuery)).ToList();
-
-            int inserted = 0;
-            foreach (var row in rows)
-            {
-                try
-                {
-                    var variantIds = JsonSerializer.Deserialize<int[]>(row.Variants ?? "[]") ?? Array.Empty<int>();
-                    if (variantIds.Length > 0)
-                    {
-                        var imageVariants = variantIds.Select(vid => new PrintifyBlueprintImageVariant
-                        {
-                            ImageId = row.Id,
-                            VariantId = vid
-                        });
-                        await _imageVariantRepo.InsertBatchAsync(imageVariants);
-                        inserted += variantIds.Length;
-                    }
-                }
-                catch { }
-            }
-
-            return inserted;
+            const string query = @"DELETE FROM public.""PrintifyBlueprintImages"" WHERE ""BlueprintId"" = @blueprintId";
+            await _dbConnection.ExecuteAsync(query, new { blueprintId });
         }
     }
 }

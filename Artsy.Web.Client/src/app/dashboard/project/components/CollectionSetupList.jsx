@@ -8,12 +8,12 @@ import Accordion from '@/components/ui/accordion';
 export default function CollectionSetupList() {
   const {
     aiItems, collectionArtwork, step, STEPS,
-    allProductImages, selectedProductCombos, productImageVariants, project,
+    allProductImages, selectedProductCombos, productBlueprintImages, project,
     collectionId, api, setStep, setCollectionArtwork,
     setAllProductImages, setSelectedProductCombos,
     currentProductComboIndex, setCurrentProductComboIndex,
     loadItemData, currentItemIndex,
-    projectQuestions,
+    projectQuestions, setProductImagePrompt,
   } = useCollection();
 
   const aiArtworks = collectionArtwork.filter(a => a.imageModel !== 'custom');
@@ -22,30 +22,13 @@ export default function CollectionSetupList() {
   const totalArtwork = aiBlueprintItems.length;
   const acceptedArtwork = aiArtworks.filter(a => a.accepted).length;
 
-  const allProductCombos = [];
-  for (const bp of productImageVariants) {
-    for (const v of (bp.variants || [])) {
-      for (const c of (v.combos || [])) {
-        if (c.hasArtwork) {
-          const key = `${bp.projectBlueprintId}:${v.variant}:${c.placementIndex}`;
-          const hasActiveRecord = allProductImages.some(img =>
-            `${img.projectBlueprintId}:${img.variant}:${img.placement}` === key
-          );
-          if (hasActiveRecord) {
-            allProductCombos.push({
-              projectBlueprintId: bp.projectBlueprintId,
-              blueprintName: bp.blueprintName,
-              variant: v.variant,
-              variantTitle: v.variantTitle,
-              placement: c.placementIndex,
-              placementName: c.placementName,
-              tokens: c.tokens,
-            });
-          }
-        }
-      }
-    }
-  }
+  const allProductCombos = productBlueprintImages.map(pbi => ({
+    productImageId: pbi.id,
+    projectBlueprintId: pbi.projectBlueprintId,
+    blueprintName: pbi.blueprintName,
+    title: pbi.title,
+    variantColor: pbi.variantColor,
+  }));
   const totalProductImages = allProductCombos.length;
   const acceptedProductImages = allProductImages.filter(img => img.accepted).length;
 
@@ -56,14 +39,13 @@ export default function CollectionSetupList() {
   const checkIdx = {
     [STEPS.PROJECT_QUESTIONS]: 0,
     [STEPS.ARTWORK_QUESTIONS]: hasPQ ? 1 : 0,
-    [STEPS.ARTWORK_PREVIEW]: hasPQ ? 2 : 1,
-    [STEPS.READY_TO_GENERATE]: hasPQ ? 3 : 2,
-    [STEPS.PRODUCT_IMAGE_SELECTION]: hasPQ ? 4 : 3,
-    [STEPS.PRODUCT_IMAGE_PROMPT]: hasPQ ? 5 : 4,
-    [STEPS.PRODUCT_IMAGE_PREVIEW]: hasPQ ? 5 : 4,
-    [STEPS.CREATE_PRODUCTS]: hasPQ ? 6 : 5,
-    [STEPS.PUBLISH_PRODUCTS]: hasPQ ? 7 : 6,
-    [STEPS.SOCIAL_MEDIA]: hasPQ ? 8 : 7,
+    [STEPS.ARTWORK_PREVIEW]: hasPQ ? 1 : 0,
+    [STEPS.READY_TO_GENERATE]: hasPQ ? 2 : 1,
+    [STEPS.PRODUCT_IMAGE_PROMPT]: hasPQ ? 3 : 2,
+    [STEPS.PRODUCT_IMAGE_PREVIEW]: hasPQ ? 3 : 2,
+    [STEPS.CREATE_PRODUCTS]: hasPQ ? 4 : 3,
+    [STEPS.PUBLISH_PRODUCTS]: hasPQ ? 5 : 4,
+    [STEPS.SOCIAL_MEDIA]: hasPQ ? 6 : 5,
   };
 
   const isComplete = (itemStep) => {
@@ -124,13 +106,11 @@ export default function CollectionSetupList() {
       await api.deleteProductImage({
         collectionId,
         projectBlueprintId: combo.projectBlueprintId,
-        variant: combo.variant,
-        placement: combo.placement,
+        productImageId: combo.productImageId,
       });
       setAllProductImages(prev => prev.filter(img =>
         !(img.projectBlueprintId === combo.projectBlueprintId &&
-          img.variant === combo.variant &&
-          img.placement === combo.placement)
+          img.productImageId === combo.productImageId)
       ));
     } catch (e) {
       console.error('deleteProductImage error:', e?.response?.data || e);
@@ -138,10 +118,16 @@ export default function CollectionSetupList() {
   };
 
   const handleReviewProductImage = (combo) => {
+    const existingImg = allProductImages.find(img =>
+      img.projectBlueprintId === combo.projectBlueprintId &&
+      img.productImageId === combo.productImageId
+    );
+    if (existingImg?.prompt) {
+      setProductImagePrompt(existingImg.prompt);
+    }
     const comboIndex = selectedProductCombos.findIndex(c =>
       c.projectBlueprintId === combo.projectBlueprintId &&
-      c.variant === combo.variant &&
-      c.placement === combo.placement
+      c.productImageId === combo.productImageId
     );
     if (comboIndex !== -1) {
       setCurrentProductComboIndex(comboIndex);
@@ -198,15 +184,13 @@ export default function CollectionSetupList() {
         const isAccepted = allProductImages.some(img =>
           img.accepted &&
           img.projectBlueprintId === combo.projectBlueprintId &&
-          img.variant === combo.variant &&
-          img.placement === combo.placement
+          img.productImageId === combo.productImageId
         );
         const currentCombo = selectedProductCombos[currentProductComboIndex];
         const isCurrentItem = (step === STEPS.PRODUCT_IMAGE_PROMPT || step === STEPS.PRODUCT_IMAGE_PREVIEW) &&
           currentCombo &&
           currentCombo.projectBlueprintId === combo.projectBlueprintId &&
-          currentCombo.variant === combo.variant &&
-          currentCombo.placement === combo.placement;
+          currentCombo.productImageId === combo.productImageId;
         return (
           <Item key={i} className="justify-between text-sm">
             <div className="flex items-center gap-2">
@@ -223,7 +207,7 @@ export default function CollectionSetupList() {
                 : isCurrentItem
                 ? 'text-blue-600 dark:text-blue-400'
                 : 'text-gray-700 dark:text-gray-300'}>
-                {combo.blueprintName} - {combo.variantTitle} ({combo.placementName})
+                {combo.blueprintName} - {combo.title} ({combo.variantColor})
               </span>
             </div>
             <div className="flex items-center gap-1 ml-auto">
@@ -242,7 +226,7 @@ export default function CollectionSetupList() {
     </List>
   ) : null;
 
-  const selectionComplete = isComplete(STEPS.PRODUCT_IMAGE_SELECTION) || acceptedProductImages > 0;
+  const productImageComplete = acceptedProductImages > 0 && (totalProductImages === 0 ? isComplete(STEPS.PRODUCT_IMAGE_PREVIEW) : acceptedProductImages === totalProductImages);
 
   const accordionItems = [
     ...(projectQuestions.length > 0 ? [{
@@ -268,16 +252,7 @@ export default function CollectionSetupList() {
       ) : null,
     },
     {
-      title: renderTitle('Select Product Variations for Image Generation', selectionComplete, null, isCurrent(STEPS.PRODUCT_IMAGE_SELECTION)),
-      content: null,
-      action: selectionComplete && !isCurrent(STEPS.PRODUCT_IMAGE_SELECTION) ? (
-        <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.PRODUCT_IMAGE_SELECTION)}>
-          Review
-        </ButtonOutline>
-      ) : null,
-    },
-    {
-      title: renderTitle('Generate Product Images', acceptedProductImages > 0 && (totalProductImages === 0 ? isComplete(STEPS.PRODUCT_IMAGE_PREVIEW) : acceptedProductImages === totalProductImages), totalProductImages > 0 ? `${acceptedProductImages}/${totalProductImages}` : (acceptedProductImages > 0 ? `${acceptedProductImages}/${acceptedProductImages}` : null), isCurrent(STEPS.PRODUCT_IMAGE_PROMPT)),
+      title: renderTitle('Generate Product Images', productImageComplete, totalProductImages > 0 ? `${acceptedProductImages}/${totalProductImages}` : (acceptedProductImages > 0 ? `${acceptedProductImages}/${acceptedProductImages}` : null), isCurrent(STEPS.PRODUCT_IMAGE_PROMPT)),
       content: productImageContent,
     },
     {

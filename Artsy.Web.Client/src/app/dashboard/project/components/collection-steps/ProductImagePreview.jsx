@@ -29,8 +29,7 @@ export default function ProductImagePreview() {
         projectId,
         collectionId,
         projectBlueprintId: comboArg.projectBlueprintId,
-        variant: comboArg.variant,
-        placement: comboArg.placement,
+        productImageId: comboArg.productImageId,
         prompt: productImagePrompt,
         requestedChanges: changes,
       });
@@ -59,7 +58,18 @@ export default function ProductImagePreview() {
     if (!currentProductImage) return;
     try {
       await api.acceptProductImage({ collectionId, productImageId: currentProductImage.id });
-      setAllProductImages(prev => [...prev, { ...currentProductImage, accepted: true }]);
+      setAllProductImages(prev => {
+        const idx = prev.findIndex(img =>
+          img.projectBlueprintId === currentProductImage.projectBlueprintId &&
+          img.productImageId === currentProductImage.productImageId
+        );
+        if (idx !== -1) {
+          const next = [...prev];
+          next[idx] = { ...currentProductImage, accepted: true };
+          return next;
+        }
+        return [...prev, { ...currentProductImage, accepted: true }];
+      });
     } catch (error) {
       console.error('acceptProductImage error:', error?.response?.data || error);
     }
@@ -94,7 +104,7 @@ export default function ProductImagePreview() {
     <div className="flex flex-col h-full">
       <h3 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
         Product Image {currentProductComboIndex + 1} of {selectedProductCombos.length}
-        {combo && ` — ${combo.blueprintName} - ${combo.variantTitle} - ${combo.placementName}`}
+        {combo && ` — ${combo.blueprintName} - ${combo.title} - ${combo.variantColor}`}
       </h3>
       <div className="flex flex-col items-center gap-4">
         <div className="w-[512px] h-[512px] max-w-full flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden">

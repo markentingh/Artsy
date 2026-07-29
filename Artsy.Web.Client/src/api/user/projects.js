@@ -19,6 +19,10 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     createBlueprint: (request) => api.post(`${apiPath}/create-blueprint`, request),
     deleteBlueprint: (request) => api.post(`${apiPath}/delete-blueprint`, request),
     updateBlueprint: (request) => api.post(`${apiPath}/update-blueprint`, request),
+    updateBlueprintVariants: (request) => api.post(`${apiPath}/update-blueprint-variants`, request),
+    updateBlueprintPricing: (request) => api.post(`${apiPath}/update-blueprint-pricing`, request),
+    updateBlueprintDetails: (request) => api.post(`${apiPath}/update-blueprint-details`, request),
+    updateBlueprintProductImagePrompt: (request) => api.post(`${apiPath}/update-product-blueprint-image`, request),
     getBlueprintPlaceholders: (projectId) => api.get(`${apiPath}/get-blueprint-placeholders?projectId=${projectId}`),
     updateBlueprintPlacement: (request) => api.post(`${apiPath}/update-blueprint-placement`, request),
     updateItemTitle: (request) => api.post(`${apiPath}/update-item-title`, request),
@@ -89,6 +93,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     },
     generateArtworkThumbnail: (request) => api.post(`${apiPath}/generate-artwork-thumbnail`, request),
     getProductImageVariants: (projectId, collectionId) => api.get(`${apiPath}/get-product-image-variants?projectId=${projectId}&collectionId=${collectionId}`),
+    estimateProductImageTokens: (request) => api.post(`${apiPath}/estimate-product-image-tokens`, request),
     generateProductImage: (request) => api.post(`${apiPath}/generate-product-image`, request),
     acceptProductImage: (request) => api.post(`${apiPath}/accept-product-image`, request),
     getProductImages: (collectionId) => api.get(`${apiPath}/collection/${collectionId}/product-images`),
@@ -102,7 +107,12 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     deletePrintifyProduct: (request) => api.post('/api/printify-products/delete', request),
     getPrintifyProductsByCollection: (collectionId) => api.get(`/api/printify-products/get-by-collection?collectionId=${collectionId}`),
     ensurePrintifyProducts: (request) => api.post('/api/printify-products/ensure-products', request),
-    getProductsByCollection: (collectionId) => api.get(`/api/printify-products/get-products?collectionId=${collectionId}`)
+    getProductsByCollection: (collectionId) => api.get(`/api/printify-products/get-products?collectionId=${collectionId}`),
+    getProductBlueprintImages: (projectBlueprintId) => api.get(`${apiPath}/get-product-blueprint-images?projectBlueprintId=${projectBlueprintId}`),
+    getAllProductBlueprintImages: (projectId) => api.get(`${apiPath}/get-all-product-blueprint-images?projectId=${projectId}`),
+    createProductBlueprintImage: (request) => api.post(`${apiPath}/create-product-blueprint-image`, request),
+    updateProductBlueprintImage: (request) => api.post(`${apiPath}/update-product-blueprint-image`, request),
+    deleteProductBlueprintImage: (request) => api.post(`${apiPath}/delete-product-blueprint-image`, request),
   };
 });
 

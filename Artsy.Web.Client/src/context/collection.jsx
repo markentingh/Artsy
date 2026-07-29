@@ -9,7 +9,6 @@ export const STEPS = {
   ARTWORK_QUESTIONS: 'artwork_questions',
   ARTWORK_PREVIEW: 'artwork_preview',
   READY_TO_GENERATE: 'ready_to_generate',
-  PRODUCT_IMAGE_SELECTION: 'product_image_selection',
   PRODUCT_IMAGE_PROMPT: 'product_image_prompt',
   PRODUCT_IMAGE_PREVIEW: 'product_image_preview',
   CREATE_PRODUCTS: 'create_products',
@@ -20,7 +19,6 @@ export const STEPS = {
 export const WIZARD_STEPS = [
   'Project Questions',
   'Artwork Questions',
-  'Artwork Preview',
   'Ready to Upscale',
   'Product Images',
   'Create Products',
@@ -39,20 +37,19 @@ export function getPlacementName(num) {
 export const STEP_INDEX = {
   project_questions: 0,
   artwork_questions: 1,
-  artwork_preview: 2,
-  ready_to_generate: 3,
-  product_image_selection: 4,
-  product_image_prompt: 4,
-  product_image_preview: 5,
-  create_products: 6,
-  publish_products: 7,
-  social_media: 8,
+  artwork_preview: 1,
+  ready_to_generate: 2,
+  product_image_prompt: 3,
+  product_image_preview: 3,
+  create_products: 4,
+  publish_products: 5,
+  social_media: 6,
 };
 
 export function buildWizardSteps(hasProjectQuestions) {
   const steps = [];
   if (hasProjectQuestions) steps.push('Project Questions');
-  steps.push('Artwork Questions', 'Artwork Preview', 'Ready to Upscale', 'Select Variations', 'Generate Images', 'Create Products', 'Publish Products', 'Social Media');
+  steps.push('Artwork Questions', 'Ready to Upscale', 'Product Images', 'Create Products', 'Publish Products', 'Social Media');
   return steps;
 }
 
@@ -61,14 +58,13 @@ export function buildStepIndex(hasProjectQuestions) {
   return {
     project_questions: 0,
     artwork_questions: 1 + offset,
-    artwork_preview: 2 + offset,
-    ready_to_generate: 3 + offset,
-    product_image_selection: 4 + offset,
-    product_image_prompt: 5 + offset,
-    product_image_preview: 5 + offset,
-    create_products: 6 + offset,
-    publish_products: 7 + offset,
-    social_media: 8 + offset,
+    artwork_preview: 1 + offset,
+    ready_to_generate: 2 + offset,
+    product_image_prompt: 3 + offset,
+    product_image_preview: 3 + offset,
+    create_products: 4 + offset,
+    publish_products: 5 + offset,
+    social_media: 6 + offset,
   };
 }
 
@@ -116,6 +112,9 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const [imageModels, setImageModels] = useState([]);
   const [selectedImageModel, setSelectedImageModel] = useState(null);
   const [upscaleComplete, setUpscaleComplete] = useState(false);
+  const [productBlueprintImages, setProductBlueprintImages] = useState([]);
+  const [printifyImageIndexByColor, setPrintifyImageIndexByColor] = useState({});
+  const [currentProductImageIndex, setCurrentProductImageIndex] = useState(0);
 
   const blueprintItemIds = useMemo(() => {
     const ids = new Set();
@@ -404,48 +403,31 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         (async () => {
           const colId = collectionId || await ensureCollection();
           if (colId) {
-            const [variants,] = await Promise.all([loadProductImageVariants(colId), loadImageModels()]);
+            await loadImageModels();
             try {
+              const pbImgRes = await api.getAllProductBlueprintImages(projectId);
+              const allPbImages = pbImgRes.data.success ? (pbImgRes.data.data || []) : [];
+              setProductBlueprintImages(allPbImages);
+
+              // Load existing product images
               const imgRes = await api.getProductImages(colId);
               if (imgRes.data.success) {
                 const allImages = (imgRes.data.data || []).filter(img => img.active);
-                const accepted = allImages.filter(img => img.accepted);
-                const acceptedKeys = new Set(accepted.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
+                setAllProductImages(allImages);
 
-                const activeKeys = new Set(allImages.map(img => `${img.projectBlueprintId}:${img.variant}:${img.placement}`));
+                // Filter out product blueprint images that already have accepted product images
+                const acceptedProductImageIds = new Set(
+                  allImages.filter(img => img.accepted).map(img => img.productImageId)
+                );
 
-                const allCombos = [];
-                for (const bp of variants) {
-                  for (const v of (bp.variants || [])) {
-                    for (const c of (v.combos || [])) {
-                      if (c.hasArtwork) {
-                        const key = `${bp.projectBlueprintId}:${v.variant}:${c.placementIndex}`;
-                        if (activeKeys.has(key)) {
-                          allCombos.push({
-                            projectBlueprintId: bp.projectBlueprintId,
-                            blueprintName: bp.blueprintName,
-                            variant: v.variant,
-                            variantTitle: v.variantTitle,
-                            placement: c.placementIndex,
-                            placementName: c.placementName,
-                            tokens: c.tokens,
-                          });
-                        }
-                      }
-                    }
-                  }
-                }
+                const missing = allPbImages.filter(pbi => !acceptedProductImageIds.has(pbi.id));
 
-                const missingCombos = allCombos.filter(c => !acceptedKeys.has(`${c.projectBlueprintId}:${c.variant}:${c.placement}`));
-
-                if (allCombos.length === 0) {
-                  setAllProductImages(allImages);
-                  setStep(STEPS.PRODUCT_IMAGE_SELECTION);
+                if (allPbImages.length === 0) {
+                  setStep(STEPS.CREATE_PRODUCTS);
                   return;
                 }
 
-                if (missingCombos.length === 0) {
-                  setAllProductImages(allImages);
+                if (missing.length === 0) {
                   try {
                     await api.ensurePrintifyProducts({ collectionId: colId });
                   } catch (e) { /* non-critical */ }
@@ -453,16 +435,32 @@ export function CollectionProvider({ children, projectId, project, collectionId:
                   return;
                 }
 
-                if (missingCombos.length < allCombos.length) {
-                  setSelectedProductCombos(missingCombos);
-                  setCurrentProductComboIndex(0);
-                  setAllProductImages(allImages);
-                  setStep(STEPS.PRODUCT_IMAGE_PROMPT);
-                  return;
-                }
+                // Set up combos for product image prompt step
+                const combos = missing.map(pbi => {
+                  const bp = blueprints.find(b => b.id === pbi.projectBlueprintId);
+                  const colorMap = printifyImageIndexByColor[pbi.projectBlueprintId] || {};
+                  const imageIndex = colorMap[pbi.variantColor];
+                  const printifyImageUrl = (bp && imageIndex !== undefined)
+                    ? `/api/printify/blueprint-image?blueprintId=${bp.blueprintId}&index=${imageIndex}&thumb=true`
+                    : null;
+                  return {
+                    productImageId: pbi.id,
+                    projectBlueprintId: pbi.projectBlueprintId,
+                    blueprintName: pbi.blueprintName,
+                    title: pbi.title,
+                    variantColor: pbi.variantColor,
+                    prompt: pbi.prompt || '',
+                    printifyImageUrl,
+                  };
+                });
+                setSelectedProductCombos(combos);
+                setCurrentProductComboIndex(0);
+                setProductImagePrompt(combos[0]?.prompt || '');
+                setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+                return;
               }
             } catch (e) {  }
-            setStep(STEPS.PRODUCT_IMAGE_SELECTION);
+            setStep(STEPS.PRODUCT_IMAGE_PROMPT);
           } else {
             setStep(STEPS.READY_TO_GENERATE);
             fetchEstimate();
@@ -476,7 +474,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       setCurrentItemIndex(nextIndex);
       loadItemData(nextIndex);
     }
-  }, [currentItemIndex, collectionArtwork, aiItems, blueprintItemIds, fetchEstimate, loadItemData, collectionId, ensureCollection, loadProductImageVariants, loadImageModels, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex]);
+  }, [currentItemIndex, collectionArtwork, aiItems, blueprintItemIds, fetchEstimate, loadItemData, collectionId, ensureCollection, loadImageModels, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex, blueprints, api, printifyImageIndexByColor]);
   advanceToNextItemRef.current = advanceToNextItem;
 
   const doGenerateAll = useCallback(async (colId) => {
@@ -500,7 +498,6 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       setGeneratingMessage(`Generating artwork ${i + 1} of ${estimate.generations.length}: ${item?.title || 'Untitled'} (${gen.width}x${gen.height})...`);
 
       try {
-        const answerList = [...buildProjectAnswers()];
         const res = await api.upscaleArtwork({
           projectId,
           collectionId: colId,
@@ -576,6 +573,8 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     setImageModels([]);
     setSelectedImageModel(null);
     setUpscaleComplete(false);
+    setProductBlueprintImages([]);
+    setCurrentProductImageIndex(0);
   }, [initialCollectionId]);
 
   const loadData = useCallback(async (existingCollectionId) => {
@@ -597,6 +596,20 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         const allBps = bpRes.data.data || [];
         const completeBps = allBps.filter(bp => bp.configured === true);
         setBlueprints(completeBps);
+
+        const colorMap = {};
+        for (const bp of allBps) {
+          const idxMap = {};
+          for (const img of (bp.printifyImages || [])) {
+            if (img.variantColors && img.imageIndex !== undefined) {
+              for (const color of img.variantColors) {
+                idxMap[color] = img.imageIndex;
+              }
+            }
+          }
+          colorMap[bp.id] = idxMap;
+        }
+        setPrintifyImageIndexByColor(colorMap);
       }
 
       if (existingCollectionId) {
@@ -688,6 +701,9 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     loadProductImageVariants, loadImageModels,
     imageModels, selectedImageModel, setSelectedImageModel,
     upscaleComplete, setUpscaleComplete,
+    productBlueprintImages, setProductBlueprintImages,
+    printifyImageIndexByColor,
+    currentProductImageIndex, setCurrentProductImageIndex,
     reset, loadData,
   };
 

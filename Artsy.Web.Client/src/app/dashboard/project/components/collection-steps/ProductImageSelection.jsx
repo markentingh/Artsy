@@ -47,7 +47,7 @@ export default function ProductImageSelection() {
   }, [imageModels, setSelectedImageModel]);
 
   const toggleCombo = useCallback((bp, variant, combo) => {
-    const key = `${bp.projectBlueprintId}:${variant.variant}:${combo.placementIndex}`;
+    const key = `${bp.projectBlueprintId}:${variant.variantColor}:${combo.placementIndex}`;
     setCheckedCombos(prev => {
       const next = { ...prev };
       if (next[key]) {
@@ -64,13 +64,12 @@ export default function ProductImageSelection() {
     for (const bp of productImageVariants) {
       for (const v of (bp.variants || [])) {
         for (const c of (v.combos || [])) {
-          if (c.hasArtwork && checkedCombos[`${bp.projectBlueprintId}:${v.variant}:${c.placementIndex}`]) {
+          if (c.hasArtwork && checkedCombos[`${bp.projectBlueprintId}:${v.variantColor}:${c.placementIndex}`]) {
             result.push({
               projectBlueprintId: bp.projectBlueprintId,
-              variant: v.variant,
+              variantColor: v.variantColor,
               placement: c.placementIndex,
               blueprintName: bp.blueprintName,
-              variantTitle: v.variantTitle,
               placementName: c.placementName,
               tokens: c.tokens,
             });
@@ -93,7 +92,7 @@ export default function ProductImageSelection() {
 
     const selectedCombos = checkedComboList.map(c => ({
       projectBlueprintId: c.projectBlueprintId,
-      variant: c.variant,
+      variantColor: c.variantColor,
       placement: c.placement,
     }));
 
@@ -124,7 +123,7 @@ export default function ProductImageSelection() {
       `${img.projectBlueprintId}:${img.variant}:${img.placement}`
     ));
     const missingCombos = checkedComboList.filter(c =>
-      !acceptedKeys.has(`${c.projectBlueprintId}:${c.variant}:${c.placement}`)
+      !acceptedKeys.has(`${c.projectBlueprintId}:${c.variantColor}:${c.placement}`)
     );
 
     if (missingCombos.length === 0) {
@@ -139,9 +138,9 @@ export default function ProductImageSelection() {
 
   const sortedVariants = useCallback((bp) => {
     return [...(bp.variants || [])].sort((a, b) => {
-      const aTitle = a.variantTitle || `Variant ${a.variant}`;
-      const bTitle = b.variantTitle || `Variant ${b.variant}`;
-      return aTitle.localeCompare(bTitle);
+      const aColor = a.variantColor || 'Default';
+      const bColor = b.variantColor || 'Default';
+      return aColor.localeCompare(bColor);
     });
   }, []);
 
@@ -180,15 +179,15 @@ export default function ProductImageSelection() {
                 {sortedVariants(bp).map((v) => (
                   (v.combos || []).filter(c => c.hasArtwork).map((combo) => (
                     <Item
-                      key={`${v.variant}-${combo.placementIndex}`}
+                      key={`${v.variantColor}-${combo.placementIndex}`}
                       className="cursor-pointer text-sm"
                     >
                       <Checkbox
-                        checked={!!checkedCombos[`${bp.projectBlueprintId}:${v.variant}:${combo.placementIndex}`]}
+                        checked={!!checkedCombos[`${bp.projectBlueprintId}:${v.variantColor}:${combo.placementIndex}`]}
                         onChange={() => toggleCombo(bp, v, combo)}
                         label={
                           <span className="flex items-center gap-2 flex-1">
-                            <span>{v.variantTitle} - {combo.placementName}</span>
+                            <span>{v.variantColor} - {combo.placementName}</span>
                             <span className="text-xs text-gray-500 dark:text-gray-400">{combo.tokens} tokens</span>
                           </span>
                         }

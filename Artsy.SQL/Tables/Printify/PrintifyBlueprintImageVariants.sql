@@ -1,9 +1,11 @@
 CREATE TABLE IF NOT EXISTS public."PrintifyBlueprintImageVariants"
 (
-    "ImageId" UUID NOT NULL,
-    "VariantId" INT NOT NULL,
-    PRIMARY KEY ("ImageId", "VariantId")
+    "Id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "BlueprintImageId" UUID NOT NULL REFERENCES public."PrintifyBlueprintImages"("Id") ON DELETE CASCADE,
+    "VariantColor" VARCHAR(32) NOT NULL DEFAULT '',
+    "DateCreated" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "DateUpdated" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_printify_image_variants_variant_id
-    ON public."PrintifyBlueprintImageVariants" ("VariantId");
+CREATE UNIQUE INDEX IF NOT EXISTS "UX_PrintifyBlueprintImageVariants_ImageId_Color"
+    ON public."PrintifyBlueprintImageVariants" ("BlueprintImageId", "VariantColor");

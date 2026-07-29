@@ -17,13 +17,13 @@ namespace Artsy.Data.Repositories
 
         public async Task<IEnumerable<PrintifyBlueprintVariant>> GetByBlueprintAndProviderAsync(int blueprintId, int printProviderId)
         {
-            const string query = @"SELECT * FROM public.""PrintifyBlueprintVariants"" WHERE ""BlueprintId"" = @blueprintId AND ""PrintProviderId"" = @printProviderId ORDER BY ""Title""";
+            const string query = @"SELECT * FROM public.""PrintifyBlueprintVariants"" WHERE ""BlueprintId"" = @blueprintId AND ""PrintProviderId"" = @printProviderId ORDER BY ""Color""";
             return await _dbConnection.QueryAsync<PrintifyBlueprintVariant>(query, new { blueprintId, printProviderId });
         }
 
         public async Task<IEnumerable<PrintifyBlueprintVariant>> GetByBlueprintIdAsync(int blueprintId)
         {
-            const string query = @"SELECT * FROM public.""PrintifyBlueprintVariants"" WHERE ""BlueprintId"" = @blueprintId ORDER BY ""Title""";
+            const string query = @"SELECT * FROM public.""PrintifyBlueprintVariants"" WHERE ""BlueprintId"" = @blueprintId ORDER BY ""Color""";
             return await _dbConnection.QueryAsync<PrintifyBlueprintVariant>(query, new { blueprintId });
         }
 
@@ -31,20 +31,20 @@ namespace Artsy.Data.Repositories
         {
             var ids = blueprintIds.ToList();
             if (ids.Count == 0) return Enumerable.Empty<PrintifyBlueprintVariant>();
-            const string query = @"SELECT * FROM public.""PrintifyBlueprintVariants"" WHERE ""BlueprintId"" = ANY(@blueprintIds) ORDER BY ""BlueprintId"", ""Title""";
+            const string query = @"SELECT * FROM public.""PrintifyBlueprintVariants"" WHERE ""BlueprintId"" = ANY(@blueprintIds) ORDER BY ""BlueprintId"", ""Color""";
             return await _dbConnection.QueryAsync<PrintifyBlueprintVariant>(query, new { blueprintIds = ids.ToArray() });
         }
 
         public async Task UpsertBatchAsync(IEnumerable<PrintifyBlueprintVariant> variants)
         {
             const string query = @"
-                INSERT INTO public.""PrintifyBlueprintVariants"" (""VariantId"", ""BlueprintId"", ""PrintProviderId"", ""Title"", ""Options"", ""Size"", ""DecorationMethods"", ""DateUpdated"")
-                VALUES (@VariantId, @BlueprintId, @PrintProviderId, @Title, @Options, @Size, @DecorationMethods, CURRENT_TIMESTAMP)
+                INSERT INTO public.""PrintifyBlueprintVariants"" (""VariantId"", ""BlueprintId"", ""PrintProviderId"", ""Color"", ""Options"", ""Size"", ""DecorationMethods"", ""DateUpdated"")
+                VALUES (@VariantId, @BlueprintId, @PrintProviderId, @Color, @Options, @Size, @DecorationMethods, CURRENT_TIMESTAMP)
                 ON CONFLICT (""VariantId"")
                 DO UPDATE SET
                     ""BlueprintId"" = @BlueprintId,
                     ""PrintProviderId"" = @PrintProviderId,
-                    ""Title"" = @Title,
+                    ""Color"" = @Color,
                     ""Options"" = @Options,
                     ""Size"" = @Size,
                     ""DecorationMethods"" = @DecorationMethods,
@@ -83,7 +83,7 @@ namespace Artsy.Data.Repositories
 
                 const string updateQuery = @"
                     UPDATE public.""PrintifyBlueprintVariants"" 
-                    SET ""Title"" = @color, ""Size"" = @size 
+                    SET ""Color"" = @color, ""Size"" = @size 
                     WHERE ""VariantId"" = @variantId";
                 updated += await _dbConnection.ExecuteAsync(updateQuery, new { color, size, variantId = row.VariantId });
             }

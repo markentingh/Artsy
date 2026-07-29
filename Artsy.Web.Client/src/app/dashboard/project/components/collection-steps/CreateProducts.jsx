@@ -13,7 +13,7 @@ export default function CreateProducts() {
   const {
     project, blueprints, allProductImages, collectionId, api,
     productImageVariants, STEPS, setStep,
-    handleSaveDraft, setMessage,
+    handleSaveDraft, setMessage, setArtworkPreview,
   } = useCollection();
 
   const printifyApi = Projects(session);
@@ -192,6 +192,11 @@ export default function CreateProducts() {
     }
   }, [allImagesUploaded, creating, allCreated, handleCreateProducts]);
 
+  const handleImageClick = useCallback((clickedImg) => {
+    const images = allImages.map(img => img.imageUrl);
+    setArtworkPreview({ images, src: clickedImg.imageUrl });
+  }, [allImages, setArtworkPreview]);
+
   return (
     <div className="flex flex-col h-full">
       <p className="text-center text-lg mb-4">
@@ -207,7 +212,7 @@ export default function CreateProducts() {
               const isDone = state?.status === 'done';
               const isError = state?.status === 'error';
               return (
-                <div key={img.id} className="relative w-[120px] h-[120px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
+                <div key={img.id} className="relative w-[120px] h-[120px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 cursor-pointer" onClick={() => handleImageClick(img)}>
                   <img
                     src={img.imageUrl}
                     alt={img.blueprintName}
