@@ -415,6 +415,58 @@ namespace Artsy.API.Controllers
             }
         }
 
+        [HttpPost("update-instagram-id")]
+        public async Task<IActionResult> UpdateInstagramId([FromBody] UpdateProjectInstagramIdRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.Id == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Project ID is required." });
+
+            try
+            {
+                var project = await _projectRepository.GetByIdAsync(request.Id, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                await _projectRepository.UpdateInstagramIdAsync(request.Id, userId, request.InstagramId);
+                project.InstagramId = request.InstagramId;
+                return Json(new ApiResponse { success = true, data = project });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("update-post-to-instagram")]
+        public async Task<IActionResult> UpdatePostToInstagram([FromBody] UpdateProjectPostToInstagramRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.Id == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Project ID is required." });
+
+            try
+            {
+                var project = await _projectRepository.GetByIdAsync(request.Id, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                await _projectRepository.UpdatePostToInstagramAsync(request.Id, userId, request.PostToInstagram);
+                project.PostToInstagram = request.PostToInstagram;
+                return Json(new ApiResponse { success = true, data = project });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
         [HttpGet("get-printify-shops")]
         public async Task<IActionResult> GetPrintifyShops()
         {

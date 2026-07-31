@@ -7,9 +7,12 @@ CREATE TABLE IF NOT EXISTS public."Projects" (
     "Color" VARCHAR(16) NOT NULL,
     "Status" INTEGER NOT NULL DEFAULT 1,
     "PublishToPrintify" BOOLEAN NOT NULL DEFAULT TRUE,
+    "PostToInstagram" BOOLEAN NOT NULL DEFAULT TRUE,
     "PrintifyStoreId" INTEGER NULL,
     "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Ensure column exists for databases created before this field was added
 ALTER TABLE public."Projects" ADD COLUMN IF NOT EXISTS "PrintifyStoreId" INTEGER NULL;
+ALTER TABLE public."Projects" ADD COLUMN IF NOT EXISTS "InstagramId" UUID NULL;
+ALTER TABLE public."Projects" ADD COLUMN IF NOT EXISTS "PostToInstagram" BOOLEAN NOT NULL DEFAULT TRUE;

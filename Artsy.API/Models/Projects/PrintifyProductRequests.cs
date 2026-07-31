@@ -3,7 +3,7 @@ namespace Artsy.API.Models.Projects
     public class CreatePrintifyProductRequest
     {
         public Guid CollectionId { get; set; }
-        public Guid ProductId { get; set; }
+        public Guid ProjectBlueprintId { get; set; }
     }
 
     public class UpdatePrintifyProductRequest
@@ -39,5 +39,11 @@ namespace Artsy.API.Models.Projects
     {
         public Guid CollectionId { get; set; }
         public Guid ProductImageId { get; set; }
+    }
+
+    public class UploadArtworkImageRequest
+    {
+        public Guid CollectionId { get; set; }
+        public Guid ArtworkId { get; set; }
     }
 }

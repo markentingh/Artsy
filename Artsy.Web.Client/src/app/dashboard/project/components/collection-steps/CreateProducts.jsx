@@ -14,6 +14,7 @@ export default function CreateProducts() {
     project, blueprints, allProductImages, collectionId, api,
     productImageVariants, STEPS, setStep,
     handleSaveDraft, setMessage, setArtworkPreview,
+    loadProductImageVariants, collectionArtwork,
   } = useCollection();
 
   const printifyApi = Projects(session);
@@ -22,8 +23,8 @@ export default function CreateProducts() {
   const [creating, setCreating] = useState(false);
   const [createdBlueprints, setCreatedBlueprints] = useState({});
   const [allCreated, setAllCreated] = useState(false);
-  const [products, setProducts] = useState([]);
   const [imageUploadState, setImageUploadState] = useState({});
+  const [artworkUploadState, setArtworkUploadState] = useState({});
 
   const blueprintsWithImages = useMemo(() => {
     const imageBlueprintIds = new Set(allProductImages.map(img => img.projectBlueprintId));
@@ -37,14 +38,6 @@ export default function CreateProducts() {
     }
     return map;
   }, [productImageVariants]);
-
-  const productByBlueprint = useMemo(() => {
-    const map = {};
-    for (const p of products) {
-      map[p.projectBlueprintId] = p;
-    }
-    return map;
-  }, [products]);
 
   const imagesByBlueprint = useMemo(() => {
     const map = {};
@@ -61,25 +54,15 @@ export default function CreateProducts() {
       (imagesByBlueprint[bp.id] || []).map(img => ({
         ...img,
         blueprintName: bp.name,
-        imageUrl: api.getProductImageUrl(collectionId, img.id),
       }))
     );
-  }, [blueprintsWithImages, imagesByBlueprint, collectionId, api]);
+  }, [blueprintsWithImages, imagesByBlueprint]);
 
   useEffect(() => {
-    if (!collectionId) return;
-    const loadProducts = async () => {
-      try {
-        const response = await printifyApi.getProductsByCollection(collectionId);
-        if (response.data.success) {
-          setProducts(response.data.data || []);
-        }
-      } catch (error) {
-        // non-critical
-      }
-    };
-    loadProducts();
-  }, [collectionId]);
+    if (collectionId && productImageVariants.length === 0) {
+      loadProductImageVariants(collectionId);
+    }
+  }, [collectionId, productImageVariants.length, loadProductImageVariants]);
 
   useEffect(() => {
     const existing = {};
@@ -93,6 +76,32 @@ export default function CreateProducts() {
     }
   }, [allProductImages]);
 
+  useEffect(() => {
+    const existing = {};
+    for (const art of collectionArtwork) {
+      if (art.printifyImageId) {
+        existing[art.id] = { status: 'done' };
+      }
+    }
+    if (Object.keys(existing).length > 0) {
+      setArtworkUploadState(prev => ({ ...existing, ...prev }));
+    }
+  }, [collectionArtwork]);
+
+  const acceptedArtwork = useMemo(() =>
+    (collectionArtwork || []).filter(a => a.accepted && a.active),
+    [collectionArtwork]
+  );
+
+  const artworkImages = useMemo(() =>
+    acceptedArtwork.map(a => ({
+      ...a,
+      imageUrl: api.getCollectionArtworkImageUrl(collectionId, a.itemId, a.id),
+      type: 'artwork',
+    })),
+    [acceptedArtwork, collectionId, api]
+  );
+
   const handleUploadImages = useCallback(async () => {
     if (!collectionId || !project?.printifyStoreId) {
       setMessage({ type: 'error', text: 'No Printify store selected for this project.' });
@@ -101,6 +110,29 @@ export default function CreateProducts() {
 
     setUploading(true);
     setMessage(null);
+
+    for (const art of artworkImages) {
+      if (artworkUploadState[art.id]?.status === 'done') continue;
+
+      setArtworkUploadState(prev => ({ ...prev, [art.id]: { status: 'uploading' } }));
+
+      try {
+        const response = await printifyApi.uploadPrintifyArtworkImage({
+          collectionId,
+          artworkId: art.id,
+        });
+
+        if (response.data.success) {
+          setArtworkUploadState(prev => ({ ...prev, [art.id]: { status: 'done' } }));
+        } else {
+          setArtworkUploadState(prev => ({ ...prev, [art.id]: { status: 'error' } }));
+          setMessage({ type: 'error', text: response.data.message || 'Failed to upload artwork' });
+        }
+      } catch (error) {
+        setArtworkUploadState(prev => ({ ...prev, [art.id]: { status: 'error' } }));
+        setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to upload artwork' });
+      }
+    }
 
     for (const img of allImages) {
       if (imageUploadState[img.id]?.status === 'done') continue;
@@ -126,12 +158,15 @@ export default function CreateProducts() {
     }
 
     setUploading(false);
-  }, [collectionId, project, allImages, imageUploadState, printifyApi, setMessage]);
+  }, [collectionId, project, allImages, imageUploadState, artworkImages, artworkUploadState, printifyApi, setMessage]);
 
   const allImagesUploaded = useMemo(() => {
-    if (allImages.length === 0) return false;
-    return allImages.every(img => imageUploadState[img.id]?.status === 'done');
-  }, [allImages, imageUploadState]);
+    const artworkDone = artworkImages.length > 0 && artworkImages.every(art => artworkUploadState[art.id]?.status === 'done');
+    const productDone = allImages.length > 0 && allImages.every(img => imageUploadState[img.id]?.status === 'done');
+    const artworkReady = artworkImages.length === 0 || artworkDone;
+    const productReady = allImages.length === 0 || productDone;
+    return artworkReady && productReady;
+  }, [allImages, imageUploadState, artworkImages, artworkUploadState]);
 
   const handleCreateProducts = useCallback(async () => {
     if (!collectionId || !project?.printifyStoreId) {
@@ -144,21 +179,17 @@ export default function CreateProducts() {
 
     let successCount = 0;
     let processedCount = 0;
-    const total = blueprintsWithImages.length;
 
     for (const bp of blueprintsWithImages) {
       const variantCount = variantCountByBlueprint[bp.id] || 0;
       if (variantCount === 0) continue;
-
-      const product = productByBlueprint[bp.id];
-      if (!product) continue;
 
       processedCount++;
 
       try {
         const response = await printifyApi.createPrintifyProduct({
           collectionId,
-          productId: product.id,
+          projectBlueprintId: bp.id,
         });
 
         if (response.data.success) {
@@ -176,21 +207,20 @@ export default function CreateProducts() {
     if (processedCount > 0 && successCount === processedCount) {
       setAllCreated(true);
     }
-  }, [collectionId, project, blueprintsWithImages, variantCountByBlueprint, productByBlueprint, printifyApi, setMessage]);
+  }, [collectionId, project, blueprintsWithImages, variantCountByBlueprint, printifyApi, setMessage]);
 
   const handleNext = useCallback(() => {
     setStep(STEPS.PUBLISH_PRODUCTS);
   }, [setStep, STEPS]);
 
   const handleStart = useCallback(async () => {
-    await handleUploadImages();
-  }, [handleUploadImages]);
-
-  useEffect(() => {
-    if (allImagesUploaded && !creating && !allCreated) {
-      handleCreateProducts();
+    if (allImagesUploaded) {
+      await handleCreateProducts();
+    } else {
+      await handleUploadImages();
+      await handleCreateProducts();
     }
-  }, [allImagesUploaded, creating, allCreated, handleCreateProducts]);
+  }, [allImagesUploaded, handleUploadImages, handleCreateProducts]);
 
   const handleImageClick = useCallback((clickedImg) => {
     const images = allImages.map(img => img.imageUrl);
@@ -200,11 +230,50 @@ export default function CreateProducts() {
   return (
     <div className="flex flex-col h-full">
       <p className="text-center text-lg mb-4">
-        The following product images will be uploaded to Printify, then products will be created.
+        Collection artwork and product images will be uploaded to Printify, then products will be created.
       </p>
+
+      {artworkImages.length > 0 && (
+        <div className="mb-4">
+          <h4 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">Collection Artwork (placements)</h4>
+          <div className="flex flex-wrap gap-3 justify-center">
+            {artworkImages.map((art) => {
+              const state = artworkUploadState[art.id];
+              const isUploading = state?.status === 'uploading';
+              const isDone = state?.status === 'done';
+              const isError = state?.status === 'error';
+              return (
+                <div key={art.id} className="relative w-[120px] h-[120px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 cursor-pointer" onClick={() => handleImageClick(art)}>
+                  <img
+                    src={art.imageUrl}
+                    alt="Artwork"
+                    className="w-full h-full object-cover"
+                  />
+                  {isUploading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                      <Icon name="progress_activity" spin className="w-6 h-6 text-white" />
+                    </div>
+                  )}
+                  {isDone && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                      <Icon name="check_circle" className="w-8 h-8 text-green-500" />
+                    </div>
+                  )}
+                  {isError && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                      <Icon name="error" className="w-8 h-8 text-red-500" />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {allImages.length > 0 && (
         <div className="mb-6">
+          <h4 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">Product Images</h4>
           <div className="flex flex-wrap gap-3 justify-center">
             {allImages.map((img) => {
               const state = imageUploadState[img.id];
@@ -262,20 +331,11 @@ export default function CreateProducts() {
         </List>
       </div>
 
-      {allCreated && (
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-medium text-green-600 dark:text-green-400">
-            All products have been created successfully!
-          </p>
-          <Button onClick={handleNext}>Next</Button>
-        </div>
-      )}
-
       <div className="buttons flex justify-end gap-2 mt-auto">
         <ButtonOutline className="cancel" onClick={handleSaveDraft}>Save Draft</ButtonOutline>
         <Button
-          onClick={handleStart}
-          disabled={uploading || creating || !project?.printifyStoreId || allCreated || allImagesUploaded}
+          onClick={allCreated ? handleNext : handleStart}
+          disabled={uploading || creating || !project?.printifyStoreId}
         >
           {uploading ? (
             <>
@@ -287,8 +347,10 @@ export default function CreateProducts() {
               <Icon name="progress_activity" spin className="w-4 h-4 inline mr-1" />
               Creating Products...
             </>
+          ) : allCreated ? (
+            'Next'
           ) : allImagesUploaded ? (
-            'Images Uploaded'
+            'Create Products'
           ) : (
             'Upload & Create Products'
           )}

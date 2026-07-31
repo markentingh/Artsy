@@ -104,7 +104,8 @@ namespace Artsy.API.Controllers
                         imageModel = a.ImageModel,
                         width = a.Width,
                         height = a.Height,
-                        index = a.Index
+                        index = a.Index,
+                        printifyImageId = a.PrintifyImageId
                     })
                 });
             }

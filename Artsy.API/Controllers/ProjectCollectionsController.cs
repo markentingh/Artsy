@@ -63,7 +63,8 @@ namespace Artsy.API.Controllers
                             productImageId = p.ProductImageId,
                             prompt = p.Prompt,
                             accepted = p.Accepted,
-                            active = p.Active
+                            active = p.Active,
+                            imageUrl = $"/api/projects/collection/{collection.Id}/product-image/{p.Id}"
                         })
                     });
                 }

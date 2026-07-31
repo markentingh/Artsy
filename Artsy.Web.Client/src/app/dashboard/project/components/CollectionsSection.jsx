@@ -12,7 +12,7 @@ import CollectionModal from './CollectionModal';
 
 export default function CollectionsSection({ projectId, project, showNewButton = true }) {
   const session = useSession();
-  const { getCollections, getCollectionArtworkThumbUrl, getProductImageUrl, deleteCollection } = Projects(session);
+  const { getCollections, getCollectionArtworkThumbUrl, deleteCollection } = Projects(session);
   const [collections, setCollections] = useState([]);
   const [mount, setMount] = useState(false);
   const [message, setMessage] = useState(null);
@@ -113,7 +113,7 @@ export default function CollectionsSection({ projectId, project, showNewButton =
               .map(a => getCollectionArtworkThumbUrl(collection.id, a.itemId, a.id));
             const productImages = (collection.productImages || [])
               .filter(p => p.active)
-              .map(p => getProductImageUrl(collection.id, p.id));
+              .map(p => p.imageUrl);
             const images = [...productImages, ...artworkImages];
             return (
               <div

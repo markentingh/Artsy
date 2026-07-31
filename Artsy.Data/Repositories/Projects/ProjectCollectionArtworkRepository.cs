@@ -113,5 +113,14 @@ namespace Artsy.Data.Repositories.Projects
                 WHERE ""CollectionId"" = @collectionId AND ""ItemId"" = @itemId";
             await _dbConnection.ExecuteAsync(query, new { collectionId, itemId });
         }
+
+        public async Task SetPrintifyImageIdAsync(Guid artworkId, string printifyImageId)
+        {
+            const string query = @"
+                UPDATE public.""ProjectCollectionArtwork""
+                SET ""PrintifyImageId"" = @printifyImageId
+                WHERE ""Id"" = @artworkId";
+            await _dbConnection.ExecuteAsync(query, new { artworkId, printifyImageId });
+        }
     }
 }

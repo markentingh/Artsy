@@ -63,6 +63,24 @@ namespace Artsy.API.Models.Printify
 
         [JsonPropertyName("print_areas")]
         public List<PrintifyPrintAreaRequest> PrintAreas { get; set; } = new();
+
+        [JsonPropertyName("images")]
+        public List<PrintifyProductImageRequest> Images { get; set; } = new();
+    }
+
+    public class PrintifyProductImageRequest
+    {
+        [JsonPropertyName("src")]
+        public string Src { get; set; } = "";
+
+        [JsonPropertyName("variant_ids")]
+        public List<int> VariantIds { get; set; } = new();
+
+        [JsonPropertyName("position")]
+        public string Position { get; set; } = "front";
+
+        [JsonPropertyName("is_default")]
+        public bool IsDefault { get; set; }
     }
 
     public class PrintifyVariantRequest

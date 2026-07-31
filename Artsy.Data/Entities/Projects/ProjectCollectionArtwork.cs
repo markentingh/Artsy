@@ -15,5 +15,6 @@ namespace Artsy.Data.Entities.Projects
         public string ResponseId { get; set; } = "";
         public bool FullSize { get; set; }
         public int Index { get; set; }
+        public string PrintifyImageId { get; set; } = "";
     }
 }

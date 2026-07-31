@@ -6,7 +6,9 @@ using Artsy.API.Models.Printify;
 using Artsy.API.Models.Projects;
 using Artsy.API.Services;
 using Artsy.Data.Entities.Projects;
+using Artsy.Data.Entities;
 using Artsy.Data.Interfaces.Projects;
+using Artsy.Data.Interfaces;
 
 namespace Artsy.API.Controllers
 {
@@ -21,6 +23,10 @@ namespace Artsy.API.Controllers
         readonly IProjectCollectionProductRepository _productRepository;
         readonly IProjectBlueprintsRepository _blueprintRepository;
         readonly IProjectCollectionProductImageRepository _productImageRepository;
+        readonly IProjectCollectionArtworkRepository _artworkRepository;
+        readonly IPrintifyBlueprintImageRepository _printifyBlueprintImageRepository;
+        readonly IPrintifyBlueprintImageVariantRepository _printifyBlueprintImageVariantRepository;
+        readonly IProjectBlueprintProductImageRepository _blueprintProductImageRepository;
         readonly IImageService _imageService;
 
         public PrintifyProductsController(
@@ -31,6 +37,10 @@ namespace Artsy.API.Controllers
             IProjectCollectionProductRepository productRepository,
             IProjectBlueprintsRepository blueprintRepository,
             IProjectCollectionProductImageRepository productImageRepository,
+            IProjectCollectionArtworkRepository artworkRepository,
+            IPrintifyBlueprintImageRepository printifyBlueprintImageRepository,
+            IPrintifyBlueprintImageVariantRepository printifyBlueprintImageVariantRepository,
+            IProjectBlueprintProductImageRepository blueprintProductImageRepository,
             IImageService imageService)
         {
             _printifyService = printifyService;
@@ -40,8 +50,23 @@ namespace Artsy.API.Controllers
             _productRepository = productRepository;
             _blueprintRepository = blueprintRepository;
             _productImageRepository = productImageRepository;
+            _artworkRepository = artworkRepository;
+            _printifyBlueprintImageRepository = printifyBlueprintImageRepository;
+            _printifyBlueprintImageVariantRepository = printifyBlueprintImageVariantRepository;
+            _blueprintProductImageRepository = blueprintProductImageRepository;
             _imageService = imageService;
         }
+
+        private static string GetPositionLabel(int position) => position switch
+        {
+            1 => "front",
+            2 => "back",
+            3 => "top",
+            4 => "bottom",
+            5 => "left",
+            6 => "right",
+            _ => "front"
+        };
 
         private async Task<bool> ValidateAccess(Guid collectionId, Guid productId)
         {
@@ -112,6 +137,63 @@ namespace Artsy.API.Controllers
             }
         }
 
+        [HttpPost("upload-artwork-image")]
+        public async Task<IActionResult> UploadArtworkImage([FromBody] UploadArtworkImageRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.CollectionId == Guid.Empty || request.ArtworkId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "CollectionId and ArtworkId are required." });
+
+            try
+            {
+                var collection = await _projectCollectionRepository.GetByIdAsync(request.CollectionId);
+                if (collection == null || collection.Status != 1)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var project = await _projectRepository.GetByIdAsync(collection.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var shopId = project.PrintifyStoreId ?? 0;
+                if (shopId == 0)
+                    return Json(new ApiResponse { success = false, message = "No Printify store selected for this project." });
+
+                var artwork = await _artworkRepository.GetByIdAsync(request.CollectionId, request.ArtworkId);
+                if (artwork == null)
+                    return Json(new ApiResponse { success = false, message = "Artwork not found." });
+
+                if (!string.IsNullOrWhiteSpace(artwork.PrintifyImageId))
+                    return Json(new ApiResponse { success = true, data = new { printifyImageId = artwork.PrintifyImageId } });
+
+                var imgBytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(
+                    artwork.ProjectId, request.CollectionId, artwork.ItemId, artwork.Id);
+                if (imgBytes == null || imgBytes.Length == 0)
+                {
+                    imgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(
+                        artwork.ProjectId, request.CollectionId, artwork.ItemId, artwork.Id);
+                }
+                if (imgBytes == null || imgBytes.Length == 0)
+                    return Json(new ApiResponse { success = false, message = "Artwork file not found." });
+
+                var base64 = Convert.ToBase64String(imgBytes);
+                var fileName = $"{artwork.Id}.jpg";
+                var uploadResp = await _printifyService.UploadImageAsync(userId, fileName, base64);
+                if (uploadResp == null)
+                    return Json(new ApiResponse { success = false, message = "Failed to upload artwork to Printify." });
+
+                await _artworkRepository.SetPrintifyImageIdAsync(artwork.Id, uploadResp.Id);
+
+                return Json(new ApiResponse { success = true, data = new { printifyImageId = uploadResp.Id } });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
         [HttpPost("create")]
         public async Task<IActionResult> Create([FromBody] CreatePrintifyProductRequest request)
         {
@@ -119,28 +201,42 @@ namespace Artsy.API.Controllers
             if (userId == Guid.Empty)
                 return Json(new ApiResponse { success = false, message = "Could not find user" });
 
-            if (request.CollectionId == Guid.Empty || request.ProductId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "CollectionId and ProductId are required." });
-
-            if (!await ValidateAccess(request.CollectionId, request.ProductId))
-                return Json(new ApiResponse { success = false, message = "Collection or product not found." });
+            if (request.CollectionId == Guid.Empty || request.ProjectBlueprintId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "CollectionId and ProjectBlueprintId are required." });
 
             try
             {
                 var collection = await _projectCollectionRepository.GetByIdAsync(request.CollectionId);
-                var project = await _projectRepository.GetByIdAsync(collection!.ProjectId, userId);
+                if (collection == null || collection.Status != 1)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
 
-                var shopId = project?.PrintifyStoreId ?? 0;
+                var project = await _projectRepository.GetByIdAsync(collection.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var shopId = project.PrintifyStoreId ?? 0;
                 if (shopId == 0)
                     return Json(new ApiResponse { success = false, message = "No Printify store selected for this project." });
 
-                var product = await _productRepository.GetByIdAsync(request.ProductId);
-                if (product == null || product.CollectionId != request.CollectionId)
-                    return Json(new ApiResponse { success = false, message = "Product not found." });
-
-                var bp = await _blueprintRepository.GetByIdAsync(product.ProjectBlueprintId);
+                var bp = await _blueprintRepository.GetByIdAsync(request.ProjectBlueprintId);
                 if (bp == null)
                     return Json(new ApiResponse { success = false, message = "Blueprint not found." });
+
+                var product = await _productRepository.GetByCollectionAndBlueprintIdAsync(request.CollectionId, bp.Id);
+                if (product == null)
+                {
+                    product = await _productRepository.CreateAsync(new ProjectCollectionProduct
+                    {
+                        ProjectId = collection.ProjectId,
+                        CollectionId = request.CollectionId,
+                        ProjectBlueprintId = bp.Id,
+                        BlueprintId = bp.BlueprintId,
+                        Name = bp.Name,
+                        Description = bp.Description ?? "",
+                        SafetyInfo = bp.SafetyInfo ?? "",
+                        PricingJson = bp.PricingJson ?? "[]"
+                    });
+                }
 
                 if (bp.PrintProviderId == 0)
                     return Json(new ApiResponse { success = false, message = "No print provider configured for blueprint." });
@@ -192,12 +288,16 @@ namespace Artsy.API.Controllers
                     IsEnabled = true,
                 }).ToList();
 
+                var collectionArtwork = (await _artworkRepository.GetByCollectionIdAsync(request.CollectionId))
+                    .Where(a => a.Accepted && a.Active && !string.IsNullOrWhiteSpace(a.PrintifyImageId))
+                    .ToList();
+
                 var productImages = (await _productImageRepository.GetByCollectionIdAsync(request.CollectionId))
                     .Where(img => img.ProjectBlueprintId == bp.Id && img.Accepted && img.Active && !string.IsNullOrWhiteSpace(img.PrintifyImageId))
                     .ToList();
 
                 var printAreas = new List<PrintifyPrintAreaRequest>();
-                if (!string.IsNullOrWhiteSpace(bp.PlacementJson))
+                if (!string.IsNullOrWhiteSpace(bp.PlacementJson) && collectionArtwork.Count > 0)
                 {
                     try
                     {
@@ -209,11 +309,11 @@ namespace Artsy.API.Controllers
                                 var position = kv.Key.ToLower();
                                 var placementImages = new List<PrintifyPlaceholderImageRequest>();
 
-                                foreach (var img in productImages)
+                                foreach (var art in collectionArtwork)
                                 {
                                     placementImages.Add(new PrintifyPlaceholderImageRequest
                                     {
-                                        Id = img.PrintifyImageId,
+                                        Id = art.PrintifyImageId,
                                         X = 0.5,
                                         Y = 0.5,
                                         Scale = 1,
@@ -242,6 +342,44 @@ namespace Artsy.API.Controllers
                     catch { }
                 }
 
+                var blueprintImages = (await _printifyBlueprintImageRepository.GetByBlueprintIdAsync(bp.BlueprintId)).ToList();
+                var blueprintImageIds = blueprintImages.Select(bi => bi.Id).ToList();
+                var imageVariants = blueprintImageIds.Count > 0
+                    ? (await _printifyBlueprintImageVariantRepository.GetByBlueprintImageIdsAsync(blueprintImageIds)).ToList()
+                    : new List<PrintifyBlueprintImageVariant>();
+
+                var productImageIds = productImages.Select(pi => pi.ProductImageId).Where(id => id != Guid.Empty).ToList();
+                var blueprintProductImages = productImageIds.Count > 0
+                    ? (await _blueprintProductImageRepository.GetByBlueprintIdsAsync(new[] { bp.Id })).ToDictionary(bpi => bpi.Id)
+                    : new Dictionary<Guid, ProjectBlueprintProductImage>();
+
+                var positionByVariantColor = new Dictionary<string, int>();
+                foreach (var bi in blueprintImages)
+                {
+                    var variantsForImage = imageVariants.Where(v => v.BlueprintImageId == bi.Id);
+                    foreach (var v in variantsForImage)
+                    {
+                        positionByVariantColor[v.VariantColor] = bi.Position;
+                    }
+                }
+
+                var images = productImages.Select(img =>
+                {
+                    var position = "front";
+                    if (img.ProductImageId != Guid.Empty && blueprintProductImages.TryGetValue(img.ProductImageId, out var bpi))
+                    {
+                        if (positionByVariantColor.TryGetValue(bpi.VariantColor, out var pos))
+                            position = GetPositionLabel(pos);
+                    }
+                    return new PrintifyProductImageRequest
+                    {
+                        Src = $"https://images.printify.com/{img.PrintifyImageId}.jpg",
+                        VariantIds = variantIds,
+                        Position = position,
+                        IsDefault = false,
+                    };
+                }).ToList();
+
                 var productRequest = new PrintifyProductRequest
                 {
                     Title = bp.Name,
@@ -251,6 +389,7 @@ namespace Artsy.API.Controllers
                     PrintProviderId = printProviderId,
                     Variants = variants,
                     PrintAreas = printAreas,
+                    Images = images,
                 };
 
                 var response = await _printifyService.CreateProductAsync(userId, shopId, productRequest);

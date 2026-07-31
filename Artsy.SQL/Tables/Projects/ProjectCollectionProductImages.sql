@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionProductImages"
     "ProjectId" UUID NOT NULL REFERENCES public."Projects"("Id"),
     "CollectionId" UUID NOT NULL REFERENCES public."ProjectCollections"("Id"),
     "ProjectBlueprintId" UUID NOT NULL REFERENCES public."ProjectBlueprints"("Id"),
+    "PrintifyImageId" VARCHAR(32) NOT NULL DEFAULT '',
     "ProductImageId" UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     "ImageModel" VARCHAR(16) NOT NULL DEFAULT '',
     "Prompt" TEXT NOT NULL DEFAULT '',

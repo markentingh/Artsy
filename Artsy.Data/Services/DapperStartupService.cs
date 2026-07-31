@@ -18,6 +18,7 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<IDbConnection>((sp) => new NpgsqlConnection(builder.Configuration["ConnectionStrings:Database"] ?? ""));
 
             builder.Services.AddTransient<IAppUserRepository, AppUserRepository>();
+            builder.Services.AddTransient<IAppUserInstagramAccountRepository, AppUserInstagramAccountRepository>();
             builder.Services.AddTransient<IAppRoleRepository, AppRoleRepository>();
             builder.Services.AddTransient<IAppUserRolesRepository, AppUserRolesRepository>();
             builder.Services.AddTransient<IAppUserTokenRepository, AppUserTokenRepository>();

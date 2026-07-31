@@ -14,5 +14,6 @@ namespace Artsy.Data.Interfaces.Projects
         Task UpdateAsync(ProjectCollectionArtwork artwork);
         Task AcceptAsync(Guid collectionId, Guid itemId);
         Task DeleteAsync(Guid collectionId, Guid itemId);
+        Task SetPrintifyImageIdAsync(Guid artworkId, string printifyImageId);
     }
 }

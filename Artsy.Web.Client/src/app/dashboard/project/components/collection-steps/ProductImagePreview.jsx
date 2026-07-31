@@ -96,9 +96,7 @@ export default function ProductImagePreview() {
     doGenerateProductImage(selectedProductCombos[currentProductComboIndex], productImageChanges);
   }, [productImageChanges, selectedProductCombos, currentProductComboIndex, doGenerateProductImage, setShowProductImageChanges]);
 
-  const imageUrl = currentProductImage
-    ? api.getProductImageUrl(collectionId, currentProductImage.id)
-    : null;
+  const imageUrl = currentProductImage?.imageUrl || null;
 
   return (
     <div className="flex flex-col h-full">

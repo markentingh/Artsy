@@ -7,8 +7,10 @@ const Connections = (args) => Api({ ...args }).endpoints(({ api }) => {
     connectPrintify: () => api.get(`${apiPath}/printify/connect`),
     getTelegramStatus: () => api.get(`${apiPath}/telegram/status`),
     connectTelegram: () => api.get(`${apiPath}/telegram/connect`),
-    getMetaStatus: () => api.get(`${apiPath}/meta/status`),
-    connectMeta: () => api.get(`${apiPath}/meta/connect`),
+    getInstagramAccounts: () => api.get(`${apiPath}/instagram/accounts`),
+    connectInstagram: () => api.get(`${apiPath}/instagram/connect`),
+    exchangeInstagram: (request) => api.post(`${apiPath}/instagram/exchange`, request),
+    disconnectInstagram: (request) => api.post(`${apiPath}/instagram/disconnect`, request),
   };
 });
 

@@ -5,7 +5,8 @@ const routes = [
   { path: '/login',                Element: lazy(() => import('@/app/account/login/page')) },
   { path: '/signup',               Element: lazy(() => import('@/app/account/signup/page')) },
   { path: '/forgot-password',      Element: lazy(() => import('@/app/account/forgot-password/page')) },
-  { path: '/create-password/:hash', Element: lazy(() => import('@/app/account/create-password/page')) }
+  { path: '/create-password/:hash', Element: lazy(() => import('@/app/account/create-password/page')) },
+  { path: '/instagram/oauth-callback',        Element: lazy(() => import('@/oauth/instagram')) }
 ];
 
 export default routes;

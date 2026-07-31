@@ -72,6 +72,18 @@ namespace Artsy.Data.Repositories.Projects
             await _dbConnection.ExecuteAsync(query, new { id, appUserId, printifyStoreId });
         }
 
+        public async Task UpdateInstagramIdAsync(Guid id, Guid appUserId, Guid? instagramId)
+        {
+            const string query = @"UPDATE public.""Projects"" SET ""InstagramId"" = @instagramId WHERE ""Id"" = @id AND ""AppUserId"" = @appUserId";
+            await _dbConnection.ExecuteAsync(query, new { id, appUserId, instagramId });
+        }
+
+        public async Task UpdatePostToInstagramAsync(Guid id, Guid appUserId, bool postToInstagram)
+        {
+            const string query = @"UPDATE public.""Projects"" SET ""PostToInstagram"" = @postToInstagram WHERE ""Id"" = @id AND ""AppUserId"" = @appUserId";
+            await _dbConnection.ExecuteAsync(query, new { id, appUserId, postToInstagram });
+        }
+
         public async Task DeleteAsync(Guid id, Guid appUserId)
         {
             const string query = @"UPDATE public.""Projects"" SET ""Status"" = 0 WHERE ""Id"" = @id AND ""AppUserId"" = @appUserId";
