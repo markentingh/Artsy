@@ -9,5 +9,6 @@ namespace Artsy.Data.Entities.Projects
         public string Prompt { get; set; } = "";
         public string ArtworkType { get; set; } = "ai";
         public Guid? CustomImageId { get; set; }
+        public string? IgnoredQuestions { get; set; }
     }
 }

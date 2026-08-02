@@ -35,15 +35,15 @@ namespace Artsy.API.Models.Projects
         public Guid CollectionId { get; set; }
     }
 
-    public class UploadProductImageRequest
-    {
-        public Guid CollectionId { get; set; }
-        public Guid ProductImageId { get; set; }
-    }
-
     public class UploadArtworkImageRequest
     {
         public Guid CollectionId { get; set; }
         public Guid ArtworkId { get; set; }
+    }
+
+    public class DownloadMockupsRequest
+    {
+        public Guid CollectionId { get; set; }
+        public Guid ProjectBlueprintId { get; set; }
     }
 }

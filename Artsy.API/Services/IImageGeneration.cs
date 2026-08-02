@@ -5,7 +5,7 @@ namespace Artsy.API.Services
     public interface IImageGeneration
     {
         string ModelKey { get; }
-        Task<ImageGenerationResult> GenerateAsync(string imageModel, string imageModelJson, string? quality = null, string? previousResponseId = null, bool useResponsesApi = false);
+        Task<ImageGenerationResult> GenerateAsync(ImageGenerationRequest request);
         IImageTokens CreateTokenizer(ImageGenerationModel model);
     }
 }

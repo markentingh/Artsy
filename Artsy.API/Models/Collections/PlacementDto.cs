@@ -4,6 +4,8 @@ namespace Artsy.API.Models.Collections
 {
     public class PlacementDto
     {
+        [JsonPropertyName("position")]
+        public string Position { get; set; } = "";
         [JsonPropertyName("source")]
         public string Source { get; set; } = "";
         [JsonPropertyName("itemId")]
@@ -16,6 +18,10 @@ namespace Artsy.API.Models.Collections
         public Guid? CustomImageId { get; set; }
         [JsonPropertyName("customItemId")]
         public Guid? CustomItemId { get; set; }
+        [JsonPropertyName("cropX")]
+        public string CropX { get; set; } = "center";
+        [JsonPropertyName("cropY")]
+        public string CropY { get; set; } = "center";
 
         public Guid GetItemId()
         {

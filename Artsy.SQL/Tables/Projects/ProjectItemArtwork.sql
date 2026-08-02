@@ -6,8 +6,10 @@ CREATE TABLE IF NOT EXISTS public."ProjectItemArtwork"
     "ImageModel" VARCHAR(16) NOT NULL DEFAULT '',
     "Prompt" TEXT NOT NULL DEFAULT '',
     "ArtworkType" VARCHAR(16) NOT NULL DEFAULT 'ai',
-    "CustomImageId" UUID NULL
+    "CustomImageId" UUID NULL,
+    "IgnoredQuestions" TEXT NULL
 );
 
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "ArtworkType" VARCHAR(16) NOT NULL DEFAULT 'ai';
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "CustomImageId" UUID NULL;
+ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "IgnoredQuestions" TEXT NULL;

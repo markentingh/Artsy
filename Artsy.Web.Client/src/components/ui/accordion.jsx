@@ -43,8 +43,12 @@ function AccordionItem({ title, content, action, bgClass, hoverClass }) {
           <div className="flex items-center gap-2 flex-1">
             {title}
           </div>
-          <div className="flex items-center gap-2 ml-2" onClick={(e) => e.stopPropagation()}>
-            {action}
+          <div className="flex items-center gap-2 ml-2">
+            {action && (
+              <div onClick={(e) => e.stopPropagation()}>
+                {action}
+              </div>
+            )}
             {hasContent && (
               <div className="rounded-full p-1">
                 <Icon

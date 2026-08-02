@@ -66,6 +66,7 @@ export default function Carousel({ images = [], alt = '', onImageClick, onImageE
             onClick={() => onImageClick?.(images[singleIndex], singleIndex)}
             onError={() => onImageError?.(singleIndex)}
           />
+          {overlayRender?.(singleIndex)}
         </div>
         {showNav && (
           <>

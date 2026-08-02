@@ -12,6 +12,7 @@ namespace Artsy.API.Services
         Task<byte[]> GetProjectCollectionArtworkAsync(Guid collectionId, Guid artworkId, int index);
         Task SaveProjectItemPreviewAsync(Guid projectId, Guid itemId, Guid previewId, byte[] imageData);
         Task<byte[]> GetProjectItemPreviewAsync(Guid projectId, Guid itemId, Guid previewId, bool thumb = false);
+        Task DeleteProjectItemPreviewAsync(Guid projectId, Guid itemId, Guid previewId);
         Task SavePrintifyCatalogImageAsync(int blueprintId, int imageIndex, byte[] imageData);
         Task<byte[]> GetPrintifyCatalogImageAsync(int blueprintId, int imageIndex, bool thumb = false);
         Task SaveProjectItemReferenceAsync(Guid projectId, Guid referenceId, string extension, byte[] imageData);
@@ -25,6 +26,8 @@ namespace Artsy.API.Services
         Task<byte[]> GetProjectCollectionArtworkFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
         Task SaveProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId, byte[] imageData);
         Task<byte[]> GetProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId);
+        Task SaveProjectCollectionMockupAsync(Guid projectId, Guid collectionId, Guid mockupId, byte[] imageData);
+        Task<byte[]> GetProjectCollectionMockupAsync(Guid projectId, Guid collectionId, Guid mockupId);
         Task<byte[]> GetImageGenerationAsync(Guid projectId, Guid? itemId, Guid? collectionId, Guid? blueprintId, string filename);
         Task<(int width, int height)?> GetImageDimensionsAsync(byte[] imageBytes);
     }
@@ -91,6 +94,23 @@ namespace Artsy.API.Services
             if (fileBytes.Length == 0 && thumb)
                 return await GetFromFileSystemAsync(Path.Combine("projects", projectId.ToString(), "previews", itemId.ToString(), $"{previewId}.jpg"));
             return fileBytes;
+        }
+
+        public async Task DeleteProjectItemPreviewAsync(Guid projectId, Guid itemId, Guid previewId)
+        {
+            var basePath = Path.Combine("projects", projectId.ToString(), "previews", itemId.ToString());
+            var fileName = $"{previewId}.jpg";
+            var thumbFileName = $"{previewId}_thumb.jpg";
+
+            if (_activeStorage == "azure")
+            {
+                await DeleteFromAzureBlobAsync(Path.Combine(basePath, fileName));
+                await DeleteFromAzureBlobAsync(Path.Combine(basePath, thumbFileName));
+                return;
+            }
+
+            await DeleteFromFileSystemAsync(Path.Combine(basePath, fileName));
+            await DeleteFromFileSystemAsync(Path.Combine(basePath, thumbFileName));
         }
 
         public async Task SavePrintifyCatalogImageAsync(int blueprintId, int imageIndex, byte[] imageData)
@@ -414,6 +434,31 @@ namespace Artsy.API.Services
         {
             var fileName = $"{productImageId}.jpg";
             var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "product-images", fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveProjectCollectionMockupAsync(Guid projectId, Guid collectionId, Guid mockupId, byte[] imageData)
+        {
+            var fileName = $"{mockupId}.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "mockups", fileName);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionMockupAsync(Guid projectId, Guid collectionId, Guid mockupId)
+        {
+            var fileName = $"{mockupId}.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "mockups", fileName);
 
             if (_activeStorage == "azure")
                 return await GetFromAzureBlobAsync(relativePath);

@@ -10,25 +10,26 @@ import ProjectQuestions from './collection-steps/ProjectQuestions';
 import ArtworkQuestions from './collection-steps/ArtworkQuestions';
 import ArtworkPreview from './collection-steps/ArtworkPreview';
 import ReadyToGenerate from './collection-steps/ReadyToGenerate';
-import PublishProducts from './collection-steps/PublishProducts';
+import PostSocialMedia from './collection-steps/PostSocialMedia';
 import CreateProducts from './collection-steps/CreateProducts';
 import PublishProductsStep from './collection-steps/PublishProductsStep';
 import ProductImagePrompt from './collection-steps/ProductImagePrompt';
 import ProductImagePreview from './collection-steps/ProductImagePreview';
 import CollectionSetupList from './CollectionSetupList';
 
-const stepTitle = (step) => {
+const stepTitle = (step, title) => {
+  const prefix = title || 'New Collection';
   switch (step) {
-    case STEPS.PROJECT_QUESTIONS: return 'New Collection - Project Questions';
-    case STEPS.ARTWORK_QUESTIONS: return 'New Collection - Artwork Questions';
-    case STEPS.ARTWORK_PREVIEW: return 'New Collection - Artwork Preview';
-    case STEPS.READY_TO_GENERATE: return 'New Collection - Ready to Upscale';
-    case STEPS.PRODUCT_IMAGE_PROMPT: return 'New Collection - Product Image Prompt';
-    case STEPS.PRODUCT_IMAGE_PREVIEW: return 'New Collection - Product Images';
-    case STEPS.CREATE_PRODUCTS: return 'New Collection - Create Products';
-    case STEPS.PUBLISH_PRODUCTS: return 'New Collection - Publish Products';
-    case STEPS.SOCIAL_MEDIA: return 'New Collection - Social Media';
-    default: return 'New Collection';
+    case STEPS.PROJECT_QUESTIONS: return `${prefix} - Project Questions`;
+    case STEPS.ARTWORK_QUESTIONS: return `${prefix} - Artwork Questions`;
+    case STEPS.ARTWORK_PREVIEW: return `${prefix} - Artwork Preview`;
+    case STEPS.READY_TO_GENERATE: return `${prefix} - Ready to Upscale`;
+    case STEPS.PRODUCT_IMAGE_PROMPT: return `${prefix} - Product Image Prompt`;
+    case STEPS.PRODUCT_IMAGE_PREVIEW: return `${prefix} - Product Images`;
+    case STEPS.CREATE_PRODUCTS: return `${prefix} - Create Products`;
+    case STEPS.PUBLISH_PRODUCTS: return `${prefix} - Publish Products`;
+    case STEPS.SOCIAL_MEDIA: return `${prefix} - Social Media`;
+    default: return prefix;
   }
 };
 
@@ -37,13 +38,14 @@ function CollectionWizard() {
     step, message, setMessage,
     initialLoading, artworkPreview, setArtworkPreview,
     onClose, STEPS, wizardSteps, stepIndex,
+    collectionTitle,
   } = useCollection();
 
   const [showChecklist, setShowChecklist] = useState(false);
 
   return (
     <Modal
-      title={stepTitle(step)}
+      title={stepTitle(step, collectionTitle)}
       onClose={onClose}
       top
       className="min-w-[40em] max-w-full"
@@ -76,25 +78,13 @@ function CollectionWizard() {
             </button>
             <hr className="flex-1 border-gray-200 dark:border-gray-700" />
           </div>
-          {showChecklist ? (
-            <div className="flex gap-4 items-stretch">
+          <div className={showChecklist ? "flex gap-4 items-stretch" : ""}>
+            {showChecklist && (
               <div className="w-[450px] shrink-0 overflow-y-auto max-h-[60vh]">
                 <CollectionSetupList />
               </div>
-              <div className="flex-1 min-w-[600px] flex flex-col">
-                {step === STEPS.PROJECT_QUESTIONS && <ProjectQuestions />}
-                {step === STEPS.ARTWORK_QUESTIONS && <ArtworkQuestions />}
-                {step === STEPS.ARTWORK_PREVIEW && <ArtworkPreview />}
-                {step === STEPS.READY_TO_GENERATE && <ReadyToGenerate />}
-                {step === STEPS.PRODUCT_IMAGE_PROMPT && <ProductImagePrompt />}
-                {step === STEPS.PRODUCT_IMAGE_PREVIEW && <ProductImagePreview />}
-                {step === STEPS.CREATE_PRODUCTS && <CreateProducts />}
-                {step === STEPS.PUBLISH_PRODUCTS && <PublishProductsStep />}
-                {step === STEPS.SOCIAL_MEDIA && <PublishProducts />}
-              </div>
-            </div>
-          ) : (
-            <div>
+            )}
+            <div className={showChecklist ? "flex-1 min-w-[600px] flex flex-col" : ""}>
               {step === STEPS.PROJECT_QUESTIONS && <ProjectQuestions />}
               {step === STEPS.ARTWORK_QUESTIONS && <ArtworkQuestions />}
               {step === STEPS.ARTWORK_PREVIEW && <ArtworkPreview />}
@@ -103,9 +93,9 @@ function CollectionWizard() {
               {step === STEPS.PRODUCT_IMAGE_PREVIEW && <ProductImagePreview />}
               {step === STEPS.CREATE_PRODUCTS && <CreateProducts />}
               {step === STEPS.PUBLISH_PRODUCTS && <PublishProductsStep />}
-              {step === STEPS.SOCIAL_MEDIA && <PublishProducts />}
+              {step === STEPS.SOCIAL_MEDIA && <PostSocialMedia />}
             </div>
-          )}
+          </div>
         </>
       )}
 
@@ -113,7 +103,7 @@ function CollectionWizard() {
         show={!!artworkPreview}
         images={artworkPreview?.images || []}
         alt="Artwork Preview"
-        defaultIndex={artworkPreview ? artworkPreview.images.indexOf(artworkPreview.src) : 0}
+        defaultIndex={artworkPreview ? (artworkPreview._idx ?? artworkPreview.images.indexOf(artworkPreview.src)) : 0}
         onClose={() => setArtworkPreview(null)}
       />
     </Modal>
@@ -131,7 +121,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
     loadImageModels, ensureCollection,
     api, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex,
     blueprints, setProductBlueprintImages, setProductImagePrompt,
-    printifyImageIndexByColor,
+    printifyImageIndexByColor, printifyProducts,
   } = useCollection();
 
   const [aiItemsLoaded, setAiItemsLoaded] = useState(false);
@@ -146,7 +136,10 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
 
   useEffect(() => {
     if (!items || items.length === 0) return;
-    const ai = items.filter(i => blueprintItemIds.has(String(i.id)));
+    const ai = items.filter(i =>
+      i.artworkType !== 'custom' &&
+      (blueprintItemIds.has(String(i.id)) || i.socialMedia)
+    );
     setAiItems(ai);
     setAiItemsLoaded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -190,7 +183,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
         loadItemData(firstMissingIndex);
       } else {
         const firstUnacceptedIndex = aiItems.findIndex(item =>
-          blueprintItemIds.has(String(item.id)) &&
+          (blueprintItemIds.has(String(item.id)) || item.socialMedia) &&
           unacceptedArtworkItemIds.includes(String(item.id))
         );
 
@@ -198,8 +191,12 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
           setCurrentItemIndex(firstUnacceptedIndex);
           loadItemData(firstUnacceptedIndex);
         } else {
-          const allFullSize = collectionArtwork.length > 0 &&
-            collectionArtwork.filter(a => a.accepted).every(a => a.fullSize);
+          const customItemIds = new Set(collectionArtwork.filter(a => a.imageModel === 'custom').map(a => String(a.itemId)));
+          const aiBlueprintItems = aiItems.filter(item => !customItemIds.has(String(item.id)));
+          const allFullSize = aiBlueprintItems.length > 0 && aiBlueprintItems.every(item => {
+            const art = collectionArtwork.find(a => String(a.itemId) === String(item.id));
+            return art && art.accepted && art.fullSize;
+          });
           if (allFullSize) {
             (async () => {
               const colId = initialCollectionId || await ensureCollection();
@@ -222,7 +219,18 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
                     const missing = allPbImages.filter(pbi => !acceptedProductImageIds.has(pbi.id));
 
                     if (allPbImages.length === 0) {
-                      setStep(STEPS.CREATE_PRODUCTS);
+                      const createdBpIds = new Set(
+                        printifyProducts.filter(pp => pp.printifyProductId && pp.projectBlueprintId && pp.mockupsDownloaded)
+                          .map(pp => pp.projectBlueprintId)
+                      );
+                      const allProductsCreated = blueprints.length > 0 && blueprints.every(bp => createdBpIds.has(bp.id));
+
+                      if (allProductsCreated) {
+                        const allPublished = printifyProducts.length > 0 && printifyProducts.every(pp => pp.published);
+                        setStep(allPublished ? STEPS.SOCIAL_MEDIA : STEPS.PUBLISH_PRODUCTS);
+                      } else {
+                        setStep(STEPS.CREATE_PRODUCTS);
+                      }
                       setInitialLoading(false);
                       return;
                     }
@@ -231,6 +239,30 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
                       try {
                         await api.ensurePrintifyProducts({ collectionId: colId });
                       } catch (e) { /* non-critical */ }
+
+                      const createdBpIds = new Set(
+                        printifyProducts.filter(pp => pp.printifyProductId && pp.projectBlueprintId && pp.mockupsDownloaded)
+                          .map(pp => pp.projectBlueprintId)
+                      );
+                      const allProductsCreated = blueprints.length > 0 && blueprints.every(bp => createdBpIds.has(bp.id));
+
+                      if (allProductsCreated) {
+                        const allPublished = printifyProducts.length > 0 && printifyProducts.every(pp => pp.published);
+                        setStep(allPublished ? STEPS.SOCIAL_MEDIA : STEPS.PUBLISH_PRODUCTS);
+                      } else {
+                        setStep(STEPS.CREATE_PRODUCTS);
+                      }
+                      setInitialLoading(false);
+                      return;
+                    }
+
+                    const createdBpIds = new Set(
+                      printifyProducts.filter(pp => pp.printifyProductId && pp.projectBlueprintId && pp.mockupsDownloaded)
+                        .map(pp => pp.projectBlueprintId)
+                    );
+                    const allProductsCreated = blueprints.length > 0 && blueprints.every(bp => createdBpIds.has(bp.id));
+
+                    if (!allProductsCreated) {
                       setStep(STEPS.CREATE_PRODUCTS);
                       setInitialLoading(false);
                       return;
@@ -260,8 +292,18 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
                     setInitialLoading(false);
                     return;
                   }
-                } catch (e) {  }
-                setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+                } catch (e) {
+                  const createdBpIds = new Set(
+                    printifyProducts.filter(pp => pp.printifyProductId && pp.projectBlueprintId && pp.mockupsDownloaded)
+                      .map(pp => pp.projectBlueprintId)
+                  );
+                  const allProductsCreated = blueprints.length > 0 && blueprints.every(bp => createdBpIds.has(bp.id));
+                  if (!allProductsCreated) {
+                    setStep(STEPS.CREATE_PRODUCTS);
+                  } else {
+                    setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+                  }
+                }
                 setInitialLoading(false);
               } else {
                 setStep(STEPS.READY_TO_GENERATE);
@@ -282,7 +324,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
   return null;
 }
 
-export default function CollectionModal({ show, projectId, project, collectionId: initialCollectionId, onClose, onSaved }) {
+export default function CollectionModal({ show, projectId, project, collectionId: initialCollectionId, collectionTitle, onClose, onSaved }) {
   if (!show) return null;
 
   return (
@@ -290,6 +332,7 @@ export default function CollectionModal({ show, projectId, project, collectionId
       projectId={projectId}
       project={project}
       collectionId={initialCollectionId}
+      collectionTitle={collectionTitle}
       onClose={onClose}
       onSaved={onSaved}
     >

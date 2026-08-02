@@ -43,8 +43,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             artwork.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectItemArtwork"" (""Id"", ""ItemId"", ""ProjectId"", ""ImageModel"", ""Prompt"", ""ArtworkType"", ""CustomImageId"")
-                VALUES (@Id, @ItemId, @ProjectId, @ImageModel, @Prompt, @ArtworkType, @CustomImageId)
+                INSERT INTO public.""ProjectItemArtwork"" (""Id"", ""ItemId"", ""ProjectId"", ""ImageModel"", ""Prompt"", ""ArtworkType"", ""CustomImageId"", ""IgnoredQuestions"")
+                VALUES (@Id, @ItemId, @ProjectId, @ImageModel, @Prompt, @ArtworkType, @CustomImageId, @IgnoredQuestions)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectItemArtwork>(query, artwork);
         }
@@ -53,7 +53,7 @@ namespace Artsy.Data.Repositories.Projects
         {
             const string query = @"
                 UPDATE public.""ProjectItemArtwork""
-                SET ""ImageModel"" = @ImageModel, ""Prompt"" = @Prompt, ""ArtworkType"" = @ArtworkType, ""CustomImageId"" = @CustomImageId
+                SET ""ImageModel"" = @ImageModel, ""Prompt"" = @Prompt, ""ArtworkType"" = @ArtworkType, ""CustomImageId"" = @CustomImageId, ""IgnoredQuestions"" = @IgnoredQuestions
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, artwork);
         }

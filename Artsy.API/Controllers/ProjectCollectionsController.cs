@@ -43,6 +43,7 @@ namespace Artsy.API.Controllers
                         id = collection.Id,
                         projectId = collection.ProjectId,
                         title = collection.Title,
+                        description = collection.Description,
                         created = collection.Created,
                         sequence = i + 1,
                         artwork = artworkList.Select(a => new
@@ -72,6 +73,40 @@ namespace Artsy.API.Controllers
                 result.Reverse();
 
                 return Json(new ApiResponse { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("update-collection-title")]
+        public async Task<IActionResult> UpdateCollectionTitle([FromBody] UpdateCollectionTitleRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.Id == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Collection ID is required." });
+
+            if (string.IsNullOrWhiteSpace(request.Title))
+                return Json(new ApiResponse { success = false, message = "Title is required." });
+
+            try
+            {
+                var collection = await _projectCollectionRepository.GetByIdAsync(request.Id);
+                if (collection == null)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var project = await _projectRepository.GetByIdAsync(collection.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                collection.Title = request.Title.Trim();
+                await _projectCollectionRepository.UpdateAsync(collection);
+
+                return Json(new ApiResponse { success = true, data = new { id = collection.Id, title = collection.Title } });
             }
             catch (Exception ex)
             {

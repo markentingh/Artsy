@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
 using Artsy.API.Models;
+using Artsy.API.Models.Collections;
 using Artsy.API.Models.Printify;
 using Artsy.API.Models.Projects;
 using Artsy.API.Services;
@@ -27,7 +30,9 @@ namespace Artsy.API.Controllers
         readonly IPrintifyBlueprintImageRepository _printifyBlueprintImageRepository;
         readonly IPrintifyBlueprintImageVariantRepository _printifyBlueprintImageVariantRepository;
         readonly IProjectBlueprintProductImageRepository _blueprintProductImageRepository;
+        readonly IProjectCollectionPrintifyProductMockupRepository _mockupRepository;
         readonly IImageService _imageService;
+        readonly IHttpClientFactory _httpClientFactory;
 
         public PrintifyProductsController(
             IPrintifyService printifyService,
@@ -41,7 +46,9 @@ namespace Artsy.API.Controllers
             IPrintifyBlueprintImageRepository printifyBlueprintImageRepository,
             IPrintifyBlueprintImageVariantRepository printifyBlueprintImageVariantRepository,
             IProjectBlueprintProductImageRepository blueprintProductImageRepository,
-            IImageService imageService)
+            IProjectCollectionPrintifyProductMockupRepository mockupRepository,
+            IImageService imageService,
+            IHttpClientFactory httpClientFactory)
         {
             _printifyService = printifyService;
             _projectCollectionRepository = projectCollectionRepository;
@@ -54,7 +61,9 @@ namespace Artsy.API.Controllers
             _printifyBlueprintImageRepository = printifyBlueprintImageRepository;
             _printifyBlueprintImageVariantRepository = printifyBlueprintImageVariantRepository;
             _blueprintProductImageRepository = blueprintProductImageRepository;
+            _mockupRepository = mockupRepository;
             _imageService = imageService;
+            _httpClientFactory = httpClientFactory;
         }
 
         private static string GetPositionLabel(int position) => position switch
@@ -83,58 +92,6 @@ namespace Artsy.API.Controllers
                 return false;
 
             return true;
-        }
-
-        [HttpPost("upload-image")]
-        public async Task<IActionResult> UploadImage([FromBody] UploadProductImageRequest request)
-        {
-            var userId = GetUserId();
-            if (userId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "Could not find user" });
-
-            if (request.CollectionId == Guid.Empty || request.ProductImageId == Guid.Empty)
-                return Json(new ApiResponse { success = false, message = "CollectionId and ProductImageId are required." });
-
-            try
-            {
-                var collection = await _projectCollectionRepository.GetByIdAsync(request.CollectionId);
-                if (collection == null || collection.Status != 1)
-                    return Json(new ApiResponse { success = false, message = "Collection not found." });
-
-                var project = await _projectRepository.GetByIdAsync(collection.ProjectId, userId);
-                if (project == null)
-                    return Json(new ApiResponse { success = false, message = "Collection not found." });
-
-                var shopId = project.PrintifyStoreId ?? 0;
-                if (shopId == 0)
-                    return Json(new ApiResponse { success = false, message = "No Printify store selected for this project." });
-
-                var image = await _productImageRepository.GetByIdAsync(request.ProductImageId);
-                if (image == null || image.CollectionId != request.CollectionId)
-                    return Json(new ApiResponse { success = false, message = "Product image not found." });
-
-                if (!string.IsNullOrWhiteSpace(image.PrintifyImageId))
-                    return Json(new ApiResponse { success = true, data = new { printifyImageId = image.PrintifyImageId } });
-
-                var imgBytes = await _imageService.GetProjectCollectionProductImageAsync(
-                    image.ProjectId, request.CollectionId, image.Id);
-                if (imgBytes == null || imgBytes.Length == 0)
-                    return Json(new ApiResponse { success = false, message = "Image file not found." });
-
-                var base64 = Convert.ToBase64String(imgBytes);
-                var fileName = $"{image.Id}.jpg";
-                var uploadResp = await _printifyService.UploadImageAsync(userId, fileName, base64);
-                if (uploadResp == null)
-                    return Json(new ApiResponse { success = false, message = "Failed to upload image to Printify." });
-
-                await _productImageRepository.SetPrintifyImageIdAsync(image.Id, uploadResp.Id);
-
-                return Json(new ApiResponse { success = true, data = new { printifyImageId = uploadResp.Id } });
-            }
-            catch (Exception ex)
-            {
-                return Json(new ApiResponse { success = false, message = ex.Message });
-            }
         }
 
         [HttpPost("upload-artwork-image")]
@@ -178,6 +135,10 @@ namespace Artsy.API.Controllers
                 if (imgBytes == null || imgBytes.Length == 0)
                     return Json(new ApiResponse { success = false, message = "Artwork file not found." });
 
+                var cropSettings = await GetCropSettingsForArtworkAsync(collection.ProjectId, artwork.ItemId);
+                if (cropSettings != null)
+                    imgBytes = CropImage(imgBytes, cropSettings.Value.Width, cropSettings.Value.Height, cropSettings.Value.CropX, cropSettings.Value.CropY);
+
                 var base64 = Convert.ToBase64String(imgBytes);
                 var fileName = $"{artwork.Id}.jpg";
                 var uploadResp = await _printifyService.UploadImageAsync(userId, fileName, base64);
@@ -192,6 +153,76 @@ namespace Artsy.API.Controllers
             {
                 return Json(new ApiResponse { success = false, message = ex.Message });
             }
+        }
+
+        private async Task<(int Width, int Height, string CropX, string CropY)?> GetCropSettingsForArtworkAsync(Guid projectId, Guid itemId)
+        {
+            var blueprints = await _blueprintRepository.GetByProjectIdAsync(projectId);
+            foreach (var bp in blueprints)
+            {
+                if (string.IsNullOrWhiteSpace(bp.PlacementJson)) continue;
+                try
+                {
+                    var placements = JsonSerializer.Deserialize<List<PlacementDto>>(bp.PlacementJson);
+                    if (placements == null) continue;
+                    foreach (var p in placements)
+                    {
+                        if (p.GetItemId() == itemId)
+                        {
+                            var (w, h) = p.GetDimensions();
+                            if (w > 0 && h > 0)
+                                return (w, h, p.CropX ?? "center", p.CropY ?? "center");
+                        }
+                    }
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        private static byte[] CropImage(byte[] imgBytes, int targetWidth, int targetHeight, string cropX, string cropY)
+        {
+            using var image = Image.Load(imgBytes);
+            var srcW = image.Width;
+            var srcH = image.Height;
+            var targetRatio = (double)targetWidth / targetHeight;
+            var srcRatio = (double)srcW / srcH;
+
+            int cropW, cropH, cropXPos, cropYPos;
+
+            if (srcRatio > targetRatio)
+            {
+                cropH = srcH;
+                cropW = (int)(srcH * targetRatio);
+                cropYPos = 0;
+                cropXPos = cropX.ToLower() switch
+                {
+                    "left" => 0,
+                    "right" => srcW - cropW,
+                    _ => (srcW - cropW) / 2,
+                };
+            }
+            else if (srcRatio < targetRatio)
+            {
+                cropW = srcW;
+                cropH = (int)(srcW / targetRatio);
+                cropXPos = 0;
+                cropYPos = cropY.ToLower() switch
+                {
+                    "top" => 0,
+                    "bottom" => srcH - cropH,
+                    _ => (srcH - cropH) / 2,
+                };
+            }
+            else
+            {
+                return imgBytes;
+            }
+
+            image.Mutate(ctx => ctx.Crop(new Rectangle(cropXPos, cropYPos, cropW, cropH)));
+            using var ms = new MemoryStream();
+            image.Save(ms, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder());
+            return ms.ToArray();
         }
 
         [HttpPost("create")]
@@ -293,49 +324,53 @@ namespace Artsy.API.Controllers
                     .ToList();
 
                 var productImages = (await _productImageRepository.GetByCollectionIdAsync(request.CollectionId))
-                    .Where(img => img.ProjectBlueprintId == bp.Id && img.Accepted && img.Active && !string.IsNullOrWhiteSpace(img.PrintifyImageId))
+                    .Where(img => img.ProjectBlueprintId == bp.Id && img.Accepted && img.Active)
                     .ToList();
 
                 var printAreas = new List<PrintifyPrintAreaRequest>();
+                var artworkUsedInPlacements = new HashSet<Guid>();
                 if (!string.IsNullOrWhiteSpace(bp.PlacementJson) && collectionArtwork.Count > 0)
                 {
                     try
                     {
-                        var placements = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(bp.PlacementJson);
+                        var placements = JsonSerializer.Deserialize<List<PlacementDto>>(bp.PlacementJson);
                         if (placements != null)
                         {
-                            foreach (var kv in placements)
+                            foreach (var placement in placements)
                             {
-                                var position = kv.Key.ToLower();
-                                var placementImages = new List<PrintifyPlaceholderImageRequest>();
+                                if (string.IsNullOrWhiteSpace(placement.Source)) continue;
 
-                                foreach (var art in collectionArtwork)
-                                {
-                                    placementImages.Add(new PrintifyPlaceholderImageRequest
-                                    {
-                                        Id = art.PrintifyImageId,
-                                        X = 0.5,
-                                        Y = 0.5,
-                                        Scale = 1,
-                                        Angle = 0,
-                                    });
-                                }
+                                var itemId = placement.GetItemId();
+                                if (itemId == Guid.Empty) continue;
 
-                                if (placementImages.Count > 0)
+                                var art = collectionArtwork.FirstOrDefault(a => a.ItemId == itemId);
+                                if (art == null) continue;
+
+                                artworkUsedInPlacements.Add(art.Id);
+
+                                var position = (placement.Position ?? "").ToLower();
+                                printAreas.Add(new PrintifyPrintAreaRequest
                                 {
-                                    printAreas.Add(new PrintifyPrintAreaRequest
+                                    VariantIds = variantIds,
+                                    Placeholders = new List<PrintifyPlaceholderRequest>
                                     {
-                                        VariantIds = variantIds,
-                                        Placeholders = new List<PrintifyPlaceholderRequest>
+                                        new PrintifyPlaceholderRequest
                                         {
-                                            new PrintifyPlaceholderRequest
+                                            Position = position,
+                                            Images = new List<PrintifyPlaceholderImageRequest>
                                             {
-                                                Position = position,
-                                                Images = placementImages,
-                                            }
+                                                new PrintifyPlaceholderImageRequest
+                                                {
+                                                    Id = art.PrintifyImageId,
+                                                    X = 0.5,
+                                                    Y = 0.5,
+                                                    Scale = 1,
+                                                    Angle = 0,
+                                                }
+                                            },
                                         }
-                                    });
-                                }
+                                    }
+                                });
                             }
                         }
                     }
@@ -363,7 +398,12 @@ namespace Artsy.API.Controllers
                     }
                 }
 
-                var images = productImages.Select(img =>
+                var domain = ConnectionSettings.PrintifyImagesDomain;
+                if (!string.IsNullOrWhiteSpace(domain) && !domain.EndsWith("/"))
+                    domain += "/";
+
+                var images = new List<PrintifyProductImageRequest>();
+                foreach (var img in productImages)
                 {
                     var position = "front";
                     if (img.ProductImageId != Guid.Empty && blueprintProductImages.TryGetValue(img.ProductImageId, out var bpi))
@@ -371,19 +411,36 @@ namespace Artsy.API.Controllers
                         if (positionByVariantColor.TryGetValue(bpi.VariantColor, out var pos))
                             position = GetPositionLabel(pos);
                     }
-                    return new PrintifyProductImageRequest
+
+                    images.Add(new PrintifyProductImageRequest
                     {
-                        Src = $"https://images.printify.com/{img.PrintifyImageId}.jpg",
+                        Src = $"{domain}printify/image/product/{img.Id}",
                         VariantIds = variantIds,
                         Position = position,
                         IsDefault = false,
-                    };
-                }).ToList();
+                    });
+                }
+
+                foreach (var art in collectionArtwork.Where(a => artworkUsedInPlacements.Contains(a.Id)))
+                {
+                    images.Add(new PrintifyProductImageRequest
+                    {
+                        Src = $"{domain}printify/image/artwork/{art.Id}",
+                        VariantIds = variantIds,
+                        Position = "front",
+                        IsDefault = false,
+                    });
+                }
+
+                var description = bp.Description ?? "";
+                if (!string.IsNullOrWhiteSpace(description))
+                    description += "\n\n";
+                description += "Disclaimer: The artworks printed on this product were generated using AI. The products and any humans and environments within the mockup images were also generated using AI. The real-world product may appear slightly different from these mockup images as a result.";
 
                 var productRequest = new PrintifyProductRequest
                 {
                     Title = bp.Name,
-                    Description = bp.Description ?? "",
+                    Description = description,
                     SafetyInformation = bp.SafetyInfo ?? "",
                     BlueprintId = bp.BlueprintId,
                     PrintProviderId = printProviderId,
@@ -392,9 +449,15 @@ namespace Artsy.API.Controllers
                     Images = images,
                 };
 
-                var response = await _printifyService.CreateProductAsync(userId, shopId, productRequest);
-                if (response == null)
+                var requestJson = JsonSerializer.Serialize(productRequest, new JsonSerializerOptions { WriteIndented = false });
+
+                var result = await _printifyService.CreateProductAsync(userId, shopId, productRequest);
+                if (result == null)
                     return Json(new ApiResponse { success = false, message = "Failed to create product on Printify." });
+                if (!result.Success)
+                    return Json(new ApiResponse { success = false, message = result.Error });
+
+                var response = result.Product;
 
                 var existing = await _printifyProductRepository.GetByCollectionAndProductIdAsync(request.CollectionId, product.Id);
                 if (existing != null)
@@ -405,8 +468,28 @@ namespace Artsy.API.Controllers
                     existing.ProviderId = response.PrintProviderId;
                     existing.Published = false;
                     existing.Status = 1;
+                    existing.RequestJson = requestJson;
                     await _printifyProductRepository.UpdateAsync(existing);
-                    return Json(new ApiResponse { success = true, data = existing });
+
+                    var mockupsDownloaded = await DownloadAndSaveMockupsAsync(userId, shopId, response.Id, collection.ProjectId, request.CollectionId, existing.Id);
+
+                    return Json(new ApiResponse { success = true, data = new
+                    {
+                        existing.Id,
+                        existing.ProjectId,
+                        existing.CollectionId,
+                        existing.ProductId,
+                        existing.PrintifyProductId,
+                        existing.PrintifyShopId,
+                        existing.PrintifyUserId,
+                        existing.ProviderId,
+                        existing.Published,
+                        existing.Status,
+                        existing.Created,
+                        ProjectBlueprintId = product.ProjectBlueprintId,
+                        BlueprintName = product.Name,
+                        MockupsDownloaded = mockupsDownloaded,
+                    } });
                 }
 
                 var record = await _printifyProductRepository.CreateAsync(new ProjectCollectionPrintifyProduct
@@ -419,10 +502,87 @@ namespace Artsy.API.Controllers
                     PrintifyUserId = response.UserId,
                     ProviderId = response.PrintProviderId,
                     Published = false,
-                    Status = 1
+                    Status = 1,
+                    RequestJson = requestJson
                 });
 
-                return Json(new ApiResponse { success = true, data = record });
+                var mockupsDownloaded2 = await DownloadAndSaveMockupsAsync(userId, shopId, response.Id, collection.ProjectId, request.CollectionId, record.Id);
+
+                return Json(new ApiResponse { success = true, data = new
+                {
+                    record.Id,
+                    record.ProjectId,
+                    record.CollectionId,
+                    record.ProductId,
+                    record.PrintifyProductId,
+                    record.PrintifyShopId,
+                    record.PrintifyUserId,
+                    record.ProviderId,
+                    record.Published,
+                    record.Status,
+                    record.Created,
+                    ProjectBlueprintId = product.ProjectBlueprintId,
+                    BlueprintName = product.Name,
+                    MockupsDownloaded = mockupsDownloaded2,
+                } });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("download-mockups")]
+        public async Task<IActionResult> DownloadMockups([FromBody] DownloadMockupsRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.CollectionId == Guid.Empty || request.ProjectBlueprintId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "CollectionId and ProjectBlueprintId are required." });
+
+            try
+            {
+                var collection = await _projectCollectionRepository.GetByIdAsync(request.CollectionId);
+                if (collection == null || collection.Status != 1)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var project = await _projectRepository.GetByIdAsync(collection.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var shopId = project.PrintifyStoreId ?? 0;
+                if (shopId == 0)
+                    return Json(new ApiResponse { success = false, message = "No Printify store selected for this project." });
+
+                var product = await _productRepository.GetByCollectionAndBlueprintIdAsync(request.CollectionId, request.ProjectBlueprintId);
+                if (product == null)
+                    return Json(new ApiResponse { success = false, message = "Product not found." });
+
+                var printifyProduct = await _printifyProductRepository.GetByCollectionAndProductIdAsync(request.CollectionId, product.Id);
+                if (printifyProduct == null || string.IsNullOrWhiteSpace(printifyProduct.PrintifyProductId))
+                    return Json(new ApiResponse { success = false, message = "Printify product not found." });
+
+                var mockupsDownloaded = await DownloadAndSaveMockupsAsync(userId, shopId, printifyProduct.PrintifyProductId, collection.ProjectId, request.CollectionId, printifyProduct.Id);
+
+                return Json(new ApiResponse { success = true, data = new
+                {
+                    printifyProduct.Id,
+                    printifyProduct.ProjectId,
+                    printifyProduct.CollectionId,
+                    printifyProduct.ProductId,
+                    printifyProduct.PrintifyProductId,
+                    printifyProduct.PrintifyShopId,
+                    printifyProduct.PrintifyUserId,
+                    printifyProduct.ProviderId,
+                    printifyProduct.Published,
+                    printifyProduct.Status,
+                    printifyProduct.Created,
+                    ProjectBlueprintId = product.ProjectBlueprintId,
+                    BlueprintName = product.Name,
+                    MockupsDownloaded = mockupsDownloaded,
+                } });
             }
             catch (Exception ex)
             {
@@ -592,6 +752,9 @@ namespace Artsy.API.Controllers
 
                 var printifyProducts = await _printifyProductRepository.GetByCollectionIdAsync(collectionId);
                 var products = await _productRepository.GetByCollectionIdAsync(collectionId);
+                var mockups = await _mockupRepository.GetByCollectionIdAsync(collectionId);
+                var mockupsByPrintifyProductId = mockups.GroupBy(m => m.PrintifyProductId)
+                    .ToDictionary(g => g.Key, g => g.Count());
 
                 var productMap = products.ToDictionary(p => p.Id);
                 var result = printifyProducts.Select(pp => new
@@ -609,9 +772,76 @@ namespace Artsy.API.Controllers
                     pp.Created,
                     ProjectBlueprintId = productMap.TryGetValue(pp.ProductId, out var p) ? p.ProjectBlueprintId : Guid.Empty,
                     BlueprintName = productMap.TryGetValue(pp.ProductId, out p) ? p.Name : "",
+                    MockupsDownloaded = mockupsByPrintifyProductId.TryGetValue(pp.Id, out var mockupCount) && mockupCount > 0,
                 });
 
                 return Json(new ApiResponse { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("get-mockups")]
+        public async Task<IActionResult> GetMockups([FromQuery] Guid collectionId)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (collectionId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "CollectionId is required." });
+
+            try
+            {
+                var collection = await _projectCollectionRepository.GetByIdAsync(collectionId);
+                if (collection == null || collection.Status != 1)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var project = await _projectRepository.GetByIdAsync(collection.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var mockups = await _mockupRepository.GetByCollectionIdAsync(collectionId);
+                var result = mockups.Select(m => new
+                {
+                    m.Id,
+                    m.ProjectId,
+                    m.CollectionId,
+                    m.PrintifyProductId,
+                    m.VariantIds,
+                    m.Position,
+                    m.IsDefault,
+                    m.Status,
+                    ImageUrl = $"/api/printify-products/mockup-image?projectId={m.ProjectId}&collectionId={m.CollectionId}&mockupId={m.Id}",
+                });
+
+                return Json(new ApiResponse { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("mockup-image")]
+        public async Task<IActionResult> GetMockupImage([FromQuery] Guid projectId, [FromQuery] Guid collectionId, [FromQuery] Guid mockupId)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (projectId == Guid.Empty || collectionId == Guid.Empty || mockupId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "projectId, collectionId, and mockupId are required." });
+
+            try
+            {
+                var imgBytes = await _imageService.GetProjectCollectionMockupAsync(projectId, collectionId, mockupId);
+                if (imgBytes == null || imgBytes.Length == 0)
+                    return NotFound();
+
+                return File(imgBytes, "image/jpeg");
             }
             catch (Exception ex)
             {
@@ -699,6 +929,62 @@ namespace Artsy.API.Controllers
             catch (Exception ex)
             {
                 return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        private async Task<bool> DownloadAndSaveMockupsAsync(Guid userId, int shopId, string printifyProductId, Guid projectId, Guid collectionId, Guid printifyProductEntityId)
+        {
+            try
+            {
+                var productDetails = await _printifyService.GetProductAsync(userId, shopId, printifyProductId);
+                if (productDetails == null)
+                {
+                    Console.WriteLine($"DownloadAndSaveMockupsAsync: GetProductAsync returned null for product {printifyProductId}");
+                    return false;
+                }
+                if (productDetails.Images == null || productDetails.Images.Count == 0)
+                {
+                    Console.WriteLine($"DownloadAndSaveMockupsAsync: No images found for product {printifyProductId}");
+                    return false;
+                }
+
+                await _mockupRepository.DeleteByPrintifyProductIdAsync(printifyProductEntityId);
+
+                var httpClient = _httpClientFactory.CreateClient();
+                foreach (var img in productDetails.Images)
+                {
+                    if (string.IsNullOrWhiteSpace(img.Src)) continue;
+
+                    var imgResponse = await httpClient.GetAsync(img.Src);
+                    if (!imgResponse.IsSuccessStatusCode) continue;
+
+                    var imgBytes = await imgResponse.Content.ReadAsByteArrayAsync();
+                    if (imgBytes == null || imgBytes.Length == 0) continue;
+
+                    var mockupId = Guid.NewGuid();
+                    await _imageService.SaveProjectCollectionMockupAsync(projectId, collectionId, mockupId, imgBytes);
+
+                    await _mockupRepository.CreateAsync(new ProjectCollectionPrintifyProductMockup
+                    {
+                        Id = mockupId,
+                        ProjectId = projectId,
+                        CollectionId = collectionId,
+                        PrintifyProductId = printifyProductEntityId,
+                        VariantIds = string.Join(",", img.VariantIds ?? new List<int>()),
+                        Position = img.Position ?? "",
+                        ImageUrl = img.Src,
+                        IsDefault = img.IsDefault,
+                        Status = 1,
+                    });
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"DownloadAndSaveMockupsAsync error: {ex.Message}");
+                Console.WriteLine($"Stack: {ex.StackTrace}");
+                return false;
             }
         }
     }

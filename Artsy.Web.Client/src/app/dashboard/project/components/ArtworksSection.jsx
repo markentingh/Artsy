@@ -190,7 +190,7 @@ export default function ArtworksSection({ projectId, onArtworkChanged }) {
                   alt={item.title || 'Artwork'}
                   singleImage
                   infiniteScroll
-                  placeholder="No Preview"
+                  placeholder="No Previews"
                   imageClassName="!max-h-none w-full h-full object-cover"
                 />
               </div>

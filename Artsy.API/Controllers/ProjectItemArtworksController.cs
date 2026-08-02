@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Artsy.API.Models;
@@ -173,6 +174,56 @@ namespace Artsy.API.Controllers
                 {
                     artwork.ArtworkType = request.ArtworkType;
                     artwork.CustomImageId = request.CustomImageId;
+                    await _projectItemArtworkRepository.UpdateAsync(artwork);
+                    return Json(new ApiResponse { success = true, data = artwork });
+                }
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("update-item-ignored-questions")]
+        public async Task<IActionResult> UpdateItemIgnoredQuestions([FromBody] UpdateProjectItemIgnoredQuestionsRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.ItemId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Item ID is required." });
+
+            try
+            {
+                var item = await _projectItemRepository.GetByIdAsync(request.ItemId);
+                if (item == null)
+                    return Json(new ApiResponse { success = false, message = "Item not found." });
+
+                var project = await _projectRepository.GetByIdAsync(item.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                var artworkList = await _projectItemArtworkRepository.GetByItemIdAsync(request.ItemId);
+                var artwork = artworkList.FirstOrDefault();
+                var ignoredJson = request.IgnoredQuestionIds != null && request.IgnoredQuestionIds.Count > 0
+                    ? JsonSerializer.Serialize(request.IgnoredQuestionIds)
+                    : null;
+
+                if (artwork == null)
+                {
+                    artwork = new ProjectItemArtwork
+                    {
+                        ItemId = request.ItemId,
+                        ProjectId = item.ProjectId,
+                        IgnoredQuestions = ignoredJson
+                    };
+                    var created = await _projectItemArtworkRepository.CreateAsync(artwork);
+                    return Json(new ApiResponse { success = true, data = created });
+                }
+                else
+                {
+                    artwork.IgnoredQuestions = ignoredJson;
                     await _projectItemArtworkRepository.UpdateAsync(artwork);
                     return Json(new ApiResponse { success = true, data = artwork });
                 }

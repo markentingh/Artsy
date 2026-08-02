@@ -76,7 +76,7 @@ export default function ProductImagePreview() {
 
     const nextIndex = currentProductComboIndex + 1;
     if (nextIndex >= selectedProductCombos.length) {
-      setStep(STEPS.CREATE_PRODUCTS);
+      setStep(STEPS.PUBLISH_PRODUCTS);
     } else {
       setCurrentProductComboIndex(nextIndex);
       setCurrentProductImage(null);

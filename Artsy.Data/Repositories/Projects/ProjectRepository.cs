@@ -84,6 +84,12 @@ namespace Artsy.Data.Repositories.Projects
             await _dbConnection.ExecuteAsync(query, new { id, appUserId, postToInstagram });
         }
 
+        public async Task UpdateSocialMediaConfigAsync(Guid id, Guid appUserId, string? socialMediaPrompt, string? socialMediaDescription)
+        {
+            const string query = @"UPDATE public.""Projects"" SET ""SocialMediaPrompt"" = @socialMediaPrompt, ""SocialMediaDescription"" = @socialMediaDescription WHERE ""Id"" = @id AND ""AppUserId"" = @appUserId";
+            await _dbConnection.ExecuteAsync(query, new { id, appUserId, socialMediaPrompt, socialMediaDescription });
+        }
+
         public async Task DeleteAsync(Guid id, Guid appUserId)
         {
             const string query = @"UPDATE public.""Projects"" SET ""Status"" = 0 WHERE ""Id"" = @id AND ""AppUserId"" = @appUserId";

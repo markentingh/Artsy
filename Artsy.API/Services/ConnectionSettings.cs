@@ -7,6 +7,7 @@ namespace Artsy.API.Services
         public static string PrintifyClientId { get; private set; } = "";
         public static string PrintifySecretKey { get; private set; } = "";
         public static string PrintifyApiToken { get; private set; } = "";
+        public static string PrintifyImagesDomain { get; private set; } = "";
         public static string InstagramAppId { get; private set; } = "";
         public static string InstagramAppSecret { get; private set; } = "";
         public static string InstagramRedirectUri { get; private set; } = "";
@@ -25,6 +26,7 @@ namespace Artsy.API.Services
             PrintifyClientId = configuration["Printify:ClientId"] ?? "";
             PrintifySecretKey = configuration["Printify:SecretKey"] ?? "";
             PrintifyApiToken = configuration["Printify:ApiToken"] ?? "";
+            PrintifyImagesDomain = configuration["Printify:Images:Domain"] ?? "";
             InstagramAppId = configuration["Meta:Instagram:AppId"] ?? "";
             InstagramAppSecret = configuration["Meta:Instagram:AppSecret"] ?? "";
             InstagramRedirectUri = configuration["Meta:Instagram:RedirectUri"] ?? "";

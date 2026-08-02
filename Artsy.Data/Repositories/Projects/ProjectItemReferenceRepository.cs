@@ -54,8 +54,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             reference.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectItemReferences"" (""Id"", ""ItemId"", ""ProjectId"", ""FileName"", ""Extension"", ""Created"")
-                VALUES (@Id, @ItemId, @ProjectId, @FileName, @Extension, @Created)
+                INSERT INTO public.""ProjectItemReferences"" (""Id"", ""ItemId"", ""ProjectId"", ""FileName"", ""Extension"", ""ArtworkId"", ""Created"")
+                VALUES (@Id, @ItemId, @ProjectId, @FileName, @Extension, @ArtworkId, @Created)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectItemReference>(query, reference);
         }

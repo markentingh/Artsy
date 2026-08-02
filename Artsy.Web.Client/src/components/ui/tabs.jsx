@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 
-export default function Tabs({ tabs, defaultTab }) {
+export default function Tabs({ tabs, defaultTab, onTabChange }) {
   const [active, setActive] = useState(defaultTab || tabs[0]?.id);
 
   const activeTab = tabs.find((tab) => tab.id === active) || tabs[0];
+
+  const handleTabClick = (tabId) => {
+    setActive(tabId);
+    if (onTabChange) onTabChange(tabId);
+  };
 
   return (
     <div>
@@ -13,7 +18,7 @@ export default function Tabs({ tabs, defaultTab }) {
             key={tab.id}
             role="tab"
             aria-selected={active === tab.id}
-            onClick={() => setActive(tab.id)}
+            onClick={() => handleTabClick(tab.id)}
             className={`cursor-pointer px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               active === tab.id
                 ? 'border-primary-500 text-primary-600 dark:text-primary-400'

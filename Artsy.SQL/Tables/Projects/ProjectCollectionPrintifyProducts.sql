@@ -10,5 +10,7 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionPrintifyProducts"
     "ProviderId" INT NOT NULL DEFAULT 0,
     "Published" BOOLEAN NOT NULL DEFAULT FALSE,
     "Status" INT NOT NULL DEFAULT 1,
+    "RequestJson" TEXT NOT NULL DEFAULT '',
     "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE public."ProjectCollectionPrintifyProducts" ADD COLUMN IF NOT EXISTS "RequestJson" TEXT NOT NULL DEFAULT '';

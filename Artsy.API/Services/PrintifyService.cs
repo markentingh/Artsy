@@ -12,10 +12,12 @@ namespace Artsy.API.Services
     {
         Task<List<PrintifyShopResponse>> GetShopsAsync(Guid userId);
         Task<PrintifyUploadResponse?> UploadImageAsync(Guid userId, string fileName, string base64Content);
-        Task<PrintifyProductResponse?> CreateProductAsync(Guid userId, int shopId, PrintifyProductRequest product);
+        Task<PrintifyUploadResponse?> GetUploadAsync(Guid userId, string imageId);
+        Task<PrintifyProductResult?> CreateProductAsync(Guid userId, int shopId, PrintifyProductRequest product);
         Task<bool> PublishProductAsync(Guid userId, int shopId, string productId, PrintifyPublishRequest request);
         Task<bool> UnpublishProductAsync(Guid userId, int shopId, string productId);
         Task<PrintifyProductResponse?> UpdateProductAsync(Guid userId, int shopId, string productId, PrintifyProductRequest product);
+        Task<PrintifyProductResponse?> GetProductAsync(Guid userId, int shopId, string productId);
         Task<bool> DeleteProductAsync(Guid userId, int shopId, string productId);
     }
 
@@ -68,7 +70,22 @@ namespace Artsy.API.Services
             return JsonSerializer.Deserialize<PrintifyUploadResponse>(json);
         }
 
-        public async Task<PrintifyProductResponse?> CreateProductAsync(Guid userId, int shopId, PrintifyProductRequest product)
+        public async Task<PrintifyUploadResponse?> GetUploadAsync(Guid userId, string imageId)
+        {
+            var token = await GetAccessTokenAsync(userId);
+            if (string.IsNullOrEmpty(token))
+                return null;
+
+            using var client = CreatePrintifyClient(token);
+            var response = await client.GetAsync($"{BaseUrl}/uploads/{imageId}.json");
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var json = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<PrintifyUploadResponse>(json);
+        }
+
+        public async Task<PrintifyProductResult?> CreateProductAsync(Guid userId, int shopId, PrintifyProductRequest product)
         {
             var token = await GetAccessTokenAsync(userId);
             if (string.IsNullOrEmpty(token))
@@ -77,11 +94,31 @@ namespace Artsy.API.Services
             using var client = CreatePrintifyClient(token);
             var content = new StringContent(JsonSerializer.Serialize(product), Encoding.UTF8, "application/json");
             var response = await client.PostAsync($"{BaseUrl}/shops/{shopId}/products.json", content);
-            if (!response.IsSuccessStatusCode)
-                return null;
 
             var json = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<PrintifyProductResponse>(json);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                try
+                {
+                    var error = JsonSerializer.Deserialize<PrintifyError>(json);
+                    var msg = !string.IsNullOrWhiteSpace(error?.Errors?.Reason)
+                        ? error.Errors.Reason
+                        : !string.IsNullOrWhiteSpace(error?.Error)
+                            ? error.Error
+                            : !string.IsNullOrWhiteSpace(error?.Message)
+                                ? error.Message
+                                : $"Printify API returned status {response.StatusCode}";
+                    return new PrintifyProductResult { Error = msg };
+                }
+                catch
+                {
+                    return new PrintifyProductResult { Error = $"Printify API returned status {response.StatusCode}" };
+                }
+            }
+
+            var productResp = JsonSerializer.Deserialize<PrintifyProductResponse>(json);
+            return new PrintifyProductResult { Product = productResp };
         }
 
         public async Task<bool> PublishProductAsync(Guid userId, int shopId, string productId, PrintifyPublishRequest request)
@@ -132,6 +169,21 @@ namespace Artsy.API.Services
             using var client = CreatePrintifyClient(token);
             var response = await client.DeleteAsync($"{BaseUrl}/shops/{shopId}/products/{productId}.json");
             return response.IsSuccessStatusCode;
+        }
+
+        public async Task<PrintifyProductResponse?> GetProductAsync(Guid userId, int shopId, string productId)
+        {
+            var token = await GetAccessTokenAsync(userId);
+            if (string.IsNullOrEmpty(token))
+                return null;
+
+            using var client = CreatePrintifyClient(token);
+            var response = await client.GetAsync($"{BaseUrl}/shops/{shopId}/products/{productId}.json");
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var json = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<PrintifyProductResponse>(json);
         }
 
         private async Task<string?> GetAccessTokenAsync(Guid userId)

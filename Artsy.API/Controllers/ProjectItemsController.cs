@@ -29,6 +29,8 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
                 var items = await _projectItemRepository.GetListByProjectIdAsync(projectId);
+                var allArtwork = await _projectItemArtworkRepository.GetByProjectIdAsync(projectId);
+                var artworkByItem = allArtwork.ToDictionary(a => a.ItemId, a => a);
                 var allReferenceThumbs = await _projectItemReferenceRepository.GetThumbnailsByProjectIdAsync(projectId);
                 var allPreviewThumbs = await _projectItemPreviewRepository.GetThumbnailsByProjectIdAsync(projectId);
 
@@ -40,13 +42,13 @@ namespace Artsy.API.Controllers
                 {
                     var thumbnails = new List<string>();
 
-                    if (refThumbsByItem.TryGetValue(i.Id, out var refs))
-                        foreach (var r in refs)
-                            thumbnails.Add($"/api/projects/item/{i.Id}/reference/{r.Id}?thumb=true");
-
                     if (previewThumbsByItem.TryGetValue(i.Id, out var previews))
                         foreach (var p in previews)
                             thumbnails.Add($"/api/projects/item/{i.Id}/preview/{p.Id}?thumb=true");
+
+                    if (refThumbsByItem.TryGetValue(i.Id, out var refs))
+                        foreach (var r in refs)
+                            thumbnails.Add($"/api/projects/item/{i.Id}/reference/{r.Id}?thumb=true");
 
                     result.Add(new ProjectItemListItem
                     {
@@ -57,6 +59,7 @@ namespace Artsy.API.Controllers
                         SocialMedia = i.SocialMedia,
                         ProductCount = i.ProductCount,
                         QuestionCount = i.QuestionCount,
+                        ArtworkType = artworkByItem.TryGetValue(i.Id, out var art) ? art.ArtworkType : "ai",
                         Thumbnails = thumbnails
                     });
                 }
@@ -116,6 +119,7 @@ namespace Artsy.API.Controllers
                         Title = created.Title,
                         ProductCount = 0,
                         QuestionCount = 0,
+                        ArtworkType = "ai",
                         Thumbnails = new List<string>()
                     }
                 });

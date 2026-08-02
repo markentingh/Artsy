@@ -35,16 +35,16 @@ namespace Artsy.API.Controllers
                 if (!variantIds.All(vid => priceMap.TryGetValue(vid, out var price) && price > 0))
                     return false;
 
-                var placements = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(placementJson);
+                var placements = JsonSerializer.Deserialize<List<JsonElement>>(placementJson);
                 if (placements == null || placements.Count == 0) return false;
                 var hasPlacements = placements.Any(p =>
                 {
-                    if (!p.Value.TryGetProperty("source", out var srcEl)) return false;
+                    if (!p.TryGetProperty("source", out var srcEl)) return false;
                     var source = srcEl.GetString() ?? "";
                     if (string.IsNullOrWhiteSpace(source)) return false;
-                    if (source == "item" && p.Value.TryGetProperty("itemId", out var itemEl) && itemEl.ValueKind != JsonValueKind.Null)
+                    if (source == "item" && p.TryGetProperty("itemId", out var itemEl) && itemEl.ValueKind != JsonValueKind.Null)
                         return true;
-                    if (source == "custom" && p.Value.TryGetProperty("customImageId", out var imgEl) && imgEl.ValueKind != JsonValueKind.Null)
+                    if (source == "custom" && p.TryGetProperty("customImageId", out var imgEl) && imgEl.ValueKind != JsonValueKind.Null)
                         return true;
                     return false;
                 });

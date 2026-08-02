@@ -13,7 +13,6 @@ namespace Artsy.Data.Entities.Projects
         public int Height { get; set; }
         public bool Accepted { get; set; }
         public string ResponseId { get; set; } = "";
-        public string PrintifyImageId { get; set; } = "";
         public bool Active { get; set; } = true;
     }
 }

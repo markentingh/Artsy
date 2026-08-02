@@ -10,6 +10,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     getById: (id) => api.get(`${apiPath}/get-by-id?id=${id}`),
     getCollections: (projectId) => api.get(`${apiPath}/get-collections?projectId=${projectId}`),
     deleteCollection: (request) => api.post(`${apiPath}/delete-collection`, request),
+    updateCollectionTitle: (request) => api.post(`${apiPath}/update-collection-title`, request),
     getItems: (projectId) => api.get(`${apiPath}/get-items?projectId=${projectId}`),
     createItem: (request) => api.post(`${apiPath}/create-item`, request),
     deleteItem: (request) => api.post(`${apiPath}/delete-item`, request),
@@ -32,8 +33,10 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     updateItemImageModel: (request) => api.post(`${apiPath}/update-item-image-model`, request),
     estimateItemTokens: (itemId, width, height) => api.get(`${apiPath}/estimate-item-tokens?itemId=${itemId}&width=${width}&height=${height}`),
     updateItemArtworkType: (request) => api.post(`${apiPath}/update-item-artwork-type`, request),
+    updateItemIgnoredQuestions: (request) => api.post(`${apiPath}/update-item-ignored-questions`, request),
     getItemPreviews: (itemId) => api.get(`${apiPath}/get-item-previews?itemId=${itemId}`),
     generateItemPreview: (request) => api.post(`${apiPath}/generate-item-preview`, request),
+    deleteItemPreview: (request) => api.post(`${apiPath}/delete-item-preview`, request),
     getItemPreviewUrl: (itemId, previewId, thumb = false) => `${apiPath}/item/${itemId}/preview/${previewId}${thumb ? '?thumb=true' : ''}`,
     getItemReferences: (itemId) => api.get(`${apiPath}/get-item-references?itemId=${itemId}`),
     uploadItemReference: (itemId, file) => {
@@ -43,6 +46,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
       return api.post(`${apiPath}/upload-item-reference`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
     },
     deleteItemReference: (request) => api.post(`${apiPath}/delete-item-reference`, request),
+    addArtworkReference: (request) => api.post(`${apiPath}/add-artwork-reference`, request),
     getItemReferenceUrl: (itemId, referenceId, thumb = false) => `${apiPath}/item/${itemId}/reference/${referenceId}${thumb ? '?thumb=true' : ''}`,
     getItemQuestions: (itemId) => api.get(`${apiPath}/get-item-questions?itemId=${itemId}`),
     createItemQuestion: (request) => api.post(`${apiPath}/create-item-question`, request),
@@ -102,13 +106,15 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     getProductImages: (collectionId) => api.get(`${apiPath}/collection/${collectionId}/product-images`),
     getActiveImageModels: () => api.get('/api/image-generation/active-models'),
     createPrintifyProduct: (request) => api.post('/api/printify-products/create', request),
-    uploadPrintifyProductImage: (request) => api.post('/api/printify-products/upload-image', request),
+    downloadPrintifyMockups: (request) => api.post('/api/printify-products/download-mockups', request),
     uploadPrintifyArtworkImage: (request) => api.post('/api/printify-products/upload-artwork-image', request),
     updatePrintifyProduct: (request) => api.post('/api/printify-products/update', request),
     publishPrintifyProduct: (request) => api.post('/api/printify-products/publish', request),
     unpublishPrintifyProduct: (request) => api.post('/api/printify-products/unpublish', request),
     deletePrintifyProduct: (request) => api.post('/api/printify-products/delete', request),
     getPrintifyProductsByCollection: (collectionId) => api.get(`/api/printify-products/get-by-collection?collectionId=${collectionId}`),
+    getMockups: (collectionId) => api.get(`/api/printify-products/get-mockups?collectionId=${collectionId}`),
+    getMockupImageUrl: (projectId, collectionId, mockupId) => `/api/printify-products/mockup-image?projectId=${projectId}&collectionId=${collectionId}&mockupId=${mockupId}`,
     ensurePrintifyProducts: (request) => api.post('/api/printify-products/ensure-products', request),
     getProductsByCollection: (collectionId) => api.get(`/api/printify-products/get-products?collectionId=${collectionId}`),
     getProductBlueprintImages: (projectBlueprintId) => api.get(`${apiPath}/get-product-blueprint-images?projectBlueprintId=${projectBlueprintId}`),
@@ -116,6 +122,9 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     createProductBlueprintImage: (request) => api.post(`${apiPath}/create-product-blueprint-image`, request),
     updateProductBlueprintImage: (request) => api.post(`${apiPath}/update-product-blueprint-image`, request),
     deleteProductBlueprintImage: (request) => api.post(`${apiPath}/delete-product-blueprint-image`, request),
+    postToSocialMedia: (request) => api.post('/api/instagram/post-to-social-media', request),
+    updateSocialMediaConfig: (request) => api.post(`${apiPath}/update-social-media-config`, request),
+    generateSocialMediaDescription: (request) => api.post(`${apiPath}/generate-social-media-description`, request),
   };
 });
 

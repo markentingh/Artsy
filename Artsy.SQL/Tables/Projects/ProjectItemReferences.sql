@@ -5,5 +5,8 @@ CREATE TABLE IF NOT EXISTS public."ProjectItemReferences"
     "ProjectId" UUID NOT NULL REFERENCES public."Projects"("Id"),
     "FileName" VARCHAR(255) NOT NULL DEFAULT '',
     "Extension" VARCHAR(10) NOT NULL DEFAULT '.jpg',
+    "ArtworkId" UUID NULL REFERENCES public."ProjectItems"("Id"),
     "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE public."ProjectItemReferences" ADD COLUMN IF NOT EXISTS "ArtworkId" UUID NULL REFERENCES public."ProjectItems"("Id");

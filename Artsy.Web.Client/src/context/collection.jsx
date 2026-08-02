@@ -20,8 +20,8 @@ export const WIZARD_STEPS = [
   'Project Questions',
   'Artwork Questions',
   'Ready to Upscale',
-  'Product Images',
   'Create Products',
+  'Product Images',
   'Publish Products',
   'Social Media',
 ];
@@ -39,9 +39,9 @@ export const STEP_INDEX = {
   artwork_questions: 1,
   artwork_preview: 1,
   ready_to_generate: 2,
-  product_image_prompt: 3,
-  product_image_preview: 3,
-  create_products: 4,
+  create_products: 3,
+  product_image_prompt: 4,
+  product_image_preview: 4,
   publish_products: 5,
   social_media: 6,
 };
@@ -49,7 +49,7 @@ export const STEP_INDEX = {
 export function buildWizardSteps(hasProjectQuestions) {
   const steps = [];
   if (hasProjectQuestions) steps.push('Project Questions');
-  steps.push('Artwork Questions', 'Ready to Upscale', 'Product Images', 'Create Products', 'Publish Products', 'Social Media');
+  steps.push('Artwork Questions', 'Ready to Upscale', 'Create Products', 'Product Images', 'Publish Products', 'Social Media');
   return steps;
 }
 
@@ -60,15 +60,15 @@ export function buildStepIndex(hasProjectQuestions) {
     artwork_questions: 1 + offset,
     artwork_preview: 1 + offset,
     ready_to_generate: 2 + offset,
-    product_image_prompt: 3 + offset,
-    product_image_preview: 3 + offset,
-    create_products: 4 + offset,
+    create_products: 3 + offset,
+    product_image_prompt: 4 + offset,
+    product_image_preview: 4 + offset,
     publish_products: 5 + offset,
     social_media: 6 + offset,
   };
 }
 
-export function CollectionProvider({ children, projectId, project, collectionId: initialCollectionId, onClose, onSaved }) {
+export function CollectionProvider({ children, projectId, project, collectionId: initialCollectionId, collectionTitle, onClose, onSaved }) {
   const session = useSession();
   const api = useMemo(() => Projects(session), [session]);
 
@@ -97,6 +97,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [generatingMessage, setGeneratingMessage] = useState('');
   const [currentGeneratingIndex, setCurrentGeneratingIndex] = useState(-1);
+  const [currentGeneratingItemId, setCurrentGeneratingItemId] = useState(null);
   const [generationError, setGenerationError] = useState(null);
   const [artworkPreview, setArtworkPreview] = useState(null);
   const [initialLoading, setInitialLoading] = useState(false);
@@ -115,6 +116,11 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const [productBlueprintImages, setProductBlueprintImages] = useState([]);
   const [printifyImageIndexByColor, setPrintifyImageIndexByColor] = useState({});
   const [currentProductImageIndex, setCurrentProductImageIndex] = useState(0);
+  const [printifyProducts, setPrintifyProducts] = useState([]);
+  const [mockups, setMockups] = useState([]);
+
+  const [socialMediaImageOrder, setSocialMediaImageOrder] = useState([]);
+  const [socialMediaSelectedImages, setSocialMediaSelectedImages] = useState({});
 
   const blueprintItemIds = useMemo(() => {
     const ids = new Set();
@@ -122,8 +128,8 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       if (!bp.placementJson) continue;
       try {
         const placements = JSON.parse(bp.placementJson);
-        if (!placements) continue;
-        for (const p of Object.values(placements)) {
+        if (!placements || !Array.isArray(placements)) continue;
+        for (const p of placements) {
           if (p.source === 'item' && p.itemId) ids.add(String(p.itemId));
         }
       } catch { /* skip */ }
@@ -343,6 +349,22 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     }
   }, [collectionId, projectId, api, buildAllAnswers, onSaved, onClose]);
 
+  const loadMockups = useCallback(async (colId) => {
+    const id = colId || collectionId;
+    if (!id) return [];
+    try {
+      const res = await api.getMockups(id);
+      if (res.data.success) {
+        const data = res.data.data || [];
+        setMockups(data);
+        return data;
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load mockups' });
+    }
+    return [];
+  }, [collectionId, api, setMessage]);
+
   const loadProductImageVariants = useCallback(async (colId) => {
     const id = colId || collectionId;
     if (!id) {
@@ -393,7 +415,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     );
     const nextIndex = aiItems.findIndex((item, idx) =>
       idx > fromIndex &&
-      blueprintItemIds.has(String(item.id)) &&
+      (blueprintItemIds.has(String(item.id)) || item.socialMedia) &&
       !acceptedItemIds.has(String(item.id))
     );
     if (nextIndex === -1) {
@@ -480,22 +502,33 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const doGenerateAll = useCallback(async (colId) => {
     if (!estimate || estimate.generations.length === 0) return;
 
+    const pendingGenerations = estimate.generations.filter(gen =>
+      !collectionArtwork.some(a => String(a.itemId) === String(gen.itemId) && a.fullSize)
+    );
+
+    if (pendingGenerations.length === 0) {
+      setUpscaleComplete(true);
+      return;
+    }
+
     setIsGeneratingAll(true);
     setGeneratingProgress(0);
     setGeneratedArtworks([]);
     setCurrentGeneratingIndex(0);
+    setCurrentGeneratingItemId(null);
     setGenerationError(null);
-    setGeneratingMessage(`Generating artwork 1 of ${estimate.generations.length}...`);
+    setGeneratingMessage(`Generating artwork 1 of ${pendingGenerations.length}...`);
     cancelRef.current = false;
 
     const results = [];
-    for (let i = 0; i < estimate.generations.length; i++) {
+    for (let i = 0; i < pendingGenerations.length; i++) {
       if (cancelRef.current) break;
 
-      const gen = estimate.generations[i];
+      const gen = pendingGenerations[i];
       const item = aiItems.find(a => a.id === gen.itemId);
       setCurrentGeneratingIndex(i);
-      setGeneratingMessage(`Generating artwork ${i + 1} of ${estimate.generations.length}: ${item?.title || 'Untitled'} (${gen.width}x${gen.height})...`);
+      setCurrentGeneratingItemId(gen.itemId);
+      setGeneratingMessage(`Generating artwork ${i + 1} of ${pendingGenerations.length}: ${item?.title || 'Untitled'} (${gen.width}x${gen.height})...`);
 
       try {
         const res = await api.upscaleArtwork({
@@ -525,15 +558,16 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         return;
       }
 
-      setGeneratingProgress(Math.round(((i + 1) / estimate.generations.length) * 100));
+      setGeneratingProgress(Math.round(((i + 1) / pendingGenerations.length) * 100));
     }
 
     setIsGeneratingAll(false);
     setCurrentGeneratingIndex(-1);
+    setCurrentGeneratingItemId(null);
     if (!cancelRef.current) {
       setUpscaleComplete(true);
     }
-  }, [estimate, aiItems, projectId, api, buildProjectAnswers]);
+  }, [estimate, aiItems, projectId, api, buildProjectAnswers, collectionArtwork]);
 
   const reset = useCallback(() => {
     setStep(STEPS.PROJECT_QUESTIONS);
@@ -561,6 +595,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     setIsGeneratingAll(false);
     setGeneratingMessage('');
     setCurrentGeneratingIndex(-1);
+    setCurrentGeneratingItemId(null);
     setGenerationError(null);
     setArtworkPreview(null);
     setInitialLoading(true);
@@ -575,6 +610,10 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     setUpscaleComplete(false);
     setProductBlueprintImages([]);
     setCurrentProductImageIndex(0);
+    setPrintifyProducts([]);
+    setMockups([]);
+    setSocialMediaImageOrder([]);
+    setSocialMediaSelectedImages({});
   }, [initialCollectionId]);
 
   const loadData = useCallback(async (existingCollectionId) => {
@@ -616,9 +655,11 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         let savedAnsMap = {};
         let artworkList = [];
 
-        const [ansRes, artRes] = await Promise.all([
+        const [ansRes, artRes, ppRes, mkRes] = await Promise.all([
           api.getCollectionAnswers(existingCollectionId),
           api.getCollectionArtwork(existingCollectionId),
+          api.getPrintifyProductsByCollection(existingCollectionId),
+          api.getMockups(existingCollectionId),
         ]);
 
         if (ansRes.data.success) {
@@ -638,6 +679,14 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         if (artRes.data.success) {
           artworkList = artRes.data.data || [];
           setCollectionArtwork(artworkList);
+        }
+
+        if (ppRes.data.success) {
+          setPrintifyProducts(ppRes.data.data || []);
+        }
+
+        if (mkRes.data.success) {
+          setMockups(mkRes.data.data || []);
         }
 
         const questions = qRes.data.success ? (qRes.data.data || []) : [];
@@ -662,7 +711,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
   const value = {
     // props
-    projectId, project, onClose, onSaved, api,
+    projectId, project, collectionTitle, onClose, onSaved, api,
     // step
     step, setStep, STEPS, wizardSteps, stepIndex,
     // data
@@ -683,6 +732,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     generatedArtworks, setGeneratedArtworks,
     generatingMessage, setGeneratingMessage,
     currentGeneratingIndex, setCurrentGeneratingIndex,
+    currentGeneratingItemId, setCurrentGeneratingItemId,
     generationError, setGenerationError,
     artworkPreview, setArtworkPreview,
     initialLoading, setInitialLoading,
@@ -704,6 +754,10 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     productBlueprintImages, setProductBlueprintImages,
     printifyImageIndexByColor,
     currentProductImageIndex, setCurrentProductImageIndex,
+    printifyProducts, setPrintifyProducts,
+    mockups, setMockups, loadMockups,
+    socialMediaImageOrder, setSocialMediaImageOrder,
+    socialMediaSelectedImages, setSocialMediaSelectedImages,
     reset, loadData,
   };
 

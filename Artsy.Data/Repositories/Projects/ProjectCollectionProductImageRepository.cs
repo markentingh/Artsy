@@ -83,12 +83,6 @@ namespace Artsy.Data.Repositories.Projects
             await _dbConnection.ExecuteAsync(query, new { collectionId, projectBlueprintId, productImageId });
         }
 
-        public async Task SetPrintifyImageIdAsync(Guid id, string printifyImageId)
-        {
-            const string query = @"UPDATE public.""ProjectCollectionProductImages"" SET ""PrintifyImageId"" = @printifyImageId WHERE ""Id"" = @id";
-            await _dbConnection.ExecuteAsync(query, new { id, printifyImageId });
-        }
-
         public async Task DeleteAsync(Guid id)
         {
             const string query = @"DELETE FROM public.""ProjectCollectionProductImages"" WHERE ""Id"" = @id";

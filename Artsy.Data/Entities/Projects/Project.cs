@@ -13,6 +13,8 @@ namespace Artsy.Data.Entities.Projects
         public bool PostToInstagram { get; set; } = true;
         public int? PrintifyStoreId { get; set; }
         public Guid? InstagramId { get; set; }
+        public string? SocialMediaPrompt { get; set; }
+        public string? SocialMediaDescription { get; set; }
         public DateTime Created { get; set; }
     }
 }

@@ -11,33 +11,50 @@ import Icon from '@/components/ui/icon';
 export default function CreateProducts() {
   const session = useSession();
   const {
-    project, blueprints, allProductImages, collectionId, api,
-    productImageVariants, STEPS, setStep,
+    project, blueprints, blueprintItemIds, allProductImages, collectionId, api,
+    STEPS, setStep,
     handleSaveDraft, setMessage, setArtworkPreview,
-    loadProductImageVariants, collectionArtwork,
+    collectionArtwork, printifyProducts, setPrintifyProducts,
+    setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex,
+    setProductBlueprintImages, setProductImagePrompt, loadImageModels,
+    ensureCollection, loadMockups,
   } = useCollection();
 
   const printifyApi = Projects(session);
 
   const [uploading, setUploading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [createdBlueprints, setCreatedBlueprints] = useState({});
-  const [allCreated, setAllCreated] = useState(false);
-  const [imageUploadState, setImageUploadState] = useState({});
+  const [downloadingMockups, setDownloadingMockups] = useState(false);
   const [artworkUploadState, setArtworkUploadState] = useState({});
 
+  const createdBlueprints = useMemo(() => {
+    const map = {};
+    for (const pp of printifyProducts) {
+      if (pp.printifyProductId && pp.projectBlueprintId && pp.mockupsDownloaded) {
+        map[pp.projectBlueprintId] = true;
+      }
+    }
+    return map;
+  }, [printifyProducts]);
+
   const blueprintsWithImages = useMemo(() => {
-    const imageBlueprintIds = new Set(allProductImages.map(img => img.projectBlueprintId));
-    return blueprints.filter(bp => imageBlueprintIds.has(bp.id));
-  }, [blueprints, allProductImages]);
+    return blueprints.filter(bp => bp.configured === true || bp.configured === undefined);
+  }, [blueprints]);
 
   const variantCountByBlueprint = useMemo(() => {
     const map = {};
-    for (const bp of productImageVariants) {
-      map[bp.projectBlueprintId] = (bp.variants || []).length;
+    for (const bp of blueprints) {
+      let count = 0;
+      if (bp.blueprintJson) {
+        try {
+          const parsed = typeof bp.blueprintJson === 'string' ? JSON.parse(bp.blueprintJson) : bp.blueprintJson;
+          count = (parsed.variantIds || []).length;
+        } catch { /* ignore */ }
+      }
+      map[bp.id] = count;
     }
     return map;
-  }, [productImageVariants]);
+  }, [blueprints]);
 
   const imagesByBlueprint = useMemo(() => {
     const map = {};
@@ -59,22 +76,10 @@ export default function CreateProducts() {
   }, [blueprintsWithImages, imagesByBlueprint]);
 
   useEffect(() => {
-    if (collectionId && productImageVariants.length === 0) {
-      loadProductImageVariants(collectionId);
+    if (collectionId) {
+      loadMockups(collectionId);
     }
-  }, [collectionId, productImageVariants.length, loadProductImageVariants]);
-
-  useEffect(() => {
-    const existing = {};
-    for (const img of allProductImages) {
-      if (img.printifyImageId) {
-        existing[img.id] = { status: 'done' };
-      }
-    }
-    if (Object.keys(existing).length > 0) {
-      setImageUploadState(prev => ({ ...existing, ...prev }));
-    }
-  }, [allProductImages]);
+  }, [collectionId, loadMockups]);
 
   useEffect(() => {
     const existing = {};
@@ -89,9 +94,13 @@ export default function CreateProducts() {
   }, [collectionArtwork]);
 
   const acceptedArtwork = useMemo(() =>
-    (collectionArtwork || []).filter(a => a.accepted && a.active),
-    [collectionArtwork]
+    (collectionArtwork || []).filter(a => a.accepted && a.active && blueprintItemIds.has(String(a.itemId))),
+    [collectionArtwork, blueprintItemIds]
   );
+
+  const allCreated = useMemo(() => {
+    return blueprintsWithImages.length > 0 && blueprintsWithImages.every(bp => createdBlueprints[bp.id]);
+  }, [blueprintsWithImages, createdBlueprints]);
 
   const artworkImages = useMemo(() =>
     acceptedArtwork.map(a => ({
@@ -134,39 +143,14 @@ export default function CreateProducts() {
       }
     }
 
-    for (const img of allImages) {
-      if (imageUploadState[img.id]?.status === 'done') continue;
-
-      setImageUploadState(prev => ({ ...prev, [img.id]: { status: 'uploading' } }));
-
-      try {
-        const response = await printifyApi.uploadPrintifyProductImage({
-          collectionId,
-          productImageId: img.id,
-        });
-
-        if (response.data.success) {
-          setImageUploadState(prev => ({ ...prev, [img.id]: { status: 'done' } }));
-        } else {
-          setImageUploadState(prev => ({ ...prev, [img.id]: { status: 'error' } }));
-          setMessage({ type: 'error', text: response.data.message || `Failed to upload image for ${img.blueprintName}` });
-        }
-      } catch (error) {
-        setImageUploadState(prev => ({ ...prev, [img.id]: { status: 'error' } }));
-        setMessage({ type: 'error', text: error?.response?.data?.message || `Failed to upload image for ${img.blueprintName}` });
-      }
-    }
-
     setUploading(false);
-  }, [collectionId, project, allImages, imageUploadState, artworkImages, artworkUploadState, printifyApi, setMessage]);
+  }, [collectionId, project, artworkImages, artworkUploadState, printifyApi, setMessage]);
 
   const allImagesUploaded = useMemo(() => {
     const artworkDone = artworkImages.length > 0 && artworkImages.every(art => artworkUploadState[art.id]?.status === 'done');
-    const productDone = allImages.length > 0 && allImages.every(img => imageUploadState[img.id]?.status === 'done');
     const artworkReady = artworkImages.length === 0 || artworkDone;
-    const productReady = allImages.length === 0 || productDone;
-    return artworkReady && productReady;
-  }, [allImages, imageUploadState, artworkImages, artworkUploadState]);
+    return artworkReady;
+  }, [artworkImages, artworkUploadState]);
 
   const handleCreateProducts = useCallback(async () => {
     if (!collectionId || !project?.printifyStoreId) {
@@ -184,34 +168,119 @@ export default function CreateProducts() {
       const variantCount = variantCountByBlueprint[bp.id] || 0;
       if (variantCount === 0) continue;
 
+      const existingPp = printifyProducts.find(p => p.projectBlueprintId === bp.id);
+      if (existingPp && existingPp.mockupsDownloaded) continue;
+
       processedCount++;
 
       try {
-        const response = await printifyApi.createPrintifyProduct({
-          collectionId,
-          projectBlueprintId: bp.id,
-        });
+        if (existingPp && existingPp.printifyProductId) {
+          const response = await printifyApi.downloadPrintifyMockups({
+            collectionId,
+            projectBlueprintId: bp.id,
+          });
 
-        if (response.data.success) {
-          setCreatedBlueprints(prev => ({ ...prev, [bp.id]: true }));
-          successCount++;
+          if (response.data.success) {
+            setPrintifyProducts(prev => [...prev.filter(p => p.projectBlueprintId !== bp.id), response.data.data]);
+            if (response.data.data.mockupsDownloaded) {
+              successCount++;
+            }
+          } else {
+            setMessage({ type: 'error', text: response.data.message || `Failed to download mockups for ${bp.name}` });
+          }
         } else {
-          setMessage({ type: 'error', text: response.data.message || `Failed to create product for ${bp.name}` });
+          const response = await printifyApi.createPrintifyProduct({
+            collectionId,
+            projectBlueprintId: bp.id,
+          });
+
+          if (response.data.success) {
+            setPrintifyProducts(prev => [...prev.filter(p => p.projectBlueprintId !== bp.id), response.data.data]);
+            if (response.data.data.mockupsDownloaded) {
+              successCount++;
+            }
+          } else {
+            setMessage({ type: 'error', text: response.data.message || `Failed to create product for ${bp.name}` });
+          }
         }
       } catch (error) {
-        setMessage({ type: 'error', text: error?.response?.data?.message || `Failed to create product for ${bp.name}` });
+        setMessage({ type: 'error', text: error?.response?.data?.message || `Failed to process ${bp.name}` });
       }
     }
 
-    setCreating(false);
-    if (processedCount > 0 && successCount === processedCount) {
-      setAllCreated(true);
-    }
-  }, [collectionId, project, blueprintsWithImages, variantCountByBlueprint, printifyApi, setMessage]);
+    await loadMockups(collectionId);
 
-  const handleNext = useCallback(() => {
-    setStep(STEPS.PUBLISH_PRODUCTS);
-  }, [setStep, STEPS]);
+    try {
+      const ppRes = await printifyApi.getPrintifyProductsByCollection(collectionId);
+      if (ppRes.data.success) {
+        setPrintifyProducts(ppRes.data.data || []);
+      }
+    } catch { /* ignore */ }
+
+    setCreating(false);
+  }, [collectionId, project, blueprintsWithImages, variantCountByBlueprint, printifyProducts, printifyApi, setMessage, setPrintifyProducts, loadMockups]);
+
+  const handleNext = useCallback(async () => {
+    const colId = collectionId || await ensureCollection();
+    if (!colId) return;
+
+    const hasMockups = printifyProducts.some(pp => pp.mockupsDownloaded);
+    if (!hasMockups) {
+      setMessage({ type: 'error', text: 'At least one mockup must be downloaded before generating product images.' });
+      return;
+    }
+
+    try {
+      const allPbImages = [];
+      for (const bp of blueprints) {
+        try {
+          const pbiResp = await api.getProductBlueprintImages(bp.id);
+          if (pbiResp.data.success) {
+            const imgs = (pbiResp.data.data || []).map(img => ({
+              ...img,
+              projectBlueprintId: bp.id,
+              blueprintName: bp.name,
+            }));
+            allPbImages.push(...imgs);
+          }
+        } catch { /* ignore */ }
+      }
+      setProductBlueprintImages(allPbImages);
+
+      const imgRes = await api.getProductImages(colId);
+      if (imgRes.data.success) {
+        const allImages = (imgRes.data.data || []).filter(img => img.active);
+        setAllProductImages(allImages);
+
+        const acceptedProductImageIds = new Set(
+          allImages.filter(img => img.accepted).map(img => img.productImageId)
+        );
+
+        const missing = allPbImages.filter(pbi => !acceptedProductImageIds.has(pbi.id));
+
+        if (allPbImages.length === 0 || missing.length === 0) {
+          setStep(STEPS.PUBLISH_PRODUCTS);
+          return;
+        }
+
+        const combos = missing.map(pbi => ({
+          productImageId: pbi.id,
+          projectBlueprintId: pbi.projectBlueprintId,
+          blueprintName: pbi.blueprintName,
+          title: pbi.title,
+          variantColor: pbi.variantColor,
+          prompt: pbi.prompt || '',
+        }));
+        setSelectedProductCombos(combos);
+        setCurrentProductComboIndex(0);
+        setProductImagePrompt(combos[0]?.prompt || '');
+        setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+        return;
+      }
+    } catch (e) { }
+
+    setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+  }, [collectionId, ensureCollection, printifyProducts, blueprints, api, setProductBlueprintImages, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex, setProductImagePrompt, setStep, STEPS, setMessage]);
 
   const handleStart = useCallback(async () => {
     if (allImagesUploaded) {
@@ -222,20 +291,27 @@ export default function CreateProducts() {
     }
   }, [allImagesUploaded, handleUploadImages, handleCreateProducts]);
 
+  const allPreviewImages = useMemo(() => {
+    return [
+      ...artworkImages.map(a => a.imageUrl),
+      ...allImages.map(img => img.imageUrl),
+    ];
+  }, [artworkImages, allImages]);
+
   const handleImageClick = useCallback((clickedImg) => {
-    const images = allImages.map(img => img.imageUrl);
-    setArtworkPreview({ images, src: clickedImg.imageUrl });
-  }, [allImages, setArtworkPreview]);
+    const idx = allPreviewImages.indexOf(clickedImg.imageUrl);
+    setArtworkPreview({ images: allPreviewImages, src: clickedImg.imageUrl, _idx: idx >= 0 ? idx : 0 });
+  }, [allPreviewImages, setArtworkPreview]);
 
   return (
     <div className="flex flex-col h-full">
       <p className="text-center text-lg mb-4">
-        Collection artwork and product images will be uploaded to Printify, then products will be created.
+        Collection artwork will be uploaded to Printify, then products will be created.
       </p>
 
       {artworkImages.length > 0 && (
         <div className="mb-4">
-          <h4 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">Collection Artwork (placements)</h4>
+          <h4 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">Artworks</h4>
           <div className="flex flex-wrap gap-3 justify-center">
             {artworkImages.map((art) => {
               const state = artworkUploadState[art.id];
@@ -247,44 +323,6 @@ export default function CreateProducts() {
                   <img
                     src={art.imageUrl}
                     alt="Artwork"
-                    className="w-full h-full object-cover"
-                  />
-                  {isUploading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                      <Icon name="progress_activity" spin className="w-6 h-6 text-white" />
-                    </div>
-                  )}
-                  {isDone && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                      <Icon name="check_circle" className="w-8 h-8 text-green-500" />
-                    </div>
-                  )}
-                  {isError && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                      <Icon name="error" className="w-8 h-8 text-red-500" />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {allImages.length > 0 && (
-        <div className="mb-6">
-          <h4 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">Product Images</h4>
-          <div className="flex flex-wrap gap-3 justify-center">
-            {allImages.map((img) => {
-              const state = imageUploadState[img.id];
-              const isUploading = state?.status === 'uploading';
-              const isDone = state?.status === 'done';
-              const isError = state?.status === 'error';
-              return (
-                <div key={img.id} className="relative w-[120px] h-[120px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 cursor-pointer" onClick={() => handleImageClick(img)}>
-                  <img
-                    src={img.imageUrl}
-                    alt={img.blueprintName}
                     className="w-full h-full object-cover"
                   />
                   {isUploading && (

@@ -16,6 +16,7 @@ import Message from '@/components/ui/message';
 import EditQuestionModal from './EditQuestionModal';
 import QuestionsAnswersModal from './QuestionsAnswersModal';
 import CustomImageSelector from './CustomImageSelector';
+import ArtworkSelector from './ArtworkSelector';
 import ConfirmModal from '@/components/ui/confirm-modal';
 
 export default function EditArtworkModal({ show, item, onClose, onChanged }) {
@@ -24,9 +25,9 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     updateItemTitle, updateItemSocialMedia,
     getItemArtwork, updateItemPrompt, updateItemImageModel, updateItemArtworkType,
     getQuestions, getItemQuestions, createItemQuestion, updateItemQuestion, deleteItemQuestion,
-    getItemPreviews, generateItemPreview, getItemPreviewUrl,
-    getItemReferences, uploadItemReference, deleteItemReference, getItemReferenceUrl,
-    estimateItemTokens
+    getItemPreviews, generateItemPreview, deleteItemPreview, getItemPreviewUrl,
+    getItemReferences, uploadItemReference, deleteItemReference, addArtworkReference, getItemReferenceUrl,
+    estimateItemTokens, updateItemIgnoredQuestions
   } = Projects(session);
 
   const [title, setTitle] = useState('');
@@ -43,6 +44,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
 
   const [questions, setQuestions] = useState([]);
   const [projectQuestions, setProjectQuestions] = useState([]);
+  const [ignoredQuestions, setIgnoredQuestions] = useState([]);
   const [previews, setPreviews] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [enlargedPreview, setEnlargedPreview] = useState(null);
@@ -57,12 +59,17 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const [estimatedCost, setEstimatedCost] = useState(null);
   const [estimating, setEstimating] = useState(false);
   const estimateTimerRef = useRef(null);
+  const previewEstimateTimerRef = useRef(null);
   const [previewEstimatedCost, setPreviewEstimatedCost] = useState(null);
 
   const [references, setReferences] = useState([]);
+  const [artworkRefPreviews, setArtworkRefPreviews] = useState({});
   const [uploadingReference, setUploadingReference] = useState(false);
   const [deleteReferenceTarget, setDeleteReferenceTarget] = useState(null);
+  const [deletePreviewTarget, setDeletePreviewTarget] = useState(null);
   const [deleteQuestionTargetId, setDeleteQuestionTargetId] = useState(null);
+  const [showArtworkSelector, setShowArtworkSelector] = useState(false);
+  const [activeTab, setActiveTab] = useState('info');
   const fileInputRef = useRef(null);
 
   const reset = () => {
@@ -81,6 +88,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setShowCustomImageSelector(false);
     setQuestions([]);
     setProjectQuestions([]);
+    setIgnoredQuestions([]);
     setPreviews([]);
     setIsGenerating(false);
     setEnlargedPreview(null);
@@ -90,8 +98,11 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setQuestionFormValue('');
     setMessage(null);
     setReferences([]);
+    setArtworkRefPreviews({});
     setUploadingReference(false);
     setDeleteReferenceTarget(null);
+    setShowArtworkSelector(false);
+    setActiveTab('info');
   };
 
   useEffect(() => {
@@ -109,6 +120,12 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
           setInitialImageModel(response.data.data?.imageModel || '');
           setArtworkType(response.data.data?.artworkType || 'ai');
           setCustomImageId(response.data.data?.customImageId || null);
+          try {
+            const ignored = response.data.data?.ignoredQuestions;
+            setIgnoredQuestions(ignored ? JSON.parse(ignored) : []);
+          } catch {
+            setIgnoredQuestions([]);
+          }
         }
       } catch (error) {
         // Ignore load errors for optional prompt
@@ -155,7 +172,27 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       try {
         const response = await getItemReferences(item.id);
         if (response.data.success) {
-          setReferences(response.data.data || []);
+          const refs = response.data.data || [];
+          setReferences(refs);
+
+          const artworkRefs = refs.filter((r) => r.artworkId);
+          if (artworkRefs.length > 0) {
+            const previewMap = {};
+            await Promise.all(artworkRefs.map(async (r) => {
+              try {
+                const previewResp = await getItemPreviews(r.artworkId);
+                if (previewResp.data.success) {
+                  const previews = previewResp.data.data || [];
+                  if (previews.length > 0) {
+                    previewMap[r.id] = getItemPreviewUrl(r.artworkId, previews[0].id, true);
+                  }
+                }
+              } catch {
+                // ignore preview fetch errors
+              }
+            }));
+            setArtworkRefPreviews(previewMap);
+          }
         }
       } catch (error) {
         // Ignore load errors for optional references
@@ -237,34 +274,38 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   };
 
   useEffect(() => {
-    if (!imageModel || artworkType !== 'ai') {
+    if (!imageModel || artworkType !== 'ai' || activeTab !== 'preview') {
       setEstimatedCost(null);
       return;
     }
     if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current);
     estimateTimerRef.current = setTimeout(() => {
       estimateTokens();
-    }, 500);
+    }, 2000);
     return () => { if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageModel, prompt, references, artworkType]);
+  }, [imageModel, prompt, references, artworkType, activeTab]);
 
   useEffect(() => {
-    if (!imageModel || !item || artworkType !== 'ai') {
+    if (!imageModel || !item || artworkType !== 'ai' || activeTab !== 'preview') {
       setPreviewEstimatedCost(null);
       return;
     }
-    estimateItemTokens(item.id, 512, 512).then(response => {
-      if (response.data.success) {
-        setPreviewEstimatedCost(response.data.data);
-      } else {
+    if (previewEstimateTimerRef.current) clearTimeout(previewEstimateTimerRef.current);
+    previewEstimateTimerRef.current = setTimeout(() => {
+      estimateItemTokens(item.id, 512, 512).then(response => {
+        if (response.data.success) {
+          setPreviewEstimatedCost(response.data.data);
+        } else {
+          setPreviewEstimatedCost(null);
+        }
+      }).catch(() => {
         setPreviewEstimatedCost(null);
-      }
-    }).catch(() => {
-      setPreviewEstimatedCost(null);
-    });
+      });
+    }, 2000);
+    return () => { if (previewEstimateTimerRef.current) clearTimeout(previewEstimateTimerRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageModel, prompt, references, artworkType]);
+  }, [imageModel, prompt, references, artworkType, activeTab]);
 
   const handleSaveImageModel = async () => {
     if (!item) return;
@@ -368,10 +409,40 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     }
   };
 
+  const handleSelectArtworkReference = async (artworkItem) => {
+    setShowArtworkSelector(false);
+    if (!item) return;
+    try {
+      const response = await addArtworkReference({ itemId: item.id, artworkId: artworkItem.id });
+      if (response.data.success) {
+        const newRef = response.data.data;
+        setReferences((prev) => [...prev, newRef]);
+        try {
+          const previewResp = await getItemPreviews(newRef.artworkId);
+          if (previewResp.data.success) {
+            const previews = previewResp.data.data || [];
+            if (previews.length > 0) {
+              setArtworkRefPreviews((prev) => ({
+                ...prev,
+                [newRef.id]: getItemPreviewUrl(newRef.artworkId, previews[0].id, true)
+              }));
+            }
+          }
+        } catch {
+          // ignore preview fetch errors
+        }
+      } else {
+        setMessage({ type: 'error', text: response.data.message || 'Failed to add artwork reference' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to add artwork reference' });
+    }
+  };
+
   const previewQuestions = useMemo(() => [
-    ...projectQuestions.map((q) => ({ ...q, source: 'Project' })),
+    ...projectQuestions.filter((q) => !ignoredQuestions.includes(q.id)).map((q) => ({ ...q, source: 'Project' })),
     ...questions.map((q) => ({ ...q, source: 'Item' })),
-  ], [projectQuestions, questions]);
+  ], [projectQuestions, questions, ignoredQuestions]);
 
   const runGenerate = async (answers) => {
     if (!item || isGenerating) return;
@@ -598,10 +669,57 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         onChange={setQuestionFormValue}
         onSave={handleSaveQuestion}
       />
+      {projectQuestions.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">Ignored Project Questions</h3>
+          <div className="space-y-2">
+            {projectQuestions.map((question) => (
+              <label
+                key={question.id}
+                className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 rounded px-3 py-2 cursor-pointer"
+              >
+                <Checkbox
+                  checked={ignoredQuestions.includes(question.id)}
+                  onChange={() => handleToggleIgnoredQuestion(question.id)}
+                />
+                <span>{question.question}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 
   const promptDirty = prompt !== initialPrompt;
+
+  const handleDeletePreview = async () => {
+    if (!deletePreviewTarget) return;
+    try {
+      const response = await deleteItemPreview({ id: deletePreviewTarget.id });
+      if (response.data.success) {
+        setPreviews((prev) => prev.filter((p) => p.id !== deletePreviewTarget.id));
+      } else {
+        setMessage({ type: 'error', text: response.data.message || 'Failed to delete preview' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to delete preview' });
+    } finally {
+      setDeletePreviewTarget(null);
+    }
+  };
+
+  const handleToggleIgnoredQuestion = async (questionId) => {
+    const newIgnored = ignoredQuestions.includes(questionId)
+      ? ignoredQuestions.filter((id) => id !== questionId)
+      : [...ignoredQuestions, questionId];
+    setIgnoredQuestions(newIgnored);
+    try {
+      await updateItemIgnoredQuestions({ itemId: item.id, ignoredQuestionIds: newIgnored });
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save ignored questions' });
+    }
+  };
 
   const previewTabContent = (
     <div>
@@ -638,20 +756,32 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         </div>
       )}
       {previews.length > 0 || isGenerating ? (
-        <div className="grid grid-cols-[repeat(auto-fill,150px)] gap-2">
+        <div className="grid grid-cols-[repeat(auto-fill,200px)] gap-2">
           {isGenerating && (
             <div className="flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 w-[200px] h-[200px]">
               <Spinner className="text-2xl" />
             </div>
           )}
           {previews.map((preview) => (
-            <img
+            <div
               key={preview.id}
-              src={getItemPreviewUrl(item.id, preview.id, true)}
-              alt="Preview"
-              className="w-[150px] h-[200px] rounded-lg object-cover cursor-pointer"
-              onClick={() => setEnlargedPreview(preview)}
-            />
+              className="relative group rounded-lg overflow-hidden"
+            >
+              <img
+                src={getItemPreviewUrl(item.id, preview.id, true)}
+                alt="Preview"
+                className="w-[200px] h-[200px] rounded-lg object-cover cursor-pointer"
+                onClick={() => setEnlargedPreview(preview)}
+              />
+              <button
+                type="button"
+                onClick={() => setDeletePreviewTarget(preview)}
+                className="absolute bottom-1 right-1 w-7 h-7 flex items-center justify-center bg-black/60 text-white rounded hover:bg-red-600 transition"
+                title="Delete preview"
+              >
+                <Icon name="delete" />
+              </button>
+            </div>
           ))}
         </div>
       ) : (
@@ -692,7 +822,11 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300">Reference Images</h3>
-            <div>
+            <div className="flex gap-2">
+              <ButtonOutline onClick={() => setShowArtworkSelector(true)}>
+                <Icon name="add" className="mr-2" />
+                <span>Artwork Reference</span>
+              </ButtonOutline>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -718,18 +852,37 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
                   key={ref.id}
                   className="relative group rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600"
                 >
-                  <img
-                    src={getItemReferenceUrl(item.id, ref.id, true)}
-                    alt={ref.fileName}
-                    className="w-[150px] h-[150px] object-cover"
-                  />
+                  {ref.artworkId ? (
+                    artworkRefPreviews[ref.id] ? (
+                      <img
+                        src={artworkRefPreviews[ref.id]}
+                        alt={ref.fileName}
+                        className="w-[150px] h-[150px] object-cover"
+                      />
+                    ) : (
+                      <div className="w-[150px] h-[150px] flex items-center justify-center bg-gray-100 dark:bg-gray-700">
+                        <Icon name="image" className="text-4xl text-gray-400" />
+                      </div>
+                    )
+                  ) : (
+                    <img
+                      src={getItemReferenceUrl(item.id, ref.id, true)}
+                      alt={ref.fileName}
+                      className="w-[150px] h-[150px] object-cover"
+                    />
+                  )}
+                  {ref.artworkId && (
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs px-2 py-1 truncate">
+                      {ref.fileName}
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={() => setDeleteReferenceTarget(ref)}
-                    className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center bg-black/60 text-white rounded opacity-0 group-hover:opacity-100 transition"
+                    className="absolute bottom-1 right-1 w-7 h-7 flex items-center justify-center bg-black/60 text-white rounded hover:bg-red-600 transition"
                     title="Remove reference"
                   >
-                    <Icon name="close" />
+                    <Icon name="delete" />
                   </button>
                 </div>
               ))}
@@ -759,7 +912,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         </Message>
       )}
 
-      <Tabs tabs={tabs} defaultTab="info" />
+      <Tabs tabs={tabs} defaultTab="info" onTabChange={setActiveTab} />
 
       <QuestionsAnswersModal
         show={showAnswersModal}
@@ -798,6 +951,16 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         />
       )}
 
+      {showArtworkSelector && (
+        <ArtworkSelector
+          show={showArtworkSelector}
+          projectId={item.projectId}
+          currentIndex={item.index}
+          onSelect={handleSelectArtworkReference}
+          onClose={() => setShowArtworkSelector(false)}
+        />
+      )}
+
       {deleteReferenceTarget && (
         <Modal
           title="Delete Reference Image"
@@ -821,6 +984,14 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         message="Do you really want to delete this question? This cannot be undone."
         onConfirm={handleConfirmDeleteQuestion}
         onClose={() => setDeleteQuestionTargetId(null)}
+      />
+
+      <ConfirmModal
+        show={!!deletePreviewTarget}
+        title="Delete Preview"
+        message="Do you really want to delete this preview image? This cannot be undone."
+        onConfirm={handleDeletePreview}
+        onClose={() => setDeletePreviewTarget(null)}
       />
     </Modal>
   );

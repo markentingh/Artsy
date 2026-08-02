@@ -33,6 +33,7 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<IProjectCollectionProductImageRepository, ProjectCollectionProductImageRepository>();
             builder.Services.AddTransient<IProjectBlueprintProductImageRepository, ProjectBlueprintProductImageRepository>();
             builder.Services.AddTransient<IProjectCollectionPrintifyProductRepository, ProjectCollectionPrintifyProductRepository>();
+            builder.Services.AddTransient<IProjectCollectionPrintifyProductMockupRepository, ProjectCollectionPrintifyProductMockupRepository>();
             builder.Services.AddTransient<IProjectCollectionProductRepository, ProjectCollectionProductRepository>();
             builder.Services.AddTransient<IProjectImageGenerationRepository, ProjectImageGenerationRepository>();
             builder.Services.AddTransient<IProjectImageUpscaleRepository, ProjectImageUpscaleRepository>();
@@ -50,6 +51,8 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<IPrintifyBlueprintImageVariantRepository, PrintifyBlueprintImageVariantRepository>();
             builder.Services.AddTransient<IProjectBlueprintProductImageRepository, ProjectBlueprintProductImageRepository>();
             builder.Services.AddTransient<ITrendRepository, TrendRepository>();
+            builder.Services.AddTransient<IProjectCollectionInstagramPostRepository, ProjectCollectionInstagramPostRepository>();
+            builder.Services.AddTransient<IProjectCollectionInstagramPostImageRepository, ProjectCollectionInstagramPostImageRepository>();
         }
     }
 }

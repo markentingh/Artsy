@@ -127,7 +127,7 @@ export default function ProductImageSelection() {
     );
 
     if (missingCombos.length === 0) {
-      setStep(STEPS.CREATE_PRODUCTS);
+      setStep(STEPS.PUBLISH_PRODUCTS);
       return;
     }
 

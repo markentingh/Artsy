@@ -55,6 +55,10 @@ export default defineConfig(({ mode }) => {
                 '^/api': {
                     target,
                     secure: false
+                },
+                '^/printify': {
+                    target,
+                    secure: false
                 }
             },
             port: port,

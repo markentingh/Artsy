@@ -19,7 +19,7 @@ export default function SetupChecklist() {
     const price = parseFloat(variantPrices[id]);
     return !isNaN(price) && price > 0;
   });
-  const hasPlacements = Object.values(placementSettings).some(p => p && p.source);
+  const hasPlacements = Array.isArray(placementSettings) && placementSettings.some(p => p && p.source);
   const hasProductImages = productBlueprintImages.length > 0 && productBlueprintImages.every(img => !!(img.prompt && img.prompt.trim()));
 
   const items = [

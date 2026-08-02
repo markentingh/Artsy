@@ -41,10 +41,13 @@ function ConfigureProductBlueprintInner() {
 
   const handleSelectCustomImage = (img) => {
     if (!customImageSelectorTarget) return;
-    const { key, itemId } = customImageSelectorTarget;
-    setPlacementSettings((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], source: 'custom', itemId, customImageId: img.id, customItemId: itemId },
+    const { position, itemId } = customImageSelectorTarget;
+    setPlacementSettings((prev) => prev.map(p => p.position !== position ? p : {
+      ...p,
+      source: 'custom',
+      itemId,
+      customImageId: img.id,
+      customItemId: itemId,
     }));
     setCustomImageSelectorTarget(null);
   };
@@ -139,7 +142,7 @@ function ConfigureProductBlueprintInner() {
           show={!!customImageSelectorTarget}
           itemId={projectItems[0]?.id}
           projectId={projectId}
-          selectedImageId={placementSettings[customImageSelectorTarget.key]?.customImageId}
+          selectedImageId={placementSettings.find(p => p.position === customImageSelectorTarget.position)?.customImageId}
           onSelect={handleSelectCustomImage}
           onClose={() => setCustomImageSelectorTarget(null)}
         />

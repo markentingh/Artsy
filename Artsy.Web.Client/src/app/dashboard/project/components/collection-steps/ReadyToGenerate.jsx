@@ -10,15 +10,13 @@ export default function ReadyToGenerate() {
     collectionId, setCollectionId, collectionArtwork, blueprints, estimate,
     isGeneratingAll, generatingProgress, generatingMessage,
     generationError, setGenerationError,
-    generatedArtworks, currentGeneratingIndex,
+    generatedArtworks, currentGeneratingIndex, currentGeneratingItemId,
     doGenerateAll, handleSaveDraft,
     setArtworkPreview, onClose, api,
     projectId, cancelRef, STEPS,
     upscaleComplete, setUpscaleComplete,
     setStep, loadImageModels,
-    ensureCollection, setAllProductImages,
-    setSelectedProductCombos, setCurrentProductComboIndex,
-    setProductBlueprintImages, setProductImagePrompt,
+    ensureCollection,
   } = useCollection();
 
   const acceptedArtworks = collectionArtwork.filter(a => a.active && a.imageModel !== 'custom');
@@ -60,7 +58,16 @@ export default function ReadyToGenerate() {
     }).filter(Boolean);
   }, [artworkImages, thumbRetried, thumbFailed]);
 
-  const currentItemGenId = currentGeneratingIndex >= 0 && estimate?.generations?.[currentGeneratingIndex]?.itemId;
+  const pendingCount = useMemo(() => {
+    if (!estimate?.generations) return 0;
+    return estimate.generations.filter(gen =>
+      !collectionArtwork.some(a => String(a.itemId) === String(gen.itemId) && a.fullSize)
+    ).length;
+  }, [estimate, collectionArtwork]);
+
+  const pendingTokens = pendingCount * 2;
+
+  const currentItemGenId = currentGeneratingItemId;
 
   const handleGenerateArtworks = useCallback(async () => {
     if (!collectionId) {
@@ -93,81 +100,27 @@ export default function ReadyToGenerate() {
     const colId = collectionId || await ensureCollection();
     if (!colId) return;
     await loadImageModels();
-
-    try {
-      // Load product blueprint images for each blueprint
-      const allPbImages = [];
-      for (const bp of blueprints) {
-        try {
-          const pbiResp = await api.getProductBlueprintImages(bp.id);
-          if (pbiResp.data.success) {
-            const imgs = (pbiResp.data.data || []).map(img => ({
-              ...img,
-              projectBlueprintId: bp.id,
-              blueprintName: bp.name,
-            }));
-            allPbImages.push(...imgs);
-          }
-        } catch { /* ignore */ }
-      }
-      setProductBlueprintImages(allPbImages);
-
-      const imgRes = await api.getProductImages(colId);
-      if (imgRes.data.success) {
-        const allImages = (imgRes.data.data || []).filter(img => img.active);
-        setAllProductImages(allImages);
-
-        const acceptedProductImageIds = new Set(
-          allImages.filter(img => img.accepted).map(img => img.productImageId)
-        );
-
-        const missing = allPbImages.filter(pbi => !acceptedProductImageIds.has(pbi.id));
-
-        if (allPbImages.length === 0) {
-          setStep(STEPS.CREATE_PRODUCTS);
-          return;
-        }
-
-        if (missing.length === 0) {
-          setStep(STEPS.CREATE_PRODUCTS);
-          return;
-        }
-
-        const combos = missing.map(pbi => ({
-          productImageId: pbi.id,
-          projectBlueprintId: pbi.projectBlueprintId,
-          blueprintName: pbi.blueprintName,
-          title: pbi.title,
-          variantColor: pbi.variantColor,
-          prompt: pbi.prompt || '',
-        }));
-        setSelectedProductCombos(combos);
-        setCurrentProductComboIndex(0);
-        setProductImagePrompt(combos[0]?.prompt || '');
-        setStep(STEPS.PRODUCT_IMAGE_PROMPT);
-        return;
-      }
-    } catch (e) { }
-
-    setStep(STEPS.PRODUCT_IMAGE_PROMPT);
-  }, [collectionId, ensureCollection, loadImageModels, setStep, STEPS, api, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex, blueprints, setProductBlueprintImages, setProductImagePrompt]);
+    setStep(STEPS.CREATE_PRODUCTS);
+  }, [collectionId, ensureCollection, loadImageModels, setStep, STEPS]);
 
   const renderOverlay = (i) => {
-    if (!isGeneratingAll) return null;
     const artwork = acceptedArtworks[i];
-    const isCurrent = artwork?.itemId === currentItemGenId;
+    if (!artwork) return null;
+
+    const isAlreadyUpscaled = artwork.fullSize;
+    const isCurrent = isGeneratingAll && artwork?.itemId === currentItemGenId;
     const isDone = generatedArtworks.some(g => g.itemId === artwork?.itemId);
 
-    if (isCurrent && !isDone) {
+    if (isCurrent && !isDone && !isAlreadyUpscaled) {
       return (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg">
           <Spinner className="text-2xl text-white" />
         </div>
       );
     }
-    if (isDone) {
+    if (isDone || isAlreadyUpscaled) {
       return (
-        <div className="absolute top-1 right-1">
+        <div className="absolute inset-0 flex items-center justify-center">
           <Checked checked={true} />
         </div>
       );
@@ -244,10 +197,10 @@ export default function ReadyToGenerate() {
       ) : (
         <>
           <p className="text-center text-lg mb-2">
-            Ready to upscale {estimate?.artworkCount || 0} preview artworks to full size for printing onto your {blueprints.length} product{blueprints.length !== 1 ? 's' : ''}.
+            Ready to upscale {pendingCount} artwork{pendingCount !== 1 ? 's' : ''} to full size.
           </p>
           <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-6">
-            This will cost {estimate?.totalTokens || 0} tokens.
+            This will cost {pendingTokens} tokens.
           </p>
           <div className="buttons flex justify-end gap-2 mt-auto">
             <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>

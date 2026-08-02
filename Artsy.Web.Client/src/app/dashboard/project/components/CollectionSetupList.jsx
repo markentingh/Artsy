@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { useCollection } from '@/context/collection';
 import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
@@ -14,6 +14,7 @@ export default function CollectionSetupList() {
     currentProductComboIndex, setCurrentProductComboIndex,
     loadItemData, currentItemIndex,
     projectQuestions, setProductImagePrompt,
+    printifyProducts, mockups,
   } = useCollection();
 
   const aiArtworks = collectionArtwork.filter(a => a.imageModel !== 'custom');
@@ -21,6 +22,10 @@ export default function CollectionSetupList() {
   const aiBlueprintItems = aiItems.filter(item => !customItemIds.has(String(item.id)));
   const totalArtwork = aiBlueprintItems.length;
   const acceptedArtwork = aiArtworks.filter(a => a.accepted).length;
+  const allArtworksUpscaled = aiBlueprintItems.length > 0 && aiBlueprintItems.every(item => {
+    const art = collectionArtwork.find(a => String(a.itemId) === String(item.id));
+    return art && art.accepted && art.fullSize;
+  });
 
   const allProductCombos = productBlueprintImages.map(pbi => ({
     productImageId: pbi.id,
@@ -41,16 +46,25 @@ export default function CollectionSetupList() {
     [STEPS.ARTWORK_QUESTIONS]: hasPQ ? 1 : 0,
     [STEPS.ARTWORK_PREVIEW]: hasPQ ? 1 : 0,
     [STEPS.READY_TO_GENERATE]: hasPQ ? 2 : 1,
-    [STEPS.PRODUCT_IMAGE_PROMPT]: hasPQ ? 3 : 2,
-    [STEPS.PRODUCT_IMAGE_PREVIEW]: hasPQ ? 3 : 2,
-    [STEPS.CREATE_PRODUCTS]: hasPQ ? 4 : 3,
+    [STEPS.CREATE_PRODUCTS]: hasPQ ? 3 : 2,
+    [STEPS.PRODUCT_IMAGE_PROMPT]: hasPQ ? 4 : 3,
+    [STEPS.PRODUCT_IMAGE_PREVIEW]: hasPQ ? 4 : 3,
     [STEPS.PUBLISH_PRODUCTS]: hasPQ ? 5 : 4,
     [STEPS.SOCIAL_MEDIA]: hasPQ ? 6 : 5,
   };
 
+  const maxStepIdxRef = useRef(0);
+  const currentStepIdx = checkIdx[step] ?? 0;
+  if (currentStepIdx > maxStepIdxRef.current) {
+    maxStepIdxRef.current = currentStepIdx;
+  }
+
   const isComplete = (itemStep) => {
-    const currentIdx = checkIdx[step] ?? 0;
-    return currentIdx > checkIdx[itemStep];
+    if (maxStepIdxRef.current <= checkIdx[itemStep]) return false;
+    if (itemStep === STEPS.CREATE_PRODUCTS) {
+      return mockups.length > 0 && printifyProducts.some(pp => pp.mockupsDownloaded);
+    }
+    return true;
   };
 
   const isCurrent = (itemStep) => {
@@ -62,13 +76,17 @@ export default function CollectionSetupList() {
     <>
       <Icon
         name={complete ? 'check_circle' : 'radio_button_unchecked'}
-        className={complete
+        className={complete && current
+          ? 'text-blue-500'
+          : complete
           ? 'text-green-500'
           : current
           ? 'text-blue-500'
           : 'text-gray-400 dark:text-gray-500'}
       />
-      <span className={complete
+      <span className={complete && current
+        ? 'text-blue-600 dark:text-blue-400'
+        : complete
         ? 'text-gray-500 dark:text-gray-400'
         : current
         ? 'text-blue-600 dark:text-blue-400'
@@ -82,16 +100,6 @@ export default function CollectionSetupList() {
       )}
     </>
   );
-
-  const handleSkipArtwork = async (itemId) => {
-    if (!collectionId) return;
-    try {
-      await api.deleteCollectionArtwork({ collectionId, itemId });
-      setCollectionArtwork(prev => prev.filter(a => String(a.itemId) !== String(itemId)));
-    } catch (e) {
-      console.error('deleteCollectionArtwork error:', e?.response?.data || e);
-    }
-  };
 
   const handleReviewArtwork = (itemId) => {
     const itemIndex = aiItems.findIndex(a => String(a.id) === String(itemId));
@@ -142,32 +150,50 @@ export default function CollectionSetupList() {
     }
   };
 
+  const firstUnacceptedIdx = aiBlueprintItems.findIndex((item, idx) => {
+    const art = collectionArtwork.find(a => String(a.itemId) === String(item.id));
+    const accepted = art && art.accepted;
+    if (accepted) return false;
+    return idx > 0 && aiBlueprintItems.slice(0, idx).some(prevItem => {
+      const prevArt = collectionArtwork.find(a => String(a.itemId) === String(prevItem.id));
+      return prevArt && prevArt.accepted;
+    });
+  });
+
   const artworkContent = (
     <List inModal>
       {aiBlueprintItems.map((item, idx) => {
         const artwork = collectionArtwork.find(a => String(a.itemId) === String(item.id));
         const isAccepted = artwork && artwork.accepted;
-        const isCurrentItem = (step === STEPS.ARTWORK_QUESTIONS || step === STEPS.ARTWORK_PREVIEW) && idx === currentItemIndex;
+        const currentItemId = aiItems[currentItemIndex]?.id;
+        const isCurrentItem = (step === STEPS.ARTWORK_QUESTIONS || step === STEPS.ARTWORK_PREVIEW) && String(item.id) === String(currentItemId);
+        const isOnArtworkStep = step === STEPS.ARTWORK_QUESTIONS || step === STEPS.ARTWORK_PREVIEW;
+        const isNextUnaccepted = !isOnArtworkStep && idx === firstUnacceptedIdx;
+        const isHighlighted = isCurrentItem || isNextUnaccepted;
         return (
           <Item key={item.id} className="justify-between text-sm">
             <div className="flex items-center gap-2">
               <Icon
                 name={isAccepted ? 'check_circle' : 'radio_button_unchecked'}
-                className={isAccepted
+                className={isAccepted && isHighlighted
+                  ? 'text-blue-500'
+                  : isAccepted
                   ? 'text-green-500'
-                  : isCurrentItem
+                  : isHighlighted
                   ? 'text-blue-500'
                   : 'text-gray-400 dark:text-gray-500'}
               />
-              <span className={isAccepted
+              <span className={isAccepted && isHighlighted
+                ? 'text-blue-600 dark:text-blue-400'
+                : isAccepted
                 ? 'text-gray-500 dark:text-gray-400'
-                : isCurrentItem
+                : isHighlighted
                 ? 'text-blue-600 dark:text-blue-400'
                 : 'text-gray-700 dark:text-gray-300'}>
                 {item.title || 'Untitled'}
               </span>
             </div>
-            {isAccepted && (
+            {((isAccepted && !isCurrentItem) || (idx === firstUnacceptedIdx && !isCurrentItem)) && (
               <ButtonOutline size="small" color="blue" onClick={() => handleReviewArtwork(item.id)}>
                 Review
               </ButtonOutline>
@@ -196,29 +222,35 @@ export default function CollectionSetupList() {
             <div className="flex items-center gap-2">
               <Icon
                 name={isAccepted ? 'check_circle' : 'radio_button_unchecked'}
-                className={isAccepted
+                className={isAccepted && isCurrentItem
+                  ? 'text-blue-500'
+                  : isAccepted
                   ? 'text-green-500'
                   : isCurrentItem
                   ? 'text-blue-500'
                   : 'text-gray-400 dark:text-gray-500'}
               />
-              <span className={isAccepted
+              <span className={isAccepted && isCurrentItem
+                ? 'text-blue-600 dark:text-blue-400'
+                : isAccepted
                 ? 'text-gray-500 dark:text-gray-400'
                 : isCurrentItem
                 ? 'text-blue-600 dark:text-blue-400'
                 : 'text-gray-700 dark:text-gray-300'}>
-                {combo.blueprintName} - {combo.title} ({combo.variantColor})
+                {combo.blueprintName}
               </span>
             </div>
             <div className="flex items-center gap-1 ml-auto">
-              {isAccepted && (
+              {isAccepted && !isCurrentItem && (
                 <ButtonOutline size="small" color="gray" onClick={() => handleSkipProductImage(combo)}>
                   Skip
                 </ButtonOutline>
               )}
-              <ButtonOutline size="small" color="blue" onClick={() => handleReviewProductImage(combo)}>
-                Review
-              </ButtonOutline>
+              {!isCurrentItem && (
+                <ButtonOutline size="small" color="blue" onClick={() => handleReviewProductImage(combo)}>
+                  Review
+                </ButtonOutline>
+              )}
             </div>
           </Item>
         );
@@ -232,7 +264,7 @@ export default function CollectionSetupList() {
     ...(projectQuestions.length > 0 ? [{
       title: renderTitle('Answer Project Questions', isComplete(STEPS.PROJECT_QUESTIONS), null, isCurrent(STEPS.PROJECT_QUESTIONS)),
       content: null,
-      action: isComplete(STEPS.PROJECT_QUESTIONS) ? (
+      action: isComplete(STEPS.PROJECT_QUESTIONS) && !isCurrent(STEPS.PROJECT_QUESTIONS) ? (
         <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.PROJECT_QUESTIONS)}>
           Review
         </ButtonOutline>
@@ -243,10 +275,19 @@ export default function CollectionSetupList() {
       content: artworkContent,
     },
     {
-      title: renderTitle('Upscale Artworks to 4K', aiArtworks.length > 0 && aiArtworks.filter(a => a.accepted).every(a => a.fullSize), null, isCurrent(STEPS.READY_TO_GENERATE)),
+      title: renderTitle('Upscale Artworks to 4K', allArtworksUpscaled, null, isCurrent(STEPS.READY_TO_GENERATE)),
       content: null,
-      action: aiArtworks.filter(a => a.accepted).some(a => !a.fullSize) ? (
+      action: !allArtworksUpscaled && totalArtwork > 0 && acceptedArtwork === totalArtwork && aiArtworks.filter(a => a.accepted).some(a => !a.fullSize) ? (
         <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.READY_TO_GENERATE)}>
+          Review
+        </ButtonOutline>
+      ) : null,
+    },
+    {
+      title: renderTitle(`Create Products on ${platforms.join(', ') || 'Platform'}`, isComplete(STEPS.CREATE_PRODUCTS), null, isCurrent(STEPS.CREATE_PRODUCTS)),
+      content: null,
+      action: isComplete(STEPS.READY_TO_GENERATE) && !isCurrent(STEPS.CREATE_PRODUCTS) ? (
+        <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.CREATE_PRODUCTS)}>
           Review
         </ButtonOutline>
       ) : null,
@@ -254,18 +295,10 @@ export default function CollectionSetupList() {
     {
       title: renderTitle('Generate Product Images', productImageComplete, totalProductImages > 0 ? `${acceptedProductImages}/${totalProductImages}` : (acceptedProductImages > 0 ? `${acceptedProductImages}/${acceptedProductImages}` : null), isCurrent(STEPS.PRODUCT_IMAGE_PROMPT)),
       content: productImageContent,
+      action: null,
     },
     {
-      title: renderTitle(`Create Products on ${platforms.join(', ') || 'Platform'}`, false, null, isCurrent(STEPS.CREATE_PRODUCTS)),
-      content: null,
-      action: totalProductImages > 0 && acceptedProductImages === totalProductImages && !isCurrent(STEPS.CREATE_PRODUCTS) ? (
-        <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.CREATE_PRODUCTS)}>
-          Review
-        </ButtonOutline>
-      ) : null,
-    },
-    {
-      title: renderTitle(`Publish Products on ${platforms.join(', ') || 'Platform'}`, false, null, isCurrent(STEPS.PUBLISH_PRODUCTS)),
+      title: renderTitle(`Publish Products on ${platforms.join(', ') || 'Platform'}`, isComplete(STEPS.PUBLISH_PRODUCTS), null, isCurrent(STEPS.PUBLISH_PRODUCTS)),
       content: null,
       action: isComplete(STEPS.CREATE_PRODUCTS) && !isCurrent(STEPS.PUBLISH_PRODUCTS) ? (
         <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.PUBLISH_PRODUCTS)}>
@@ -276,6 +309,11 @@ export default function CollectionSetupList() {
     {
       title: renderTitle('Post to Social Media', false, null),
       content: null,
+      action: printifyProducts.length > 0 && printifyProducts.every(pp => pp.published) && !isCurrent(STEPS.SOCIAL_MEDIA) ? (
+        <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.SOCIAL_MEDIA)}>
+          Review
+        </ButtonOutline>
+      ) : null,
     },
   ];
 

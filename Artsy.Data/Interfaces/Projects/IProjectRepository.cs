@@ -13,6 +13,7 @@ namespace Artsy.Data.Interfaces.Projects
         Task UpdatePrintifyStoreIdAsync(Guid id, Guid appUserId, int? printifyStoreId);
         Task UpdateInstagramIdAsync(Guid id, Guid appUserId, Guid? instagramId);
         Task UpdatePostToInstagramAsync(Guid id, Guid appUserId, bool postToInstagram);
+        Task UpdateSocialMediaConfigAsync(Guid id, Guid appUserId, string? socialMediaPrompt, string? socialMediaDescription);
         Task DeleteAsync(Guid id, Guid appUserId);
         Task UnarchiveAsync(Guid id, Guid appUserId);
     }

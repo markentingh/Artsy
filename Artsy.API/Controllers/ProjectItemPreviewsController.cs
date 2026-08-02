@@ -117,19 +117,30 @@ namespace Artsy.API.Controllers
                 modelRequest.Quality = "low";
 
                 var references = await _projectItemReferenceRepository.GetByItemIdAsync(request.ItemId);
+                var inputImages = new List<byte[]>();
                 if (references != null && references.Any())
                 {
-                    modelRequest.Images = new List<OpenAIImageReference>();
                     foreach (var reference in references)
                     {
-                        var imageBytes = await _imageService.GetProjectItemReferenceAsync(reference.ProjectId, reference.Id, reference.Extension);
+                        byte[]? imageBytes = null;
+
+                        if (reference.ArtworkId.HasValue)
+                        {
+                            var refPreviews = await _projectItemPreviewRepository.GetByItemIdAsync(reference.ArtworkId.Value);
+                            var newestPreview = refPreviews.FirstOrDefault();
+                            if (newestPreview != null)
+                            {
+                                imageBytes = await _imageService.GetProjectItemPreviewAsync(reference.ProjectId, reference.ArtworkId.Value, newestPreview.Id);
+                            }
+                        }
+                        else
+                        {
+                            imageBytes = await _imageService.GetProjectItemReferenceAsync(reference.ProjectId, reference.Id, reference.Extension);
+                        }
+
                         if (imageBytes != null && imageBytes.Length > 0)
                         {
-                            modelRequest.Images.Add(new OpenAIImageReference
-                            {
-                                Image = Convert.ToBase64String(imageBytes),
-                                Detail = "auto"
-                            });
+                            inputImages.Add(imageBytes);
                         }
                     }
                 }
@@ -151,7 +162,16 @@ namespace Artsy.API.Controllers
                     if (imageGen == null)
                         throw new InvalidOperationException($"Image model '{artwork.ImageModel}' is not supported.");
 
-                    var genResult = await imageGen.GenerateAsync(artwork.ImageModel, imageModelJson, "low");
+                    var genRequest = new ImageGenerationRequest
+                    {
+                        Model = genModel.Model,
+                        Prompt = finalPrompt,
+                        InputImages = inputImages,
+                        Width = 1024,
+                        Height = 1024,
+                        Quality = "low"
+                    };
+                    var genResult = await imageGen.GenerateAsync(genRequest);
                     await _imageService.SaveProjectItemPreviewAsync(createdPreview.ProjectId, createdPreview.ItemId, createdPreview.Id, genResult.ImageBytes);
 
                     await _projectImageGenerationRepository.CreateAsync(new ProjectImageGeneration
@@ -211,5 +231,41 @@ namespace Artsy.API.Controllers
                 return Json(new ApiResponse { success = false, message = ex.Message });
             }
         }
+
+        [HttpPost("delete-item-preview")]
+        public async Task<IActionResult> DeleteItemPreview([FromBody] DeleteItemPreviewRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.Id == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Preview ID is required." });
+
+            try
+            {
+                var preview = await _projectItemPreviewRepository.GetByIdAsync(request.Id);
+                if (preview == null)
+                    return Json(new ApiResponse { success = false, message = "Preview not found." });
+
+                var project = await _projectRepository.GetByIdAsync(preview.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                await _imageService.DeleteProjectItemPreviewAsync(preview.ProjectId, preview.ItemId, preview.Id);
+                await _projectItemPreviewRepository.DeleteAsync(request.Id);
+
+                return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+    }
+
+    public class DeleteItemPreviewRequest
+    {
+        public Guid Id { get; set; }
     }
 }

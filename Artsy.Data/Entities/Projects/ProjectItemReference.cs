@@ -7,6 +7,7 @@ namespace Artsy.Data.Entities.Projects
         public Guid ProjectId { get; set; }
         public string FileName { get; set; } = "";
         public string Extension { get; set; } = ".jpg";
+        public Guid? ArtworkId { get; set; }
         public DateTime Created { get; set; }
     }
 }

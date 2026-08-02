@@ -7,7 +7,9 @@ import Checked from '@/components/ui/checked';
 import Tooltip from '@/components/ui/tooltip';
 import Message from '@/components/ui/message';
 import Button from '@/components/ui/button';
+import ButtonOutline from '@/components/ui/button-outline';
 import Select from '@/components/forms/select';
+import ConfigureSocialMediaPosts from './ConfigureSocialMediaPosts';
 
 const platforms = [
   { key: 'printify', name: 'Printify', color: 'bg-green-500' },
@@ -28,6 +30,7 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
   const [selectedShopId, setSelectedShopId] = useState('');
   const [instagramAccounts, setInstagramAccounts] = useState([]);
   const [selectedInstagramAccountId, setSelectedInstagramAccountId] = useState('');
+  const [showConfigureModal, setShowConfigureModal] = useState(false);
 
   const apiMap = {
     printify: { getStatus: getPrintifyStatus, connect: connectPrintify },
@@ -351,6 +354,12 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
       <div className="flex items-center gap-1 mb-4">
         <h2 className="text-xl font-semibold">Publishing</h2>
         <Tooltip text="Connect your print-on-demand platforms to publish your collections as real products. Once connected, toggle publishing to automatically send your collection artwork to the platform for listing and sale." />
+        <div className="ml-auto">
+          <ButtonOutline size="small" onClick={() => setShowConfigureModal(true)}>
+            <Icon name="settings" />
+            <span className="ml-1">Configure</span>
+          </ButtonOutline>
+        </div>
       </div>
       <div
         className="grid gap-6"
@@ -358,6 +367,15 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
       >
         {platforms.map((platform) => renderPlatformCard(platform))}
       </div>
+      <ConfigureSocialMediaPosts
+        show={showConfigureModal}
+        projectId={projectId}
+        project={project}
+        onClose={() => setShowConfigureModal(false)}
+        onSaved={(updated) => {
+          if (onProjectUpdated) onProjectUpdated(updated);
+        }}
+      />
     </div>
   );
 }

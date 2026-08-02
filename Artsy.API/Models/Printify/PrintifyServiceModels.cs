@@ -129,6 +129,24 @@ namespace Artsy.API.Models.Printify
 
         [JsonPropertyName("angle")]
         public double Angle { get; set; } = 0;
+
+        [JsonPropertyName("pattern")]
+        public PrintifyPatternRequest? Pattern { get; set; }
+    }
+
+    public class PrintifyPatternRequest
+    {
+        [JsonPropertyName("spacing_x")]
+        public int SpacingX { get; set; }
+
+        [JsonPropertyName("spacing_y")]
+        public int SpacingY { get; set; }
+
+        [JsonPropertyName("scale")]
+        public int Scale { get; set; }
+
+        [JsonPropertyName("offset")]
+        public int Offset { get; set; }
     }
 
     public class PrintifyProductResponse
@@ -246,5 +264,33 @@ namespace Artsy.API.Models.Printify
 
         [JsonPropertyName("shipping_template")]
         public bool ShippingTemplate { get; set; }
+    }
+
+    public class PrintifyError
+    {
+        [JsonPropertyName("error")]
+        public string Error { get; set; } = "";
+
+        [JsonPropertyName("request_id")]
+        public string RequestId { get; set; } = "";
+
+        [JsonPropertyName("message")]
+        public string Message { get; set; } = "";
+
+        [JsonPropertyName("errors")]
+        public PrintifyErrorDetails? Errors { get; set; }
+    }
+
+    public class PrintifyErrorDetails
+    {
+        [JsonPropertyName("reason")]
+        public string Reason { get; set; } = "";
+    }
+
+    public class PrintifyProductResult
+    {
+        public PrintifyProductResponse? Product { get; set; }
+        public string? Error { get; set; }
+        public bool Success => Product != null && string.IsNullOrEmpty(Error);
     }
 }

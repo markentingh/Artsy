@@ -43,7 +43,7 @@ namespace Artsy.Data.Repositories.Projects
         {
             const string query = @"
                 UPDATE public.""ProjectCollections""
-                SET ""Title"" = @Title
+                SET ""Title"" = @Title, ""Description"" = @Description
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, collection);
         }

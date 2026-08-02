@@ -47,6 +47,14 @@ namespace Artsy.Data.Repositories.Projects
             return await _dbConnection.QueryFirstOrDefaultAsync<ProjectCollectionArtwork>(query, new { collectionId, artworkId });
         }
 
+        public async Task<ProjectCollectionArtwork?> GetByIdAsync(Guid artworkId)
+        {
+            const string query = @"
+                SELECT * FROM public.""ProjectCollectionArtwork""
+                WHERE ""Id"" = @artworkId";
+            return await _dbConnection.QueryFirstOrDefaultAsync<ProjectCollectionArtwork>(query, new { artworkId });
+        }
+
         public async Task<IEnumerable<ProjectCollectionArtwork>> GetByCollectionIdAsync(Guid collectionId)
         {
             const string query = @"

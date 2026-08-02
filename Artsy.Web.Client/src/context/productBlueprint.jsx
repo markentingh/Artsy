@@ -40,7 +40,7 @@ export function ProductBlueprintProvider({
   const [projectItems, setProjectItems] = useState([]);
   const [itemPreviews, setItemPreviews] = useState({});
   const [itemArtworkMap, setItemArtworkMap] = useState({});
-  const [placementSettings, setPlacementSettings] = useState({});
+  const [placementSettings, setPlacementSettings] = useState([]);
   const [customImageSelectorTarget, setCustomImageSelectorTarget] = useState(null);
   const [outOfStockIds, setOutOfStockIds] = useState(new Set());
   const [blueprintImages, setBlueprintImages] = useState([]);
@@ -52,7 +52,7 @@ export function ProductBlueprintProvider({
   const [productBlueprintImages, setProductBlueprintImages] = useState([]);
 
   const initialSelectedVariants = useRef([]);
-  const initialPlacementSettings = useRef({});
+  const initialPlacementSettings = useRef([]);
   const initialVariantPrices = useRef({});
   const initialProductBlueprintImages = useRef([]);
 
@@ -91,7 +91,7 @@ export function ProductBlueprintProvider({
     setSelectedProvider('');
     setSelectedVariants([]);
     setDescriptionExpanded(false);
-    setPlacementSettings({});
+    setPlacementSettings([]);
     setOutOfStockIds(new Set());
     setBlueprintImages([]);
     setPrompt('');
@@ -151,8 +151,8 @@ export function ProductBlueprintProvider({
               }
             }
             try {
-              const placement = JSON.parse(existingConfig.placementJson || '{}');
-              setPlacementSettings(placement);
+              const placement = JSON.parse(existingConfig.placementJson || '[]');
+              setPlacementSettings(Array.isArray(placement) ? placement : []);
               initialPlacementSettings.current = JSON.parse(JSON.stringify(placement));
             } catch { /* ignore */ }
             setPrompt(existingConfig.prompt || '');
@@ -331,15 +331,18 @@ export function ProductBlueprintProvider({
     if (allPlaceholders.length === 0) return;
     setPlacementSettings((prev) => {
       let changed = false;
-      const next = { ...prev };
+      const next = [...prev];
       for (const ph of allPlaceholders) {
-        const existing = next[ph.key] || {};
-        const dm = existing.decorationMethod || ph.decorationMethods[0]?.method || '';
+        const existing = next.find(p => p.position === ph.position);
+        const dm = existing?.decorationMethod || ph.decorationMethods[0]?.method || '';
         const methodData = ph.decorationMethods.find((d) => d.method === dm);
         const availableDims = methodData?.dimensions || [];
-        const dims = existing.dimensions || (availableDims.length > 0 ? availableDims[0] : '');
-        if (existing.decorationMethod !== dm || existing.dimensions !== dims) {
-          next[ph.key] = { ...existing, decorationMethod: dm, dimensions: dims };
+        const dims = existing?.dimensions || (availableDims.length > 0 ? availableDims[0] : '');
+        if (!existing) {
+          next.push({ position: ph.position, decorationMethod: dm, dimensions: dims, source: '', itemId: null, customImageId: null, customItemId: null, cropX: 'center', cropY: 'center' });
+          changed = true;
+        } else if (existing.decorationMethod !== dm || existing.dimensions !== dims) {
+          Object.assign(existing, { decorationMethod: dm, dimensions: dims });
           changed = true;
         }
       }
@@ -483,8 +486,8 @@ export function ProductBlueprintProvider({
     }
   };
 
-  const getPlacementCarouselImages = (key) => {
-    const settings = placementSettings[key];
+  const getPlacementCarouselImages = (position) => {
+    const settings = placementSettings.find(p => p.position === position);
     if (!settings) return [];
     if (settings.source === 'custom' && settings.customImageId && settings.customItemId) {
       return [getItemReferenceUrl(settings.customItemId, settings.customImageId, true)];

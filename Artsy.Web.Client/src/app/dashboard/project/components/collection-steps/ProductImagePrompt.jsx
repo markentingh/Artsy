@@ -16,9 +16,24 @@ export default function ProductImagePrompt() {
     collectionArtwork, blueprints,
     allProductImages,
     setArtworkPreview,
+    mockups, printifyProducts, loadMockups,
   } = useCollection();
 
   const combo = selectedProductCombos[currentProductComboIndex];
+
+  useEffect(() => {
+    if (collectionId && mockups.length === 0) {
+      loadMockups(collectionId);
+    }
+  }, [collectionId, mockups.length, loadMockups]);
+
+  const mockupImages = useMemo(() => {
+    if (!combo || !printifyProducts.length || !mockups.length) return [];
+    const pp = printifyProducts.find(p => p.projectBlueprintId === combo.projectBlueprintId);
+    if (!pp) return [];
+    return mockups.filter(m => m.printifyProductId === pp.id).map(m => m.imageUrl);
+  }, [combo, printifyProducts, mockups]);
+
   const [thumbRetried, setThumbRetried] = useState({});
   const [thumbFailed, setThumbFailed] = useState({});
   const retryRef = useRef({});
@@ -31,11 +46,9 @@ export default function ProductImagePrompt() {
     const bp = blueprints.find(b => b.id === combo.projectBlueprintId);
     if (!bp || !bp.placementJson) return null;
     try {
-      const placementDict = JSON.parse(bp.placementJson);
-      if (!placementDict) return null;
-      const placementKeys = Object.keys(placementDict);
-      if (placementKeys.length === 0) return null;
-      const placement = placementDict[placementKeys[0]];
+      const placementArr = JSON.parse(bp.placementJson);
+      if (!placementArr || !Array.isArray(placementArr) || placementArr.length === 0) return null;
+      const placement = placementArr[0];
       if (placement && placement.source === 'item' && placement.itemId) return String(placement.itemId);
     } catch { /* skip */ }
     return null;
@@ -65,23 +78,21 @@ export default function ProductImagePrompt() {
 
   const allImages = useMemo(() => {
     const productImg = existingProductImage ? [existingProductImage] : [];
-    const printifyImg = combo?.printifyImageUrl ? [combo.printifyImageUrl] : [];
-    return [...productImg, ...printifyImg, ...artworkImages.map(a => a.thumbUrl)];
-  }, [existingProductImage, combo, artworkImages]);
+    return [...productImg, ...mockupImages, ...artworkImages.map(a => a.thumbUrl)];
+  }, [existingProductImage, mockupImages, artworkImages]);
 
   const fullSizeImages = useMemo(() => {
     const productImg = existingProductImage ? [existingProductImage] : [];
-    const printifyImg = combo?.printifyImageUrl ? [combo.printifyImageUrl] : [];
-    return [...productImg, ...printifyImg, ...artworkImages.map(a => a.url)];
-  }, [existingProductImage, combo, artworkImages]);
+    return [...productImg, ...mockupImages, ...artworkImages.map(a => a.url)];
+  }, [existingProductImage, mockupImages, artworkImages]);
 
   const handleImageError = useCallback(async (index) => {
     if (retryRef.current[index]) return;
     retryRef.current[index] = true;
 
     const productImgCount = existingProductImage ? 1 : 0;
-    const printifyImgCount = combo?.printifyImageUrl ? 1 : 0;
-    const artworkIndex = index - productImgCount - printifyImgCount;
+    const mockupImgCount = mockupImages.length;
+    const artworkIndex = index - productImgCount - mockupImgCount;
     const artwork = artworkImages[artworkIndex];
     if (!artwork || !collectionId) {
       setThumbFailed(prev => ({ ...prev, [index]: true }));
@@ -98,7 +109,7 @@ export default function ProductImagePrompt() {
     } catch {
       setThumbFailed(prev => ({ ...prev, [index]: true }));
     }
-  }, [artworkImages, existingProductImage, combo, collectionId, api]);
+  }, [artworkImages, existingProductImage, mockupImages, collectionId, api]);
 
   const imagesWithRetry = useMemo(() => {
     return allImages.map((url, i) => {
@@ -177,7 +188,7 @@ export default function ProductImagePrompt() {
       ? selectedProductCombos.length - 1
       : currentProductComboIndex;
     if (nextIndex >= selectedProductCombos.length - 1) {
-      setStep(STEPS.CREATE_PRODUCTS);
+      setStep(STEPS.PUBLISH_PRODUCTS);
     } else {
       setCurrentProductComboIndex(nextIndex + 1);
     }

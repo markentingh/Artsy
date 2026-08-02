@@ -41,7 +41,10 @@ export default function ArtworkPreview() {
           await api.acceptCollectionArtwork({ collectionId: colId, itemId: item.id });
           const artRes = await api.getCollectionArtwork(colId);
           if (artRes.data.success) {
-            setCollectionArtwork(artRes.data.data || []);
+            const updatedArtwork = artRes.data.data || [];
+            setCollectionArtwork(updatedArtwork);
+            advanceToNextItem(undefined, updatedArtwork);
+            return;
           }
         } catch (error) {
           console.error('acceptCollectionArtwork error:', error?.response?.data || error);

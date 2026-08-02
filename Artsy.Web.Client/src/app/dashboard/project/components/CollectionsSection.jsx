@@ -12,13 +12,16 @@ import CollectionModal from './CollectionModal';
 
 export default function CollectionsSection({ projectId, project, showNewButton = true }) {
   const session = useSession();
-  const { getCollections, getCollectionArtworkThumbUrl, deleteCollection } = Projects(session);
+  const { getCollections, getCollectionArtworkThumbUrl, deleteCollection, updateCollectionTitle } = Projects(session);
   const [collections, setCollections] = useState([]);
   const [mount, setMount] = useState(false);
   const [message, setMessage] = useState(null);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [resumeCollectionId, setResumeCollectionId] = useState(null);
+  const [resumeCollectionTitle, setResumeCollectionTitle] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editingCollectionId, setEditingCollectionId] = useState(null);
+  const [editingTitle, setEditingTitle] = useState('');
 
   const fetchCollections = async () => {
     try {
@@ -42,11 +45,13 @@ export default function CollectionsSection({ projectId, project, showNewButton =
 
   const handleNewCollection = () => {
     setResumeCollectionId(null);
+    setResumeCollectionTitle('');
     setShowCollectionModal(true);
   };
 
   const handleResumeCollection = (collection) => {
     setResumeCollectionId(collection.id);
+    setResumeCollectionTitle(collection.title || `Collection #${collection.sequence}`);
     setShowCollectionModal(true);
   };
 
@@ -57,6 +62,40 @@ export default function CollectionsSection({ projectId, project, showNewButton =
   const handleDeleteCollection = (collection, e) => {
     e.stopPropagation();
     setDeleteTarget(collection);
+  };
+
+  const handleEditTitle = (collection, e) => {
+    e.stopPropagation();
+    setEditingCollectionId(collection.id);
+    setEditingTitle(collection.title || `Collection #${collection.sequence}`);
+  };
+
+  const handleCancelEditTitle = (e) => {
+    e.stopPropagation();
+    setEditingCollectionId(null);
+    setEditingTitle('');
+  };
+
+  const handleSaveTitle = async (collection, e) => {
+    e.stopPropagation();
+    const trimmed = editingTitle.trim();
+    if (!trimmed) {
+      setMessage({ type: 'error', text: 'Title is required.' });
+      return;
+    }
+    try {
+      const resp = await updateCollectionTitle({ id: collection.id, title: trimmed });
+      if (resp.data.success) {
+        setCollections((prev) => prev.map((c) => c.id === collection.id ? { ...c, title: resp.data.data.title } : c));
+      } else {
+        setMessage({ type: 'error', text: resp.data.message || 'Failed to update title' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to update title' });
+    } finally {
+      setEditingCollectionId(null);
+      setEditingTitle('');
+    }
   };
 
   const handleConfirmDelete = async () => {
@@ -132,13 +171,38 @@ export default function CollectionsSection({ projectId, project, showNewButton =
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium mb-1">Collection #{collection.sequence}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(collection.created).toLocaleDateString()}
-                    </p>
+                  <div className="flex-1 min-w-0">
+                    {editingCollectionId === collection.id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={editingTitle}
+                          onChange={(e) => setEditingTitle(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTitle(collection, e); if (e.key === 'Escape') handleCancelEditTitle(e); }}
+                          autoFocus
+                          className="flex-1 px-2 py-1 text-sm border rounded bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                        <ButtonIcon name="check" color="green" onClick={(e) => handleSaveTitle(collection, e)} title="Save title" />
+                        <ButtonIcon name="close" color="red" onClick={handleCancelEditTitle} title="Cancel" />
+                      </div>
+                    ) : (
+                      <>
+                        <h3 className="font-medium mb-1">
+                          {collection.title || `Collection #${collection.sequence}`}
+                        </h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          {new Date(collection.created).toLocaleDateString()}
+                        </p>
+                      </>
+                    )}
                   </div>
-                  <ButtonIcon name="delete" color="red" onClick={(e) => handleDeleteCollection(collection, e)} title="Delete collection" />
+                  {editingCollectionId !== collection.id && (
+                    <div className="flex items-center gap-1">
+                      <ButtonIcon name="edit" color="blue" onClick={(e) => handleEditTitle(collection, e)} title="Edit title" />
+                      <ButtonIcon name="delete" color="red" onClick={(e) => handleDeleteCollection(collection, e)} title="Delete collection" />
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -151,6 +215,7 @@ export default function CollectionsSection({ projectId, project, showNewButton =
         projectId={projectId}
         project={project}
         collectionId={resumeCollectionId}
+        collectionTitle={resumeCollectionTitle}
         onClose={() => setShowCollectionModal(false)}
         onSaved={handleCollectionSaved}
       />

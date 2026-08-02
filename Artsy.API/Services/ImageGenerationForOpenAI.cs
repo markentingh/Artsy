@@ -19,6 +19,7 @@ namespace Artsy.API.Services
         public string ApiKey { get; set; } = "";
         public string Endpoint { get; set; } = "https://api.openai.com/v1/responses";
         public string ImageEndpoint { get; set; } = "https://api.openai.com/v1/images/generations";
+        public string ImageEditEndpoint { get; set; } = "https://api.openai.com/v1/images/edits";
     }
 
     public class ImageGenerationForOpenAI : IImageGeneration
@@ -39,18 +40,32 @@ namespace Artsy.API.Services
             _options = options.Value;
         }
 
-        public async Task<ImageGenerationResult> GenerateAsync(string imageModel, string imageModelJson, string? quality = null, string? previousResponseId = null, bool useResponsesApi = false)
+        public async Task<ImageGenerationResult> GenerateAsync(ImageGenerationRequest request)
         {
-            if (string.IsNullOrWhiteSpace(imageModelJson))
-                throw new ArgumentException("Image model JSON is required.", nameof(imageModelJson));
+            if (string.IsNullOrWhiteSpace(request.Prompt))
+                throw new ArgumentException("Prompt is required.", nameof(request));
 
-            return useResponsesApi
-                ? await GenerateViaResponsesApiAsync(imageModelJson, quality, previousResponseId)
-                : await GenerateViaImageApiAsync(imageModelJson, quality);
+            if (request.UseResponsesApi)
+                return await GenerateViaResponsesApiAsync(request);
+
+            if (request.InputImages != null && request.InputImages.Count > 0)
+                return await GenerateViaImageEditApiAsync(request);
+
+            return await GenerateViaImageApiAsync(request);
         }
 
-        async Task<ImageGenerationResult> GenerateViaImageApiAsync(string imageModelJson, string? quality)
+        async Task<ImageGenerationResult> GenerateViaImageApiAsync(ImageGenerationRequest request)
         {
+            if (!_options.Models.TryGetValue("openai", out var config))
+                throw new InvalidOperationException("OpenAI image model is not configured.");
+
+            if (string.IsNullOrWhiteSpace(config.ApiKey))
+                throw new InvalidOperationException("OpenAI API key is missing.");
+
+            var model = string.IsNullOrWhiteSpace(request.Model) ? "gpt-image-2" : request.Model;
+            var size = FindBestResolution($"{request.Width}x{request.Height}");
+            var quality = string.IsNullOrWhiteSpace(request.Quality) ? "medium" : request.Quality;
+
             var jsonOptions = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
@@ -58,42 +73,13 @@ namespace Artsy.API.Services
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             };
 
-            var request = JsonSerializer.Deserialize<OpenAIImageRequest>(imageModelJson, jsonOptions);
-            if (request == null)
-                throw new ArgumentException("Image model JSON could not be deserialized.", nameof(imageModelJson));
-
-            if (string.IsNullOrWhiteSpace(request.Prompt))
-                throw new ArgumentException("Prompt is required.", nameof(request.Prompt));
-
-            if (!_options.Models.TryGetValue("openai", out var config))
-                throw new InvalidOperationException("OpenAI image model is not configured.");
-
-            if (string.IsNullOrWhiteSpace(config.ApiKey))
-                throw new InvalidOperationException("OpenAI API key is missing.");
-
-            if (string.IsNullOrWhiteSpace(request.Model))
-                request.Model = "gpt-image-2";
-
-            if (string.IsNullOrWhiteSpace(request.Size))
-                request.Size = "1024x1024";
-            else
-                request.Size = FindBestResolution(request.Size);
-
-            if (request.N == null || request.N < 1)
-                request.N = 1;
-
-            if (!string.IsNullOrWhiteSpace(quality))
-                request.Quality = quality;
-            else if (string.IsNullOrWhiteSpace(request.Quality))
-                request.Quality = "medium";
-
             var imageApiRequest = new
             {
-                model = request.Model,
+                model,
                 prompt = request.Prompt,
-                n = request.N,
-                size = request.Size,
-                quality = request.Quality
+                n = 1,
+                size,
+                quality
             };
 
             var jsonContent = JsonSerializer.Serialize(imageApiRequest, jsonOptions);
@@ -136,8 +122,58 @@ namespace Artsy.API.Services
             return new ImageGenerationResult { ImageBytes = imageBytes };
         }
 
-        async Task<ImageGenerationResult> GenerateViaResponsesApiAsync(string imageModelJson, string? quality, string? previousResponseId)
+        async Task<ImageGenerationResult> GenerateViaImageEditApiAsync(ImageGenerationRequest request)
         {
+            if (!_options.Models.TryGetValue("openai", out var config))
+                throw new InvalidOperationException("OpenAI image model is not configured.");
+
+            if (string.IsNullOrWhiteSpace(config.ApiKey))
+                throw new InvalidOperationException("OpenAI API key is missing.");
+
+            var model = string.IsNullOrWhiteSpace(request.Model) ? "gpt-image-2" : request.Model;
+            var size = FindBestResolution($"{request.Width}x{request.Height}");
+            var quality = string.IsNullOrWhiteSpace(request.Quality) ? "medium" : request.Quality;
+
+            using var multipart = new MultipartFormDataContent();
+
+            multipart.Add(new StringContent(model), "model");
+            multipart.Add(new StringContent(request.Prompt), "prompt");
+            multipart.Add(new StringContent(size), "size");
+            multipart.Add(new StringContent(quality), "quality");
+
+            var firstImage = request.InputImages[0];
+            var imageContent = new ByteArrayContent(firstImage);
+            imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            multipart.Add(imageContent, "image", "image.png");
+
+            if (request.InputMask != null && request.InputMask.Length > 0)
+            {
+                var maskContent = new ByteArrayContent(request.InputMask);
+                maskContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+                multipart.Add(maskContent, "mask", "mask.png");
+            }
+
+            for (var i = 1; i < request.InputImages.Count; i++)
+            {
+                var extraContent = new ByteArrayContent(request.InputImages[i]);
+                extraContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+                multipart.Add(extraContent, $"image[{i}]", $"image_{i}.png");
+            }
+
+            using var client = _httpClientFactory.CreateClient("ImageGeneration");
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, config.ImageEditEndpoint)
+            {
+                Content = multipart
+            };
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ApiKey);
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(_options.TimeoutSeconds));
+            var response = await client.SendAsync(httpRequest, cts.Token);
+            var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException($"Image edit failed: {response.StatusCode} - {responseContent}");
+
             var jsonOptions = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
@@ -145,24 +181,47 @@ namespace Artsy.API.Services
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             };
 
-            var request = JsonSerializer.Deserialize<OpenAIImageRequest>(imageModelJson, jsonOptions);
-            if (request == null)
-                throw new ArgumentException("Image model JSON could not be deserialized.", nameof(imageModelJson));
+            var generationResponse = JsonSerializer.Deserialize<OpenAIImageResponse>(responseContent, jsonOptions);
+            if (generationResponse?.Data == null || generationResponse.Data.Count == 0)
+                throw new InvalidOperationException("No image returned from edit API.");
 
-            if (string.IsNullOrWhiteSpace(request.Prompt))
-                throw new ArgumentException("Prompt is required.", nameof(request.Prompt));
+            var first = generationResponse.Data[0];
+            byte[]? imageBytes = null;
 
+            if (!string.IsNullOrWhiteSpace(first.B64Json))
+                imageBytes = Convert.FromBase64String(first.B64Json);
+            else if (!string.IsNullOrWhiteSpace(first.Url))
+            {
+                using var imageResponse = await client.GetAsync(first.Url, cts.Token);
+                if (!imageResponse.IsSuccessStatusCode)
+                    throw new InvalidOperationException($"Failed to download generated image: {imageResponse.StatusCode}");
+                imageBytes = await imageResponse.Content.ReadAsByteArrayAsync(cts.Token);
+            }
+
+            if (imageBytes == null || imageBytes.Length == 0)
+                throw new InvalidOperationException("Generated image did not contain a URL or base64 data.");
+
+            return new ImageGenerationResult { ImageBytes = imageBytes };
+        }
+
+        async Task<ImageGenerationResult> GenerateViaResponsesApiAsync(ImageGenerationRequest request)
+        {
             if (!_options.Models.TryGetValue("openai", out var config))
                 throw new InvalidOperationException("OpenAI image model is not configured.");
 
             if (string.IsNullOrWhiteSpace(config.ApiKey))
                 throw new InvalidOperationException("OpenAI API key is missing.");
 
-            var imageModel = request.Model ?? "gpt-image-2";
-            var toolSize = !string.IsNullOrWhiteSpace(request.Size) ? FindBestResolution(request.Size) : "1024x1024";
-            var toolQuality = !string.IsNullOrWhiteSpace(quality) ? quality
-                : !string.IsNullOrWhiteSpace(request.Quality) ? request.Quality
-                : "medium";
+            var imageModel = string.IsNullOrWhiteSpace(request.Model) ? "gpt-image-2" : request.Model;
+            var toolSize = FindBestResolution($"{request.Width}x{request.Height}");
+            var toolQuality = string.IsNullOrWhiteSpace(request.Quality) ? "medium" : request.Quality;
+
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            };
 
             var responsesRequest = new OpenAIResponsesRequest
             {
@@ -180,25 +239,25 @@ namespace Artsy.API.Services
                 ToolChoice = "auto"
             };
 
-            if (!string.IsNullOrWhiteSpace(previousResponseId))
-                responsesRequest.PreviousResponseId = previousResponseId;
+            if (!string.IsNullOrWhiteSpace(request.PreviousResponseId))
+                responsesRequest.PreviousResponseId = request.PreviousResponseId;
 
             var contentItems = new List<OpenAIInputContent>
             {
                 new() { Type = "input_text", Text = request.Prompt }
             };
 
-            if (request.Images != null && request.Images.Count > 0)
+            if (request.InputImages != null && request.InputImages.Count > 0)
             {
-                foreach (var img in request.Images)
+                foreach (var imgBytes in request.InputImages)
                 {
-                    if (!string.IsNullOrWhiteSpace(img.Image))
+                    if (imgBytes != null && imgBytes.Length > 0)
                     {
                         contentItems.Add(new OpenAIInputContent
                         {
                             Type = "input_image",
-                            ImageUrl = $"data:image/png;base64,{img.Image}",
-                            Detail = img.Detail ?? "auto"
+                            ImageUrl = $"data:image/png;base64,{Convert.ToBase64String(imgBytes)}",
+                            Detail = "auto"
                         });
                     }
                 }

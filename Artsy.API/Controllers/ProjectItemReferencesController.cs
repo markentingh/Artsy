@@ -144,7 +144,22 @@ namespace Artsy.API.Controllers
                 if (project == null)
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
-                var bytes = await _imageService.GetProjectItemReferenceAsync(reference.ProjectId, reference.Id, reference.Extension, thumb);
+                byte[]? bytes = null;
+
+                if (reference.ArtworkId.HasValue)
+                {
+                    var refPreviews = await _projectItemPreviewRepository.GetByItemIdAsync(reference.ArtworkId.Value);
+                    var newestPreview = refPreviews.FirstOrDefault();
+                    if (newestPreview != null)
+                    {
+                        bytes = await _imageService.GetProjectItemPreviewAsync(reference.ProjectId, reference.ArtworkId.Value, newestPreview.Id, thumb);
+                    }
+                }
+                else
+                {
+                    bytes = await _imageService.GetProjectItemReferenceAsync(reference.ProjectId, reference.Id, reference.Extension, thumb);
+                }
+
                 if (bytes == null || bytes.Length == 0)
                     return NotFound();
 
@@ -156,10 +171,65 @@ namespace Artsy.API.Controllers
                 return Json(new ApiResponse { success = false, message = ex.Message });
             }
         }
+
+        [HttpPost("add-artwork-reference")]
+        public async Task<IActionResult> AddArtworkReference([FromBody] AddArtworkReferenceRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.ItemId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Item ID is required." });
+
+            if (request.ArtworkId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Artwork ID is required." });
+
+            try
+            {
+                var item = await _projectItemRepository.GetByIdAsync(request.ItemId);
+                if (item == null)
+                    return Json(new ApiResponse { success = false, message = "Item not found." });
+
+                var project = await _projectRepository.GetByIdAsync(item.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                var artworkItem = await _projectItemRepository.GetByIdAsync(request.ArtworkId);
+                if (artworkItem == null || artworkItem.ProjectId != item.ProjectId)
+                    return Json(new ApiResponse { success = false, message = "Artwork not found in this project." });
+
+                if (artworkItem.Index >= item.Index)
+                    return Json(new ApiResponse { success = false, message = "Can only reference artworks with a lower index." });
+
+                var reference = new ProjectItemReference
+                {
+                    ItemId = request.ItemId,
+                    ProjectId = item.ProjectId,
+                    FileName = artworkItem.Title ?? "",
+                    Extension = ".jpg",
+                    ArtworkId = request.ArtworkId,
+                    Created = DateTime.UtcNow
+                };
+                var created = await _projectItemReferenceRepository.CreateAsync(reference);
+
+                return Json(new ApiResponse { success = true, data = created });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
     }
 
     public class DeleteItemReferenceRequest
     {
         public Guid Id { get; set; }
+    }
+
+    public class AddArtworkReferenceRequest
+    {
+        public Guid ItemId { get; set; }
+        public Guid ArtworkId { get; set; }
     }
 }
