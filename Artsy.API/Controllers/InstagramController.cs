@@ -80,6 +80,54 @@ namespace Artsy.API.Controllers
             }
         }
 
+        [HttpGet("collection-posted")]
+        [Authorize]
+        public async Task<IActionResult> CollectionPosted(Guid collectionId)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            try
+            {
+                var posts = await _instagramPostRepository.GetByCollectionIdAsync(collectionId);
+                return Json(new ApiResponse { success = true, data = new { posted = posts.Any() } });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("collection-post")]
+        [Authorize]
+        public async Task<IActionResult> CollectionPost(Guid collectionId)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            try
+            {
+                var posts = await _instagramPostRepository.GetByCollectionIdAsync(collectionId);
+                var post = posts.FirstOrDefault();
+                if (post == null)
+                    return Json(new ApiResponse { success = true, data = null });
+
+                return Json(new ApiResponse { success = true, data = new
+                {
+                    id = post.Id,
+                    description = post.Description,
+                    permalink = post.Permalink,
+                    created = post.Created
+                }});
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
         [HttpGet("connect")]
         [Authorize]
         public async Task<IActionResult> Connect()
@@ -143,9 +191,16 @@ namespace Artsy.API.Controllers
                 var existing = await _instagramAccountRepository.GetByInstagramBusinessAccountIdAsync(user.Id!.Value, account.instagramBusinessAccountId);
                 if (existing != null)
                 {
+                    existing.MetaAccessToken = tokenResponse.access_token;
+                    existing.MetaTokenExpiresAtUtc = DateTime.UtcNow.AddSeconds(tokenResponse.expires_in > 0 ? tokenResponse.expires_in : 3600);
+                    existing.Username = account.username;
+                    existing.ProfilePictureUrl = account.profilePictureUrl;
+                    await _instagramAccountRepository.UpsertAsync(existing);
+
                     user.OAuthState = null;
                     _userRepository.UpdateOAuthState(user);
-                    return Json(new ApiResponse { success = false, message = $"Instagram account @{account.username} is already connected." });
+
+                    return Json(new ApiResponse { success = true, data = new { id = existing.Id, instagramBusinessAccountId = existing.InstagramBusinessAccountId, username = existing.Username } });
                 }
 
                 var igAccount = await _instagramAccountRepository.UpsertAsync(new AppUserInstagramAccount
@@ -202,33 +257,88 @@ namespace Artsy.API.Controllers
 
                 var sortedImages = request.Images.OrderBy(i => i.SortOrder).ToList();
                 var mediaContainerIds = new List<string>();
+                var errors = new List<string>();
+                var domain = ConnectionSettings.MetaImagesDomain.TrimEnd('/');
+
+                if (string.IsNullOrEmpty(domain))
+                    return Json(new ApiResponse { success = false, message = "Meta Images Domain is not configured." });
+
+                var isCarousel = sortedImages.Count > 1;
 
                 foreach (var img in sortedImages)
                 {
-                    byte[]? imgBytes = null;
+                    string? imageUrl = null;
                     if (img.ProductImageId.HasValue)
                     {
                         var productImage = await _productImageRepository.GetByIdAsync(img.ProductImageId.Value);
                         if (productImage == null || !productImage.Accepted || !productImage.Active) continue;
-                        imgBytes = await _imageService.GetProjectCollectionProductImageAsync(project.Id, request.CollectionId, productImage.Id);
+                        imageUrl = $"{domain}/meta/image/product/{img.ProductImageId.Value}";
                     }
                     else if (img.ArtworkId.HasValue && img.ItemId.HasValue)
                     {
                         var artwork = await _artworkRepository.GetByIdAsync(img.ArtworkId.Value);
                         if (artwork == null || !artwork.Accepted || !artwork.Active) continue;
-                        imgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(project.Id, request.CollectionId, img.ItemId.Value, artwork.Id);
+                        imageUrl = $"{domain}/meta/image/artwork/{img.ArtworkId.Value}";
                     }
 
-                    if (imgBytes == null || imgBytes.Length == 0) continue;
+                    if (string.IsNullOrEmpty(imageUrl)) continue;
 
-                    var base64 = Convert.ToBase64String(imgBytes);
-                    var mediaContainerId = await CreateInstagramMediaContainer(igAccount, base64, request.Description);
+                    var (mediaContainerId, error) = await CreateInstagramMediaContainer(igAccount, imageUrl, request.Description, isCarousel);
                     if (!string.IsNullOrEmpty(mediaContainerId))
                         mediaContainerIds.Add(mediaContainerId);
+                    else if (!string.IsNullOrEmpty(error))
+                        errors.Add(error);
                 }
 
                 if (mediaContainerIds.Count == 0)
-                    return Json(new ApiResponse { success = false, message = "Failed to create any media containers for the post." });
+                {
+                    var errorMsg = errors.Count > 0
+                        ? $"Failed to create any media containers for the post. Errors: {string.Join("; ", errors)}"
+                        : "Failed to create any media containers for the post.";
+                    var tokenExpired = errors.Any(e => e.Contains("Session has expired") || e.Contains("access token"));
+                    return Json(new ApiResponse { success = false, message = errorMsg, data = tokenExpired ? new { tokenExpired = true } : null });
+                }
+
+                string publishContainerId;
+                if (isCarousel)
+                {
+                    foreach (var childId in mediaContainerIds)
+                    {
+                        var ready = await WaitForMediaReady(igAccount, childId);
+                        if (!ready)
+                            return Json(new ApiResponse { success = false, message = "One or more images failed to process on Instagram." });
+                    }
+
+                    var (carouselId, carouselError) = await CreateInstagramCarouselContainer(igAccount, mediaContainerIds, request.Description);
+                    if (string.IsNullOrEmpty(carouselId))
+                    {
+                        return Json(new ApiResponse { success = false, message = $"Failed to create carousel container. {carouselError}" });
+                    }
+
+                    var carouselReady = await WaitForMediaReady(igAccount, carouselId);
+                    if (!carouselReady)
+                        return Json(new ApiResponse { success = false, message = "Carousel failed to process on Instagram." });
+
+                    publishContainerId = carouselId;
+                }
+                else
+                {
+                    var ready = await WaitForMediaReady(igAccount, mediaContainerIds.First());
+                    if (!ready)
+                        return Json(new ApiResponse { success = false, message = "Image failed to process on Instagram." });
+                    publishContainerId = mediaContainerIds.First();
+                }
+
+                var (publishSuccess, mediaId, publishError) = await PublishInstagramMedia(igAccount, publishContainerId);
+                if (!publishSuccess)
+                    return Json(new ApiResponse { success = false, message = $"Failed to publish media to Instagram. {publishError}" });
+
+                string? permalink = null;
+                if (!string.IsNullOrEmpty(mediaId))
+                {
+                    await Task.Delay(2000);
+                    permalink = await GetMediaPermalink(igAccount, mediaId);
+                }
 
                 var post = await _instagramPostRepository.CreateAsync(new ProjectCollectionInstagramPost
                 {
@@ -236,9 +346,15 @@ namespace Artsy.API.Controllers
                     CollectionId = request.CollectionId,
                     InstagramAccountId = igAccount.Id,
                     Description = request.Description,
-                    ContainerId = mediaContainerIds.First(),
+                    ContainerId = publishContainerId,
+                    Permalink = permalink,
                     Status = 1,
                 });
+
+                if (!string.IsNullOrEmpty(permalink))
+                {
+                    await _instagramPostRepository.UpdatePermalinkAsync(post.Id, permalink);
+                }
 
                 for (var i = 0; i < sortedImages.Count; i++)
                 {
@@ -255,11 +371,7 @@ namespace Artsy.API.Controllers
                     }
                 }
 
-                var publishResult = await PublishInstagramMedia(igAccount, mediaContainerIds);
-                if (!publishResult)
-                    return Json(new ApiResponse { success = false, message = "Failed to publish media to Instagram." });
-
-                return Json(new ApiResponse { success = true, data = new { postId = post.Id, mediaCount = mediaContainerIds.Count } });
+                return Json(new ApiResponse { success = true, data = new { postId = post.Id, mediaCount = mediaContainerIds.Count, permalink } });
             }
             catch (Exception ex)
             {
@@ -267,58 +379,165 @@ namespace Artsy.API.Controllers
             }
         }
 
-        private async Task<string?> CreateInstagramMediaContainer(AppUserInstagramAccount account, string base64Image, string caption)
+        private async Task<(string? containerId, string? error)> CreateInstagramMediaContainer(AppUserInstagramAccount account, string imageUrl, string caption, bool isCarouselItem)
         {
             try
             {
                 var client = _httpClientFactory.CreateClient();
-                var imageUrl = $"data:image/jpeg;base64,{base64Image}";
+
+                var fields = new Dictionary<string, string>
+                {
+                    { "image_url", imageUrl },
+                    { "access_token", account.MetaAccessToken }
+                };
+
+                if (isCarouselItem)
+                {
+                    fields["is_carousel_item"] = "true";
+                }
+                else
+                {
+                    fields["caption"] = caption;
+                }
+
+                var content = new FormUrlEncodedContent(fields);
+
+                var response = await client.PostAsync($"https://graph.instagram.com/{account.InstagramBusinessAccountId}/media", content);
+                var json = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return (null, $"Instagram API returned {response.StatusCode}: {json}");
+                }
+
+                var doc = JsonDocument.Parse(json);
+
+                if (doc.RootElement.TryGetProperty("id", out var idProp))
+                    return (idProp.GetString(), null);
+
+                if (doc.RootElement.TryGetProperty("error", out var errorProp))
+                {
+                    var msg = errorProp.TryGetProperty("message", out var msgProp) ? msgProp.GetString() ?? json : json;
+                    return (null, msg);
+                }
+
+                return (null, $"Unexpected response: {json}");
+            }
+            catch (Exception ex)
+            {
+                return (null, ex.Message);
+            }
+        }
+
+        private async Task<(string? containerId, string? error)> CreateInstagramCarouselContainer(AppUserInstagramAccount account, List<string> childrenIds, string caption)
+        {
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
 
                 var content = new FormUrlEncodedContent(new Dictionary<string, string>
                 {
-                    { "image_url", imageUrl },
+                    { "media_type", "CAROUSEL" },
+                    { "children", string.Join(",", childrenIds) },
                     { "caption", caption },
                     { "access_token", account.MetaAccessToken }
                 });
 
                 var response = await client.PostAsync($"https://graph.instagram.com/{account.InstagramBusinessAccountId}/media", content);
                 var json = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return (null, $"Instagram API returned {response.StatusCode}: {json}");
+                }
+
                 var doc = JsonDocument.Parse(json);
 
                 if (doc.RootElement.TryGetProperty("id", out var idProp))
-                    return idProp.GetString();
+                    return (idProp.GetString(), null);
 
-                return null;
+                if (doc.RootElement.TryGetProperty("error", out var errorProp))
+                {
+                    var msg = errorProp.TryGetProperty("message", out var msgProp) ? msgProp.GetString() ?? json : json;
+                    return (null, msg);
+                }
+
+                return (null, $"Unexpected response: {json}");
             }
-            catch
+            catch (Exception ex)
             {
-                return null;
+                return (null, ex.Message);
             }
         }
 
-        private async Task<bool> PublishInstagramMedia(AppUserInstagramAccount account, List<string> mediaContainerIds)
+        private async Task<bool> WaitForMediaReady(AppUserInstagramAccount account, string containerId, int maxAttempts = 10, int delayMs = 3000)
+        {
+            var client = _httpClientFactory.CreateClient();
+            for (var i = 0; i < maxAttempts; i++)
+            {
+                await Task.Delay(delayMs);
+                var url = $"https://graph.instagram.com/{containerId}?fields=status_code&access_token={Uri.EscapeDataString(account.MetaAccessToken)}";
+                var response = await client.GetAsync(url);
+                var json = await response.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("status_code", out var statusProp))
+                {
+                    var status = statusProp.GetString();
+                    if (status == "FINISHED") return true;
+                    if (status == "ERROR") return false;
+                }
+            }
+            return false;
+        }
+
+        private async Task<(bool success, string? mediaId, string? error)> PublishInstagramMedia(AppUserInstagramAccount account, string containerId)
         {
             try
             {
                 var client = _httpClientFactory.CreateClient();
-                var creationId = mediaContainerIds.First();
 
                 var content = new FormUrlEncodedContent(new Dictionary<string, string>
                 {
-                    { "creation_id", creationId },
+                    { "creation_id", containerId },
                     { "access_token", account.MetaAccessToken }
                 });
 
                 var response = await client.PostAsync($"https://graph.instagram.com/{account.InstagramBusinessAccountId}/media_publish", content);
                 var json = await response.Content.ReadAsStringAsync();
-                var doc = JsonDocument.Parse(json);
 
-                return doc.RootElement.TryGetProperty("id", out _);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return (false, null, $"Instagram API returned {response.StatusCode}: {json}");
+                }
+
+                var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("id", out var idProp))
+                    return (true, idProp.GetString(), null);
+
+                return (false, null, $"Unexpected response: {json}");
+            }
+            catch (Exception ex)
+            {
+                return (false, null, ex.Message);
+            }
+        }
+
+        private async Task<string?> GetMediaPermalink(AppUserInstagramAccount account, string mediaId)
+        {
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
+                var url = $"https://graph.instagram.com/{mediaId}?fields=permalink&access_token={Uri.EscapeDataString(account.MetaAccessToken)}";
+                var response = await client.GetAsync(url);
+                var json = await response.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("permalink", out var permalinkProp))
+                    return permalinkProp.GetString();
             }
             catch
             {
-                return false;
             }
+            return null;
         }
 
         private async Task<(string access_token, string refresh_token, int expires_in)> ExchangeCodeForToken(string code)

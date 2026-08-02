@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import Modal from '@/components/ui/modal';
-import Button from '@/components/ui/button';
+import ButtonOutline from '@/components/ui/button-outline';
 import TextArea from '@/components/forms/textarea';
 import Tooltip from '@/components/ui/tooltip';
 import Message from '@/components/ui/message';
@@ -68,7 +68,7 @@ export default function ConfigureSocialMediaPosts({ show, projectId, project, on
       />
       <div className="flex items-center gap-1 mb-1">
         <label className="block text-sm font-medium">Description</label>
-        <Tooltip text="Appended below the AI-generated description when posting to Instagram. Use this for personal notes, links, or custom text you want included in every post." />
+        <Tooltip text="Appended below the AI-generated description when posting to Instagram. Use this for personal notes or custom text you want included in every post." />
       </div>
       <TextArea
         name="socialMediaDescription"
@@ -78,16 +78,16 @@ export default function ConfigureSocialMediaPosts({ show, projectId, project, on
         onChange={(e) => setDescription(e.target.value)}
         className="mb-4"
       />
-      <div className="buttons">
-        <Button onClick={handleSave} disabled={saving}>
+      <div className="buttons flex gap-3">
+        <ButtonOutline onClick={handleSave} disabled={saving}>
           {saving ? (
-            <>
+            <span className="inline-flex items-center">
               <Icon name="progress_activity" spin className="w-4 h-4 mr-1" />
               Saving...
-            </>
-          ) : 'Save'}
-        </Button>
-        <Button className="cancel" onClick={onClose}>Cancel</Button>
+            </span>
+          ) : 'Save Changes'}
+        </ButtonOutline>
+        <ButtonOutline className="cancel" color="gray" onClick={onClose}>Cancel</ButtonOutline>
       </div>
     </Modal>
   );

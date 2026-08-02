@@ -14,8 +14,8 @@ export default function PublishProductsStep() {
   const {
     project, blueprints, allProductImages, collectionId,
     productImageVariants, STEPS, setStep,
-    handleSaveDraft, setMessage, printifyProducts,
-    collectionArtwork, api,
+    setMessage, printifyProducts,
+    collectionArtwork, api, onClose,
   } = useCollection();
 
   const printifyApi = Projects(session);
@@ -211,7 +211,7 @@ export default function PublishProductsStep() {
         </div>
       )}
       <div className="buttons flex justify-end gap-2 mt-auto">
-        <ButtonOutline className="cancel" onClick={handleSaveDraft}>Save Draft</ButtonOutline>
+        <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         {allPublished ? (
           <Button onClick={handleNext}>Next</Button>
         ) : (

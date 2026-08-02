@@ -73,9 +73,54 @@ namespace Artsy.API.Controllers
 
                     var itemTitles = aiItems.Select(i => i.Title).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
                     var projectTitle = project.Title;
+                    var collectionTitle = collection.Title;
 
-                    var systemPrompt = "You are a social media marketing expert. Generate an SEO-friendly, engaging rich description for an Instagram post about a collection of artwork. Use relevant hashtags. Keep it under 2000 characters.";
-                    var userPrompt = $"Project: {projectTitle}\nArtworks: {string.Join(", ", itemTitles)}\nPrompt: {prompt}\n\nGenerate an engaging Instagram post description.";
+                    var projectQuestions = (await _projectQuestionRepository.GetByProjectIdAsync(project.Id)).ToList();
+                    var itemQuestions = (await _projectItemQuestionRepository.GetByProjectIdAsync(project.Id)).ToList();
+                    var answers = (await _projectCollectionAnswerRepository.GetByCollectionIdAsync(request.CollectionId)).ToList();
+
+                    var projectQa = projectQuestions
+                        .Where(q => !string.IsNullOrWhiteSpace(q.Question))
+                        .Select(q => {
+                            var ans = answers.FirstOrDefault(a => a.QuestionId == q.Id && a.ItemId == null);
+                            return new { Q = q.Question, A = ans?.Answer };
+                        })
+                        .Where(qa => !string.IsNullOrWhiteSpace(qa.A))
+                        .ToList();
+
+                    var itemQa = aiItems.Select(item => {
+                        var itemQs = itemQuestions.Where(q => q.ItemId == item.Id && !string.IsNullOrWhiteSpace(q.Question)).ToList();
+                        var itemAns = answers.Where(a => a.ItemId == item.Id).ToList();
+                        var pairs = itemQs.Select(q => {
+                            var ans = itemAns.FirstOrDefault(a => a.QuestionId == q.Id);
+                            return new { Q = q.Question, A = ans?.Answer };
+                        }).Where(qa => !string.IsNullOrWhiteSpace(qa.A)).ToList();
+                        return new { ItemTitle = item.Title, QAs = pairs };
+                    }).Where(x => x.QAs.Count > 0).ToList();
+
+                    var qaBuilder = new System.Text.StringBuilder();
+                    if (projectQa.Count > 0)
+                    {
+                        qaBuilder.AppendLine("Project Q&A:");
+                        foreach (var qa in projectQa)
+                            qaBuilder.AppendLine($"  Q: {qa.Q} A: {qa.A}");
+                    }
+                    if (itemQa.Count > 0)
+                    {
+                        qaBuilder.AppendLine("Artwork Q&A:");
+                        foreach (var item in itemQa)
+                        {
+                            qaBuilder.AppendLine($"  {item.ItemTitle}:");
+                            foreach (var qa in item.QAs)
+                                qaBuilder.AppendLine($"    Q: {qa.Q} A: {qa.A}");
+                        }
+                    }
+
+                    var systemPrompt = "You are a social media marketing expert. Generate an SEO-friendly, engaging rich description for an Instagram post about a collection of artwork. Use relevant hashtags. Keep it under 2000 characters. URL links are not allowed.";
+                    var userPrompt = $"Project: {projectTitle}\nCollection: {collectionTitle}\nArtworks: {string.Join(", ", itemTitles)}\n";
+                    if (qaBuilder.Length > 0)
+                        userPrompt += qaBuilder.ToString();
+                    userPrompt += $"\nPrompt: {prompt}\n\nGenerate an engaging Instagram post description.";
 
                     try
                     {

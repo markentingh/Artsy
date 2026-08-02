@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { useCollection } from '@/context/collection';
 import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
@@ -7,14 +7,16 @@ import Accordion from '@/components/ui/accordion';
 
 export default function CollectionSetupList() {
   const {
-    aiItems, collectionArtwork, step, STEPS,
+    aiItems, collectionArtwork, step, STEPS, maxStepIndex,
     allProductImages, selectedProductCombos, productBlueprintImages, project,
     collectionId, api, setStep, setCollectionArtwork,
-    setAllProductImages, setSelectedProductCombos,
-    currentProductComboIndex, setCurrentProductComboIndex,
-    loadItemData, currentItemIndex,
-    projectQuestions, setProductImagePrompt,
+    setAllProductImages,
+    currentProductComboIndex,
+    currentItemIndex,
+    projectQuestions,
     printifyProducts, mockups,
+    reviewStep,
+    instagramPosted,
   } = useCollection();
 
   const aiArtworks = collectionArtwork.filter(a => a.imageModel !== 'custom');
@@ -51,25 +53,23 @@ export default function CollectionSetupList() {
     [STEPS.PRODUCT_IMAGE_PREVIEW]: hasPQ ? 4 : 3,
     [STEPS.PUBLISH_PRODUCTS]: hasPQ ? 5 : 4,
     [STEPS.SOCIAL_MEDIA]: hasPQ ? 6 : 5,
+    [STEPS.SUMMARY]: hasPQ ? 7 : 6,
   };
 
-  const maxStepIdxRef = useRef(0);
   const currentStepIdx = checkIdx[step] ?? 0;
-  if (currentStepIdx > maxStepIdxRef.current) {
-    maxStepIdxRef.current = currentStepIdx;
-  }
-
-  const isComplete = (itemStep) => {
-    if (maxStepIdxRef.current <= checkIdx[itemStep]) return false;
-    if (itemStep === STEPS.CREATE_PRODUCTS) {
-      return mockups.length > 0 && printifyProducts.some(pp => pp.mockupsDownloaded);
-    }
-    return true;
-  };
+  const maxStepIdx = Math.max(maxStepIndex, currentStepIdx);
 
   const isCurrent = (itemStep) => {
     const currentIdx = checkIdx[step] ?? -1;
     return currentIdx === checkIdx[itemStep];
+  };
+
+  const isComplete = (itemStep) => {
+    if (maxStepIdx <= checkIdx[itemStep]) return false;
+    if (itemStep === STEPS.CREATE_PRODUCTS) {
+      return mockups.length > 0 && printifyProducts.some(pp => pp.mockupsDownloaded);
+    }
+    return true;
   };
 
   const renderTitle = (label, complete, count, current = false) => (
@@ -102,10 +102,7 @@ export default function CollectionSetupList() {
   );
 
   const handleReviewArtwork = (itemId) => {
-    const itemIndex = aiItems.findIndex(a => String(a.id) === String(itemId));
-    if (itemIndex === -1) return;
-    setStep(STEPS.ARTWORK_QUESTIONS);
-    loadItemData(itemIndex);
+    reviewStep(STEPS.ARTWORK_QUESTIONS, itemId);
   };
 
   const handleSkipProductImage = async (combo) => {
@@ -126,28 +123,7 @@ export default function CollectionSetupList() {
   };
 
   const handleReviewProductImage = (combo) => {
-    const existingImg = allProductImages.find(img =>
-      img.projectBlueprintId === combo.projectBlueprintId &&
-      img.productImageId === combo.productImageId
-    );
-    if (existingImg?.prompt) {
-      setProductImagePrompt(existingImg.prompt);
-    }
-    const comboIndex = selectedProductCombos.findIndex(c =>
-      c.projectBlueprintId === combo.projectBlueprintId &&
-      c.productImageId === combo.productImageId
-    );
-    if (comboIndex !== -1) {
-      setCurrentProductComboIndex(comboIndex);
-      setStep(STEPS.PRODUCT_IMAGE_PROMPT);
-    } else {
-      setSelectedProductCombos(prev => {
-        const next = [...prev, combo];
-        setCurrentProductComboIndex(next.length - 1);
-        setStep(STEPS.PRODUCT_IMAGE_PROMPT);
-        return next;
-      });
-    }
+    reviewStep(STEPS.PRODUCT_IMAGE_PROMPT, combo);
   };
 
   const firstUnacceptedIdx = aiBlueprintItems.findIndex((item, idx) => {
@@ -307,10 +283,19 @@ export default function CollectionSetupList() {
       ) : null,
     },
     {
-      title: renderTitle('Post to Social Media', false, null),
+      title: renderTitle('Post to Social Media', instagramPosted, null, isCurrent(STEPS.SOCIAL_MEDIA)),
       content: null,
       action: printifyProducts.length > 0 && printifyProducts.every(pp => pp.published) && !isCurrent(STEPS.SOCIAL_MEDIA) ? (
         <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.SOCIAL_MEDIA)}>
+          Review
+        </ButtonOutline>
+      ) : null,
+    },
+    {
+      title: renderTitle('Summary', instagramPosted, null, isCurrent(STEPS.SUMMARY)),
+      content: null,
+      action: instagramPosted && !isCurrent(STEPS.SUMMARY) ? (
+        <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.SUMMARY)}>
           Review
         </ButtonOutline>
       ) : null,

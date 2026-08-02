@@ -11,7 +11,7 @@ export default function ReadyToGenerate() {
     isGeneratingAll, generatingProgress, generatingMessage,
     generationError, setGenerationError,
     generatedArtworks, currentGeneratingIndex, currentGeneratingItemId,
-    doGenerateAll, handleSaveDraft,
+    doGenerateAll,
     setArtworkPreview, onClose, api,
     projectId, cancelRef, STEPS,
     upscaleComplete, setUpscaleComplete,
@@ -196,16 +196,28 @@ export default function ReadyToGenerate() {
         </>
       ) : (
         <>
-          <p className="text-center text-lg mb-2">
-            Ready to upscale {pendingCount} artwork{pendingCount !== 1 ? 's' : ''} to full size.
-          </p>
-          <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-6">
-            This will cost {pendingTokens} tokens.
-          </p>
+          {pendingCount === 0 ? (
+            <p className="text-center text-lg mb-4">
+              All artworks have been upscaled.
+            </p>
+          ) : (
+            <>
+              <p className="text-center text-lg mb-2">
+                Ready to upscale {pendingCount} artwork{pendingCount !== 1 ? 's' : ''} to full size.
+              </p>
+              <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-6">
+                This will cost {pendingTokens} tokens.
+              </p>
+            </>
+          )}
           <div className="buttons flex justify-end gap-2 mt-auto">
             <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
-            <ButtonOutline onClick={handleSaveDraft}>Save Draft</ButtonOutline>
-            <ButtonOutline onClick={handleGenerateArtworks}>Upscale Artworks</ButtonOutline>
+            {pendingCount > 0 && (
+              <ButtonOutline onClick={handleGenerateArtworks}>Upscale Artworks</ButtonOutline>
+            )}
+            {pendingCount === 0 && (
+              <ButtonOutline onClick={handleNext}>Next</ButtonOutline>
+            )}
           </div>
         </>
       )}

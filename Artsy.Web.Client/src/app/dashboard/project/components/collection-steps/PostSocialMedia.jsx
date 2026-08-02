@@ -6,14 +6,18 @@ import ButtonOutline from '@/components/ui/button-outline';
 import Button from '@/components/ui/button';
 import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';
+import ReconnectInstagramModal from '../ReconnectInstagramModal';
 
 export default function PostSocialMedia() {
   const session = useSession();
   const {
     project, collectionId, collectionArtwork, allProductImages,
-    items, handleSaveDraft, setMessage, api,
+    items, setMessage, api, onClose,
     socialMediaImageOrder, setSocialMediaImageOrder,
     socialMediaSelectedImages, setSocialMediaSelectedImages,
+    instagramPosted, setInstagramPosted,
+    instagramPost, setInstagramPost,
+    STEPS, setStep,
   } = useCollection();
 
   const printifyApi = Projects(session);
@@ -22,6 +26,7 @@ export default function PostSocialMedia() {
   const [posted, setPosted] = useState(false);
   const [description, setDescription] = useState('');
   const [generatingDescription, setGeneratingDescription] = useState(false);
+  const [showReconnectModal, setShowReconnectModal] = useState(false);
 
   const gridRef = useRef(null);
   const draggedIdRef = useRef(null);
@@ -298,15 +303,29 @@ export default function PostSocialMedia() {
 
       if (response.data.success) {
         setPosted(true);
+        setInstagramPosted(true);
+        if (response.data.data?.permalink) {
+          setInstagramPost(prev => ({ ...prev, permalink: response.data.data.permalink, description }));
+        } else {
+          setInstagramPost(prev => ({ ...prev, description }));
+        }
       } else {
-        setMessage({ type: 'error', text: response.data.message || 'Failed to post to Instagram' });
+        if (response.data.data?.tokenExpired) {
+          setShowReconnectModal(true);
+        } else {
+          setMessage({ type: 'error', text: response.data.message || 'Failed to post to Instagram' });
+        }
       }
     } catch (error) {
-      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to post to Instagram' });
+      if (error?.response?.data?.data?.tokenExpired) {
+        setShowReconnectModal(true);
+      } else {
+        setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to post to Instagram' });
+      }
     }
 
     setPosting(false);
-  }, [collectionId, project, orderedImages, socialMediaSelectedImages, description, printifyApi, setMessage]);
+  }, [collectionId, project, orderedImages, socialMediaSelectedImages, description, printifyApi, setMessage, setInstagramPosted, setInstagramPost]);
 
   if (!project?.postToInstagram) {
     return (
@@ -315,7 +334,7 @@ export default function PostSocialMedia() {
           Instagram posting is not enabled for this project.
         </p>
         <div className="buttons flex justify-end gap-2 mt-auto">
-          <ButtonOutline className="cancel" onClick={handleSaveDraft}>Save Draft</ButtonOutline>
+          <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         </div>
       </div>
     );
@@ -417,7 +436,7 @@ export default function PostSocialMedia() {
         />
       </div>
 
-      {posted && (
+      {(posted || instagramPosted) && (
         <div className="flex flex-col items-center justify-center mb-4">
           <p className="text-sm font-medium text-green-600 dark:text-green-400 text-center mb-4">
             Images have been posted to Instagram successfully!
@@ -426,18 +445,32 @@ export default function PostSocialMedia() {
       )}
 
       <div className="buttons flex justify-end gap-2 mt-auto">
-        <ButtonOutline className="cancel" onClick={handleSaveDraft}>Save Draft</ButtonOutline>
-        <Button onClick={handlePost} disabled={posting || orderedImages.filter(img => socialMediaSelectedImages[img.id]).length === 0}>
-          {posting ? (
-            <>
-              <Icon name="progress_activity" spin className="w-4 h-4 inline mr-1" />
-              Posting...
-            </>
-          ) : (
-            'Post Images'
-          )}
-        </Button>
+        <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+        {!instagramPosted && (
+          <Button onClick={handlePost} disabled={posting || orderedImages.filter(img => socialMediaSelectedImages[img.id]).length === 0}>
+            {posting ? (
+              <>
+                <Icon name="progress_activity" spin className="w-4 h-4 inline mr-1" />
+                Posting...
+              </>
+            ) : (
+              'Post Images'
+            )}
+          </Button>
+        )}
+        {instagramPosted && (
+          <Button onClick={() => setStep(STEPS.SUMMARY)}>Next</Button>
+        )}
       </div>
+
+      <ReconnectInstagramModal
+        show={showReconnectModal}
+        onClose={() => setShowReconnectModal(false)}
+        onReconnected={() => {
+          setShowReconnectModal(false);
+          handlePost();
+        }}
+      />
 
     </div>
   );

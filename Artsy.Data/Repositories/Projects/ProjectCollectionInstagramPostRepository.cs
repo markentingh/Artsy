@@ -20,8 +20,8 @@ namespace Artsy.Data.Repositories.Projects
                 post.Id = Guid.NewGuid();
             post.Created = DateTime.UtcNow;
             const string query = @"
-                INSERT INTO public.""ProjectCollectionInstagramPosts"" (""Id"", ""ProjectId"", ""CollectionId"", ""InstagramAccountId"", ""Description"", ""ContainerId"", ""Status"", ""Created"")
-                VALUES (@Id, @ProjectId, @CollectionId, @InstagramAccountId, @Description, @ContainerId, @Status, @Created)
+                INSERT INTO public.""ProjectCollectionInstagramPosts"" (""Id"", ""ProjectId"", ""CollectionId"", ""InstagramAccountId"", ""Description"", ""ContainerId"", ""Permalink"", ""Status"", ""Created"")
+                VALUES (@Id, @ProjectId, @CollectionId, @InstagramAccountId, @Description, @ContainerId, @Permalink, @Status, @Created)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectCollectionInstagramPost>(query, post);
         }
@@ -30,6 +30,12 @@ namespace Artsy.Data.Repositories.Projects
         {
             const string query = @"SELECT * FROM public.""ProjectCollectionInstagramPosts"" WHERE ""CollectionId"" = @collectionId AND ""Status"" = 1 ORDER BY ""Created"" DESC";
             return await _dbConnection.QueryAsync<ProjectCollectionInstagramPost>(query, new { collectionId });
+        }
+
+        public async Task UpdatePermalinkAsync(Guid postId, string permalink)
+        {
+            const string query = @"UPDATE public.""ProjectCollectionInstagramPosts"" SET ""Permalink"" = @permalink WHERE ""Id"" = @postId";
+            await _dbConnection.ExecuteAsync(query, new { postId, permalink });
         }
     }
 }

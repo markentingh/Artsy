@@ -355,7 +355,7 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
         <h2 className="text-xl font-semibold">Publishing</h2>
         <Tooltip text="Connect your print-on-demand platforms to publish your collections as real products. Once connected, toggle publishing to automatically send your collection artwork to the platform for listing and sale." />
         <div className="ml-auto">
-          <ButtonOutline size="small" onClick={() => setShowConfigureModal(true)}>
+          <ButtonOutline onClick={() => setShowConfigureModal(true)}>
             <Icon name="settings" />
             <span className="ml-1">Configure</span>
           </ButtonOutline>

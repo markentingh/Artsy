@@ -13,7 +13,7 @@ export default function CreateProducts() {
   const {
     project, blueprints, blueprintItemIds, allProductImages, collectionId, api,
     STEPS, setStep,
-    handleSaveDraft, setMessage, setArtworkPreview,
+    setMessage, setArtworkPreview,
     collectionArtwork, printifyProducts, setPrintifyProducts,
     setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex,
     setProductBlueprintImages, setProductImagePrompt, loadImageModels,
@@ -370,7 +370,6 @@ export default function CreateProducts() {
       </div>
 
       <div className="buttons flex justify-end gap-2 mt-auto">
-        <ButtonOutline className="cancel" onClick={handleSaveDraft}>Save Draft</ButtonOutline>
         <Button
           onClick={allCreated ? handleNext : handleStart}
           disabled={uploading || creating || !project?.printifyStoreId}

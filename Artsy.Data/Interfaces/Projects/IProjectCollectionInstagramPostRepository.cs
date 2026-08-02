@@ -6,5 +6,6 @@ namespace Artsy.Data.Interfaces.Projects
     {
         Task<ProjectCollectionInstagramPost> CreateAsync(ProjectCollectionInstagramPost post);
         Task<IEnumerable<ProjectCollectionInstagramPost>> GetByCollectionIdAsync(Guid collectionId);
+        Task UpdatePermalinkAsync(Guid postId, string permalink);
     }
 }

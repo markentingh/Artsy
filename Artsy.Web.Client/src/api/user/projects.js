@@ -123,6 +123,8 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     updateProductBlueprintImage: (request) => api.post(`${apiPath}/update-product-blueprint-image`, request),
     deleteProductBlueprintImage: (request) => api.post(`${apiPath}/delete-product-blueprint-image`, request),
     postToSocialMedia: (request) => api.post('/api/instagram/post-to-social-media', request),
+    checkInstagramPosted: (collectionId) => api.get(`/api/instagram/collection-posted?collectionId=${collectionId}`),
+    getInstagramPost: (collectionId) => api.get(`/api/instagram/collection-post?collectionId=${collectionId}`),
     updateSocialMediaConfig: (request) => api.post(`${apiPath}/update-social-media-config`, request),
     generateSocialMediaDescription: (request) => api.post(`${apiPath}/generate-social-media-description`, request),
   };

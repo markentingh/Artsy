@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useRef, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 
@@ -14,6 +14,7 @@ export const STEPS = {
   CREATE_PRODUCTS: 'create_products',
   PUBLISH_PRODUCTS: 'publish_products',
   SOCIAL_MEDIA: 'social_media',
+  SUMMARY: 'summary',
 };
 
 export const WIZARD_STEPS = [
@@ -24,6 +25,7 @@ export const WIZARD_STEPS = [
   'Product Images',
   'Publish Products',
   'Social Media',
+  'Summary',
 ];
 
 const PLACEMENT_NAMES = [
@@ -44,12 +46,13 @@ export const STEP_INDEX = {
   product_image_preview: 4,
   publish_products: 5,
   social_media: 6,
+  summary: 7,
 };
 
 export function buildWizardSteps(hasProjectQuestions) {
   const steps = [];
   if (hasProjectQuestions) steps.push('Project Questions');
-  steps.push('Artwork Questions', 'Ready to Upscale', 'Create Products', 'Product Images', 'Publish Products', 'Social Media');
+  steps.push('Artwork Questions', 'Ready to Upscale', 'Create Products', 'Product Images', 'Publish Products', 'Social Media', 'Summary');
   return steps;
 }
 
@@ -65,6 +68,7 @@ export function buildStepIndex(hasProjectQuestions) {
     product_image_preview: 4 + offset,
     publish_products: 5 + offset,
     social_media: 6 + offset,
+    summary: 7 + offset,
   };
 }
 
@@ -73,6 +77,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const api = useMemo(() => Projects(session), [session]);
 
   const [step, setStep] = useState(STEPS.PROJECT_QUESTIONS);
+  const [maxStepIndex, setMaxStepIndex] = useState(0);
   const [projectQuestions, setProjectQuestions] = useState([]);
   const [items, setItems] = useState([]);
   const [aiItems, setAiItems] = useState([]);
@@ -121,6 +126,8 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
   const [socialMediaImageOrder, setSocialMediaImageOrder] = useState([]);
   const [socialMediaSelectedImages, setSocialMediaSelectedImages] = useState({});
+  const [instagramPosted, setInstagramPosted] = useState(false);
+  const [instagramPost, setInstagramPost] = useState(null);
 
   const blueprintItemIds = useMemo(() => {
     const ids = new Set();
@@ -306,48 +313,6 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load artwork data' });
     }
   }, [aiItems, collectionId, savedAnswers, api, ensureCollection, doGeneratePreview, fetchEstimate, projectId]);
-
-  const handleSaveDraft = useCallback(async () => {
-    if (!collectionId) {
-      try {
-        const colRes = await api.createCollection({ projectId, title: `Collection ${new Date().toISOString().split('T')[0]}` });
-        if (colRes.data.success) {
-          setCollectionId(colRes.data.data.id);
-          const res = await api.saveCollectionDraft({
-            projectId,
-            collectionId: colRes.data.data.id,
-            answers: buildAllAnswers(),
-          });
-          if (res.data.success) {
-            if (onSaved) onSaved();
-            onClose();
-          } else {
-            setMessage({ type: 'error', text: res.data.message || 'Failed to save draft' });
-          }
-        } else {
-          setMessage({ type: 'error', text: colRes.data.message || 'Failed to create collection' });
-        }
-      } catch (error) {
-        setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to create collection' });
-      }
-    } else {
-      try {
-        const res = await api.saveCollectionDraft({
-          projectId,
-          collectionId,
-          answers: buildAllAnswers(),
-        });
-        if (res.data.success) {
-          if (onSaved) onSaved();
-          onClose();
-        } else {
-          setMessage({ type: 'error', text: res.data.message || 'Failed to save draft' });
-        }
-      } catch (error) {
-        setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save draft' });
-      }
-    }
-  }, [collectionId, projectId, api, buildAllAnswers, onSaved, onClose]);
 
   const loadMockups = useCallback(async (colId) => {
     const id = colId || collectionId;
@@ -571,6 +536,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
   const reset = useCallback(() => {
     setStep(STEPS.PROJECT_QUESTIONS);
+    setMaxStepIndex(0);
     setProjectQuestions([]);
     setItems([]);
     setAiItems([]);
@@ -655,11 +621,13 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         let savedAnsMap = {};
         let artworkList = [];
 
-        const [ansRes, artRes, ppRes, mkRes] = await Promise.all([
+        const [ansRes, artRes, ppRes, mkRes, igRes, igPostRes] = await Promise.all([
           api.getCollectionAnswers(existingCollectionId),
           api.getCollectionArtwork(existingCollectionId),
           api.getPrintifyProductsByCollection(existingCollectionId),
           api.getMockups(existingCollectionId),
+          api.checkInstagramPosted(existingCollectionId),
+          api.getInstagramPost(existingCollectionId),
         ]);
 
         if (ansRes.data.success) {
@@ -689,6 +657,14 @@ export function CollectionProvider({ children, projectId, project, collectionId:
           setMockups(mkRes.data.data || []);
         }
 
+        if (igRes.data.success) {
+          setInstagramPosted(igRes.data.data?.posted || false);
+        }
+
+        if (igPostRes.data.success) {
+          setInstagramPost(igPostRes.data.data || null);
+        }
+
         const questions = qRes.data.success ? (qRes.data.data || []) : [];
         const allProjectQuestionsAnswered = questions.length === 0 || questions.every(q => savedAnsMap[`project:${q.id}`]);
         if (!allProjectQuestionsAnswered) {
@@ -709,11 +685,72 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const wizardSteps = useMemo(() => buildWizardSteps(hasProjectQuestions), [hasProjectQuestions]);
   const stepIndex = useMemo(() => buildStepIndex(hasProjectQuestions), [hasProjectQuestions]);
 
+  useEffect(() => {
+    const idx = stepIndex[step] ?? 0;
+    setMaxStepIndex(prev => Math.max(prev, idx));
+  }, [step, stepIndex]);
+
+  const reviewStep = useCallback((targetStep, substep) => {
+    if ((targetStep === STEPS.ARTWORK_QUESTIONS || targetStep === STEPS.ARTWORK_PREVIEW) && aiItems.length > 0) {
+      if (substep) {
+        const itemIndex = aiItems.findIndex(a => String(a.id) === String(substep));
+        if (itemIndex !== -1) {
+          loadItemData(itemIndex);
+          return;
+        }
+      }
+      loadItemData(0);
+      return;
+    }
+
+    if (targetStep === STEPS.PRODUCT_IMAGE_PROMPT && productBlueprintImages.length > 0) {
+      let combo;
+      if (substep) {
+        combo = substep;
+      } else {
+        const pbi = productBlueprintImages[0];
+        combo = {
+          productImageId: pbi.id,
+          projectBlueprintId: pbi.projectBlueprintId,
+          blueprintName: pbi.blueprintName,
+          title: pbi.title,
+          variantColor: pbi.variantColor,
+        };
+      }
+      const existingImg = allProductImages.find(img =>
+        img.projectBlueprintId === combo.projectBlueprintId &&
+        img.productImageId === combo.productImageId
+      );
+      if (existingImg?.prompt) {
+        setProductImagePrompt(existingImg.prompt);
+      } else {
+        setProductImagePrompt(combo.prompt || '');
+      }
+      const comboIndex = selectedProductCombos.findIndex(c =>
+        c.projectBlueprintId === combo.projectBlueprintId &&
+        c.productImageId === combo.productImageId
+      );
+      if (comboIndex !== -1) {
+        setCurrentProductComboIndex(comboIndex);
+      } else {
+        setSelectedProductCombos(prev => {
+          const next = [...prev, combo];
+          setCurrentProductComboIndex(next.length - 1);
+          return next;
+        });
+      }
+      setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+      return;
+    }
+
+    setStep(targetStep);
+  }, [aiItems, loadItemData, productBlueprintImages, allProductImages, selectedProductCombos, setProductImagePrompt, setSelectedProductCombos, setCurrentProductComboIndex, setStep, STEPS]);
+
   const value = {
     // props
     projectId, project, collectionTitle, onClose, onSaved, api,
     // step
-    step, setStep, STEPS, wizardSteps, stepIndex,
+    step, setStep, STEPS, wizardSteps, stepIndex, maxStepIndex,
     // data
     projectQuestions, items, aiItems, setAiItems, blueprints, blueprintItemIds,
     currentItemIndex, setCurrentItemIndex, currentItem,
@@ -742,7 +779,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     // helpers
     ensureCollection, buildProjectAnswers, buildAllAnswers, saveAnswers,
     fetchEstimate, doGeneratePreview, loadItemData, advanceToNextItem,
-    handleSaveDraft, doGenerateAll,
+    doGenerateAll, reviewStep,
     // product image
     productImageVariants, productImagePrompt, setProductImagePrompt,
     selectedProductCombos, setSelectedProductCombos,
@@ -758,6 +795,8 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     mockups, setMockups, loadMockups,
     socialMediaImageOrder, setSocialMediaImageOrder,
     socialMediaSelectedImages, setSocialMediaSelectedImages,
+    instagramPosted, setInstagramPosted,
+    instagramPost, setInstagramPost,
     reset, loadData,
   };
 

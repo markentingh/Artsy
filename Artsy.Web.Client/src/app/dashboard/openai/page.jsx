@@ -318,17 +318,19 @@ export default function AdminOpenAI() {
                                 <td className="px-4 py-3">{model.model}</td>
                                 <td className="px-4 py-3 truncate max-w-xs">{model.endpoint}</td>
                                 <td className="px-4 py-3">{model.type === 0 ? 'Local' : 'Cloud'}</td>
-                                <td className="px-4 py-3 space-x-2" onClick={(e) => e.stopPropagation()}>
-                                    <button
-                                        type="button"
-                                        className={'icon ' + (model.preferred ? 'text-amber-400' : '')}
-                                        onClick={() => handleTogglePreferred(model)}
-                                        title={model.preferred ? 'Preferred' : 'Set as preferred'}
-                                    >
-                                        <Icon name={model.preferred ? 'star_shine' : 'star'} />
-                                    </button>
-                                    <ButtonIcon name="edit" onClick={() => handleEdit(model)} title="Edit model" />
-                                    <ButtonIcon name="delete" color="red" onClick={() => handleDelete(model)} title="Delete model" />
+                                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            className={'icon ' + (model.preferred ? 'text-amber-400' : '')}
+                                            onClick={() => handleTogglePreferred(model)}
+                                            title={model.preferred ? 'Preferred' : 'Set as preferred'}
+                                        >
+                                            <Icon name={model.preferred ? 'star_shine' : 'star'} />
+                                        </button>
+                                        <ButtonIcon name="edit" onClick={() => handleEdit(model)} title="Edit model" />
+                                        <ButtonIcon name="delete" color="red" onClick={() => handleDelete(model)} title="Delete model" />
+                                    </div>
                                 </td>
                             </tr>
                         ))}

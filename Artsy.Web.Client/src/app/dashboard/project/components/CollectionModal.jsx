@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { CollectionProvider, useCollection, STEPS } from '@/context/collection';
 import Modal from '@/components/ui/modal';
 import Spinner from '@/components/ui/spinner';
@@ -11,6 +11,7 @@ import ArtworkQuestions from './collection-steps/ArtworkQuestions';
 import ArtworkPreview from './collection-steps/ArtworkPreview';
 import ReadyToGenerate from './collection-steps/ReadyToGenerate';
 import PostSocialMedia from './collection-steps/PostSocialMedia';
+import SummaryStep from './collection-steps/SummaryStep';
 import CreateProducts from './collection-steps/CreateProducts';
 import PublishProductsStep from './collection-steps/PublishProductsStep';
 import ProductImagePrompt from './collection-steps/ProductImagePrompt';
@@ -29,6 +30,7 @@ const stepTitle = (step, title) => {
     case STEPS.CREATE_PRODUCTS: return `${prefix} - Create Products`;
     case STEPS.PUBLISH_PRODUCTS: return `${prefix} - Publish Products`;
     case STEPS.SOCIAL_MEDIA: return `${prefix} - Social Media`;
+    case STEPS.SUMMARY: return `${prefix} - Summary`;
     default: return prefix;
   }
 };
@@ -37,11 +39,41 @@ function CollectionWizard() {
   const {
     step, message, setMessage,
     initialLoading, artworkPreview, setArtworkPreview,
-    onClose, STEPS, wizardSteps, stepIndex,
-    collectionTitle,
+    onClose, STEPS, wizardSteps, stepIndex, maxStepIndex,
+    collectionTitle, setStep, reviewStep,
   } = useCollection();
 
   const [showChecklist, setShowChecklist] = useState(false);
+
+  const stepFromIndex = useMemo(() => {
+    const map = {};
+    const order = [
+      STEPS.PROJECT_QUESTIONS,
+      STEPS.ARTWORK_QUESTIONS,
+      STEPS.ARTWORK_PREVIEW,
+      STEPS.READY_TO_GENERATE,
+      STEPS.CREATE_PRODUCTS,
+      STEPS.PRODUCT_IMAGE_PROMPT,
+      STEPS.PRODUCT_IMAGE_PREVIEW,
+      STEPS.PUBLISH_PRODUCTS,
+      STEPS.SOCIAL_MEDIA,
+      STEPS.SUMMARY,
+    ];
+    for (const s of order) {
+      const idx = stepIndex[s];
+      if (idx !== undefined && map[idx] === undefined) {
+        map[idx] = s;
+      }
+    }
+    return map;
+  }, [stepIndex, STEPS]);
+
+  const handleStepClick = (index) => {
+    const targetStep = stepFromIndex[index];
+    if (!targetStep) return;
+    reviewStep(targetStep);
+    setShowChecklist(true);
+  };
 
   return (
     <Modal
@@ -62,7 +94,7 @@ function CollectionWizard() {
         </div>
       ) : (
         <>
-          <Steps steps={wizardSteps} currentIndex={stepIndex[step] ?? 0} />
+          <Steps steps={wizardSteps} currentIndex={stepIndex[step] ?? 0} maxIndex={maxStepIndex} onStepClick={handleStepClick} />
           <div className="flex items-center gap-2 mb-4">
             <hr className="flex-1 border-gray-200 dark:border-gray-700" />
             <button
@@ -94,6 +126,7 @@ function CollectionWizard() {
               {step === STEPS.CREATE_PRODUCTS && <CreateProducts />}
               {step === STEPS.PUBLISH_PRODUCTS && <PublishProductsStep />}
               {step === STEPS.SOCIAL_MEDIA && <PostSocialMedia />}
+              {step === STEPS.SUMMARY && <SummaryStep />}
             </div>
           </div>
         </>
@@ -122,6 +155,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
     api, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex,
     blueprints, setProductBlueprintImages, setProductImagePrompt,
     printifyImageIndexByColor, printifyProducts,
+    instagramPosted, setInstagramPost,
   } = useCollection();
 
   const [aiItemsLoaded, setAiItemsLoaded] = useState(false);
@@ -227,7 +261,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
 
                       if (allProductsCreated) {
                         const allPublished = printifyProducts.length > 0 && printifyProducts.every(pp => pp.published);
-                        setStep(allPublished ? STEPS.SOCIAL_MEDIA : STEPS.PUBLISH_PRODUCTS);
+                        setStep(allPublished ? (instagramPosted ? STEPS.SUMMARY : STEPS.SOCIAL_MEDIA) : STEPS.PUBLISH_PRODUCTS);
                       } else {
                         setStep(STEPS.CREATE_PRODUCTS);
                       }
@@ -248,7 +282,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
 
                       if (allProductsCreated) {
                         const allPublished = printifyProducts.length > 0 && printifyProducts.every(pp => pp.published);
-                        setStep(allPublished ? STEPS.SOCIAL_MEDIA : STEPS.PUBLISH_PRODUCTS);
+                        setStep(allPublished ? (instagramPosted ? STEPS.SUMMARY : STEPS.SOCIAL_MEDIA) : STEPS.PUBLISH_PRODUCTS);
                       } else {
                         setStep(STEPS.CREATE_PRODUCTS);
                       }

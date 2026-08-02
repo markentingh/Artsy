@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionInstagramPosts"
     "InstagramAccountId" UUID NOT NULL REFERENCES public."AppUserInstagramAccounts"("Id"),
     "Description" TEXT NOT NULL DEFAULT '',
     "ContainerId" VARCHAR(64) NOT NULL DEFAULT '',
+    "Permalink" VARCHAR(512) NULL,
     "Status" INT NOT NULL DEFAULT 1,
     "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

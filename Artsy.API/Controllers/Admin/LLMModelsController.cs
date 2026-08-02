@@ -65,6 +65,11 @@ namespace Artsy.API.Controllers.Admin
                     Artsy.AI.OpenAI.AddModel(MapToAIModel(model, id));
                 }
 
+                if (model.Preferred)
+                {
+                    Artsy.AI.OpenAI.PreferredModel = id;
+                }
+
                 return Json(new ApiResponse { success = true, data = new { id } });
             }
             catch (Exception ex)
@@ -105,6 +110,11 @@ namespace Artsy.API.Controllers.Admin
                     Artsy.AI.OpenAI.RemoveModel(model.ModelId);
                 }
 
+                if (model.Preferred)
+                {
+                    Artsy.AI.OpenAI.PreferredModel = model.ModelId;
+                }
+
                 return Json(new ApiResponse { success = true });
             }
             catch (Exception ex)
@@ -126,6 +136,10 @@ namespace Artsy.API.Controllers.Admin
                     if (dbModel.Enabled)
                     {
                         Artsy.AI.OpenAI.UpdateModel(MapToAIModel(dbModel));
+                        if (dbModel.Preferred)
+                        {
+                            Artsy.AI.OpenAI.PreferredModel = model.Id;
+                        }
                     }
                     else
                     {
@@ -153,6 +167,10 @@ namespace Artsy.API.Controllers.Admin
 
                 if (dbModel.Enabled)
                 {
+                    if (!Artsy.AI.OpenAI.Available.ContainsKey(model.Id))
+                    {
+                        Artsy.AI.OpenAI.AddModel(MapToAIModel(dbModel));
+                    }
                     Artsy.AI.OpenAI.PreferredModel = model.Id;
                 }
 

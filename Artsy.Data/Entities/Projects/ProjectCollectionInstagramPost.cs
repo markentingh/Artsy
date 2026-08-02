@@ -8,6 +8,7 @@ namespace Artsy.Data.Entities.Projects
         public Guid InstagramAccountId { get; set; }
         public string Description { get; set; } = "";
         public string ContainerId { get; set; } = "";
+        public string? Permalink { get; set; }
         public int Status { get; set; } = 1;
         public DateTime Created { get; set; }
     }

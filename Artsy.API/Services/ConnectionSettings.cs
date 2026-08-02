@@ -11,6 +11,7 @@ namespace Artsy.API.Services
         public static string InstagramAppId { get; private set; } = "";
         public static string InstagramAppSecret { get; private set; } = "";
         public static string InstagramRedirectUri { get; private set; } = "";
+        public static string MetaImagesDomain { get; private set; } = "";
         public static string FacebookLoginAppId { get; private set; } = "";
         public static string FacebookLoginAppSecret { get; private set; } = "";
         public static string FacebookLoginRedirectUri { get; private set; } = "";
@@ -30,6 +31,7 @@ namespace Artsy.API.Services
             InstagramAppId = configuration["Meta:Instagram:AppId"] ?? "";
             InstagramAppSecret = configuration["Meta:Instagram:AppSecret"] ?? "";
             InstagramRedirectUri = configuration["Meta:Instagram:RedirectUri"] ?? "";
+            MetaImagesDomain = configuration["Meta:Images:Domain"] ?? "";
             FacebookLoginAppId = configuration["Meta:FacebookLogin:AppId"] ?? "";
             FacebookLoginAppSecret = configuration["Meta:FacebookLogin:AppSecret"] ?? "";
             FacebookLoginRedirectUri = configuration["Meta:FacebookLogin:RedirectUri"] ?? "";
