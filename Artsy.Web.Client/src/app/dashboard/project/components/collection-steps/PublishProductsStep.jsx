@@ -133,7 +133,7 @@ export default function PublishProductsStep() {
       .map(img => img.imageUrl);
     const artworkImgs = (collectionArtwork || [])
       .filter(a => a.accepted && a.active)
-      .map(a => api.getCollectionArtworkImageUrl(collectionId, a.itemId, a.id, true));
+      .map(a => api.getCollectionArtworkThumbUrl(collectionId, a.itemId, a.id));
     return [...productImgs, ...artworkImgs];
   }, [allProductImages, collectionArtwork, collectionId, api]);
 

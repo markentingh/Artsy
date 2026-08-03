@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
+import { Instagram } from '@/api/user/instagram';
 import { Connections } from '@/api/user/connections';
 import Icon from '@/components/ui/icon';
 import Checked from '@/components/ui/checked';
@@ -18,7 +19,8 @@ const platforms = [
 
 export default function PublishingSection({ projectId, project, onProjectUpdated }) {
   const session = useSession();
-  const { updatePublishToPrintify, updateInstagramId, updatePostToInstagram, getInstagramAccounts } = Projects(session);
+  const { updatePublishToPrintify, updateInstagramId, updatePostToInstagram } = Projects(session);
+  const { getAccounts: getInstagramAccounts } = Instagram(session);
   const { getPrintifyStatus, connectPrintify, connectInstagram, exchangeInstagram } = Connections(session);
 
   const [connectionStatus, setConnectionStatus] = useState({});

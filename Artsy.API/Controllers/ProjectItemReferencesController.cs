@@ -73,17 +73,23 @@ namespace Artsy.API.Controllers
                 await file.CopyToAsync(ms);
                 var imageData = ms.ToArray();
 
+                var customImage = new CustomImage
+                {
+                    AppUserId = userId,
+                    FileName = file.FileName,
+                    Extension = extension
+                };
+                var createdImage = await _customImageRepository.CreateAsync(customImage);
+                await _imageService.SaveCustomImageAsync(userId, createdImage.Id, extension, imageData);
+
                 var reference = new ProjectItemReference
                 {
                     ItemId = itemId,
                     ProjectId = item.ProjectId,
-                    FileName = file.FileName,
-                    Extension = extension,
+                    CustomImageId = createdImage.Id,
                     Created = DateTime.UtcNow
                 };
                 var created = await _projectItemReferenceRepository.CreateAsync(reference);
-
-                await _imageService.SaveProjectItemReferenceAsync(item.ProjectId, created.Id, extension, imageData);
 
                 return Json(new ApiResponse { success = true, data = created });
             }
@@ -113,7 +119,6 @@ namespace Artsy.API.Controllers
                 if (project == null)
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
-                await _imageService.DeleteProjectItemReferenceAsync(reference.ProjectId, reference.Id, reference.Extension);
                 await _projectItemReferenceRepository.DeleteAsync(request.Id);
 
                 return Json(new ApiResponse { success = true });
@@ -155,16 +160,18 @@ namespace Artsy.API.Controllers
                         bytes = await _imageService.GetProjectItemPreviewAsync(reference.ProjectId, reference.ArtworkId.Value, newestPreview.Id, thumb);
                     }
                 }
-                else
+                else if (reference.CustomImageId.HasValue)
                 {
-                    bytes = await _imageService.GetProjectItemReferenceAsync(reference.ProjectId, reference.Id, reference.Extension, thumb);
+                    var customImage = await _customImageRepository.GetByIdAsync(reference.CustomImageId.Value);
+                    if (customImage == null)
+                        return NotFound();
+                    bytes = await _imageService.GetCustomImageAsync(customImage.AppUserId, customImage.Id, customImage.Extension, thumb);
                 }
 
                 if (bytes == null || bytes.Length == 0)
                     return NotFound();
 
-                var contentType = reference.Extension == ".png" ? "image/png" : "image/jpeg";
-                return File(bytes, contentType);
+                return File(bytes, "image/jpeg");
             }
             catch (Exception ex)
             {
@@ -206,9 +213,51 @@ namespace Artsy.API.Controllers
                 {
                     ItemId = request.ItemId,
                     ProjectId = item.ProjectId,
-                    FileName = artworkItem.Title ?? "",
-                    Extension = ".jpg",
                     ArtworkId = request.ArtworkId,
+                    Created = DateTime.UtcNow
+                };
+                var created = await _projectItemReferenceRepository.CreateAsync(reference);
+
+                return Json(new ApiResponse { success = true, data = created });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("add-custom-image-reference")]
+        public async Task<IActionResult> AddCustomImageReference([FromBody] AddCustomImageReferenceRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.ItemId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Item ID is required." });
+
+            if (request.CustomImageId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Custom image ID is required." });
+
+            try
+            {
+                var item = await _projectItemRepository.GetByIdAsync(request.ItemId);
+                if (item == null)
+                    return Json(new ApiResponse { success = false, message = "Item not found." });
+
+                var project = await _projectRepository.GetByIdAsync(item.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                var customImage = await _customImageRepository.GetByIdAsync(request.CustomImageId);
+                if (customImage == null || customImage.AppUserId != userId)
+                    return Json(new ApiResponse { success = false, message = "Custom image not found." });
+
+                var reference = new ProjectItemReference
+                {
+                    ItemId = request.ItemId,
+                    ProjectId = item.ProjectId,
+                    CustomImageId = request.CustomImageId,
                     Created = DateTime.UtcNow
                 };
                 var created = await _projectItemReferenceRepository.CreateAsync(reference);
@@ -231,5 +280,11 @@ namespace Artsy.API.Controllers
     {
         public Guid ItemId { get; set; }
         public Guid ArtworkId { get; set; }
+    }
+
+    public class AddCustomImageReferenceRequest
+    {
+        public Guid ItemId { get; set; }
+        public Guid CustomImageId { get; set; }
     }
 }

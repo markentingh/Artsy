@@ -36,6 +36,16 @@ export default function SummaryStep() {
       .map(img => img.imageUrl);
     const artworkImgs = (collectionArtwork || [])
       .filter(a => a.accepted && a.active)
+      .map(a => api.getCollectionArtworkThumbUrl(collectionId, a.itemId, a.id));
+    return [...productImgs, ...artworkImgs];
+  }, [allProductImages, collectionArtwork, collectionId, api]);
+
+  const fullSizeImages = useMemo(() => {
+    const productImgs = (allProductImages || [])
+      .filter(img => img.accepted && img.active)
+      .map(img => (img.imageUrl || '').replace('?thumb=true', ''));
+    const artworkImgs = (collectionArtwork || [])
+      .filter(a => a.accepted && a.active)
       .map(a => api.getCollectionArtworkImageUrl(collectionId, a.itemId, a.id, true));
     return [...productImgs, ...artworkImgs];
   }, [allProductImages, collectionArtwork, collectionId, api]);
@@ -79,8 +89,8 @@ export default function SummaryStep() {
   }, [collectionId, printifyProducts, printifyApi, setMessage]);
 
   const handleImageClick = useCallback((src, index) => {
-    setArtworkPreview({ images: allImages, src, _idx: index });
-  }, [allImages, setArtworkPreview]);
+    setArtworkPreview({ images: fullSizeImages, src: fullSizeImages[index], _idx: index });
+  }, [fullSizeImages, setArtworkPreview]);
 
   return (
     <div className="flex flex-col h-full" style={{ maxWidth: '900px' }}>

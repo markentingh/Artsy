@@ -26,12 +26,19 @@ namespace Artsy.API.Services
         Task<byte[]> GetProjectCollectionArtworkFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
         Task SaveProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId, byte[] imageData);
         Task<byte[]> GetProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId);
+        Task<byte[]> GetProjectCollectionProductImageThumbAsync(Guid projectId, Guid collectionId, Guid productImageId);
+        Task<bool> GenerateProjectCollectionProductImageThumbAsync(Guid projectId, Guid collectionId, Guid productImageId);
         Task SaveProjectCollectionMockupAsync(Guid projectId, Guid collectionId, Guid mockupId, byte[] imageData);
         Task<byte[]> GetProjectCollectionMockupAsync(Guid projectId, Guid collectionId, Guid mockupId);
+        Task<byte[]> GetProjectCollectionMockupThumbAsync(Guid projectId, Guid collectionId, Guid mockupId);
+        Task<bool> GenerateProjectCollectionMockupThumbAsync(Guid projectId, Guid collectionId, Guid mockupId);
         Task<byte[]> GetImageGenerationAsync(Guid projectId, Guid? itemId, Guid? collectionId, Guid? blueprintId, string filename);
         Task<(int width, int height)?> GetImageDimensionsAsync(byte[] imageBytes);
         Task<byte[]> ResizeImageAsync(byte[] imageData, int maxWidth);
         Task<byte[]> ResizeAndCropForInstagramAsync(byte[] imageData);
+        Task SaveCustomImageAsync(Guid appUserId, Guid imageId, string extension, byte[] imageData);
+        Task<byte[]> GetCustomImageAsync(Guid appUserId, Guid imageId, string extension, bool thumb = false);
+        Task DeleteCustomImageAsync(Guid appUserId, Guid imageId, string extension);
     }
 
     public class ImageService : IImageService
@@ -443,6 +450,47 @@ namespace Artsy.API.Services
             return await GetFromFileSystemAsync(relativePath);
         }
 
+        public async Task<byte[]> GetProjectCollectionProductImageThumbAsync(Guid projectId, Guid collectionId, Guid productImageId)
+        {
+            var thumbFileName = $"{productImageId}_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "product-images", thumbFileName);
+
+            byte[] thumbBytes;
+            if (_activeStorage == "azure")
+                thumbBytes = await GetFromAzureBlobAsync(thumbRelativePath);
+            else
+                thumbBytes = await GetFromFileSystemAsync(thumbRelativePath);
+
+            if (thumbBytes != null && thumbBytes.Length > 0)
+                return thumbBytes;
+
+            await GenerateProjectCollectionProductImageThumbAsync(projectId, collectionId, productImageId);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(thumbRelativePath);
+            return await GetFromFileSystemAsync(thumbRelativePath);
+        }
+
+        public async Task<bool> GenerateProjectCollectionProductImageThumbAsync(Guid projectId, Guid collectionId, Guid productImageId)
+        {
+            var imageData = await GetProjectCollectionProductImageAsync(projectId, collectionId, productImageId);
+            if (imageData == null || imageData.Length == 0)
+                return false;
+
+            var thumbFileName = $"{productImageId}_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "product-images", thumbFileName);
+            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return true;
+            }
+
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+            return true;
+        }
+
         public async Task SaveProjectCollectionMockupAsync(Guid projectId, Guid collectionId, Guid mockupId, byte[] imageData)
         {
             var fileName = $"{mockupId}.jpg";
@@ -466,6 +514,47 @@ namespace Artsy.API.Services
                 return await GetFromAzureBlobAsync(relativePath);
 
             return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task<byte[]> GetProjectCollectionMockupThumbAsync(Guid projectId, Guid collectionId, Guid mockupId)
+        {
+            var thumbFileName = $"{mockupId}_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "mockups", thumbFileName);
+
+            byte[] thumbBytes;
+            if (_activeStorage == "azure")
+                thumbBytes = await GetFromAzureBlobAsync(thumbRelativePath);
+            else
+                thumbBytes = await GetFromFileSystemAsync(thumbRelativePath);
+
+            if (thumbBytes != null && thumbBytes.Length > 0)
+                return thumbBytes;
+
+            await GenerateProjectCollectionMockupThumbAsync(projectId, collectionId, mockupId);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(thumbRelativePath);
+            return await GetFromFileSystemAsync(thumbRelativePath);
+        }
+
+        public async Task<bool> GenerateProjectCollectionMockupThumbAsync(Guid projectId, Guid collectionId, Guid mockupId)
+        {
+            var imageData = await GetProjectCollectionMockupAsync(projectId, collectionId, mockupId);
+            if (imageData == null || imageData.Length == 0)
+                return false;
+
+            var thumbFileName = $"{mockupId}_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "mockups", thumbFileName);
+            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return true;
+            }
+
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+            return true;
         }
 
         public async Task<byte[]> GetImageGenerationAsync(Guid projectId, Guid? itemId, Guid? collectionId, Guid? blueprintId, string filename)
@@ -568,6 +657,71 @@ namespace Artsy.API.Services
             {
                 return imageData;
             }
+        }
+
+        public async Task SaveCustomImageAsync(Guid appUserId, Guid imageId, string extension, byte[] imageData)
+        {
+            var fileName = $"{imageId}{extension}";
+            var relativePath = Path.Combine("custom-images", appUserId.ToString(), fileName);
+            var thumbFileName = $"{imageId}_thumb.jpg";
+            var thumbRelativePath = Path.Combine("custom-images", appUserId.ToString(), thumbFileName);
+            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+        }
+
+        public async Task<byte[]> GetCustomImageAsync(Guid appUserId, Guid imageId, string extension, bool thumb = false)
+        {
+            if (thumb)
+            {
+                var thumbFileName = $"{imageId}_thumb.jpg";
+                var thumbRelativePath = Path.Combine("custom-images", appUserId.ToString(), thumbFileName);
+
+                if (_activeStorage == "azure")
+                {
+                    var thumbBytes = await GetFromAzureBlobAsync(thumbRelativePath);
+                    if (thumbBytes.Length > 0) return thumbBytes;
+                }
+                else
+                {
+                    var thumbBytes = await GetFromFileSystemAsync(thumbRelativePath);
+                    if (thumbBytes.Length > 0) return thumbBytes;
+                }
+            }
+
+            var fileName = $"{imageId}{extension}";
+            var relativePath = Path.Combine("custom-images", appUserId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task DeleteCustomImageAsync(Guid appUserId, Guid imageId, string extension)
+        {
+            var fileName = $"{imageId}{extension}";
+            var relativePath = Path.Combine("custom-images", appUserId.ToString(), fileName);
+            var thumbFileName = $"{imageId}_thumb.jpg";
+            var thumbRelativePath = Path.Combine("custom-images", appUserId.ToString(), thumbFileName);
+
+            if (_activeStorage == "azure")
+            {
+                await DeleteFromAzureBlobAsync(relativePath);
+                await DeleteFromAzureBlobAsync(thumbRelativePath);
+                return;
+            }
+
+            await DeleteFromFileSystemAsync(relativePath);
+            await DeleteFromFileSystemAsync(thumbRelativePath);
         }
     }
 }

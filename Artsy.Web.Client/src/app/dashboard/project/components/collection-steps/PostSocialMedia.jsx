@@ -45,7 +45,7 @@ export default function PostSocialMedia() {
         type: 'artwork',
         artworkId: a.id,
         itemId: a.itemId,
-        url: api.getCollectionArtworkImageUrl(collectionId, a.itemId, a.id, true),
+        url: api.getCollectionArtworkThumbUrl(collectionId, a.itemId, a.id),
         label: 'Artwork',
       }));
 

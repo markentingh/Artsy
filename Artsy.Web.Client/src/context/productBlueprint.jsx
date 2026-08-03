@@ -3,6 +3,7 @@ import { useSession } from '@/context/session';
 import { Printify } from '@/api/admin/printify';
 import { Printify as PrintifyPublic } from '@/api/user/printify';
 import { Projects } from '@/api/user/projects';
+import { CustomImages } from '@/api/user/customImages';
 
 const ProductBlueprintContext = createContext(null);
 
@@ -25,6 +26,7 @@ export function ProductBlueprintProvider({
     createBlueprint, updateBlueprint, updateBlueprintVariants, updateBlueprintPricing,
     updateBlueprintDetails, updateBlueprintPlacement, updateProductBlueprintImage,
   } = Projects(session);
+  const { getCustomImageUrl } = CustomImages(session);
 
   const [detail, setDetail] = useState(null);
   const [printProviders, setPrintProviders] = useState([]);
@@ -250,7 +252,7 @@ export function ProductBlueprintProvider({
         .filter(img => (img.variantColors || []).includes(group.color))
         .map(img => img.imageIndex);
       const uniqueIndices = [...new Set(indices)];
-      const urls = uniqueIndices.map(i => getBlueprintImageUrl(blueprint.id, i));
+      const urls = uniqueIndices.map(i => getBlueprintImageUrl(blueprint.id, i, true));
       map.set(group.color, urls);
     }
     return map;
@@ -339,7 +341,7 @@ export function ProductBlueprintProvider({
         const availableDims = methodData?.dimensions || [];
         const dims = existing?.dimensions || (availableDims.length > 0 ? availableDims[0] : '');
         if (!existing) {
-          next.push({ position: ph.position, decorationMethod: dm, dimensions: dims, source: '', itemId: null, customImageId: null, customItemId: null, cropX: 'center', cropY: 'center' });
+          next.push({ position: ph.position, decorationMethod: dm, dimensions: dims, source: '', itemId: null, customImageId: null, cropX: 'center', cropY: 'center' });
           changed = true;
         } else if (existing.decorationMethod !== dm || existing.dimensions !== dims) {
           Object.assign(existing, { decorationMethod: dm, dimensions: dims });
@@ -489,14 +491,14 @@ export function ProductBlueprintProvider({
   const getPlacementCarouselImages = (position) => {
     const settings = placementSettings.find(p => p.position === position);
     if (!settings) return [];
-    if (settings.source === 'custom' && settings.customImageId && settings.customItemId) {
-      return [getItemReferenceUrl(settings.customItemId, settings.customImageId, true)];
+    if (settings.source === 'custom' && settings.customImageId) {
+      return [getCustomImageUrl(settings.customImageId, true)];
     }
     if (settings.source === 'item' && settings.itemId) {
       const itemId = settings.itemId;
       const artwork = itemArtworkMap[itemId];
       if (artwork && artwork.artworkType === 'custom' && artwork.customImageId) {
-        return [getItemReferenceUrl(itemId, artwork.customImageId, true)];
+        return [getCustomImageUrl(artwork.customImageId, true)];
       }
       const previews = itemPreviews[itemId] || [];
       return previews.map((p) => getItemPreviewUrl(itemId, p.id, true));

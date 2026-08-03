@@ -96,7 +96,7 @@ export default function ProductImagePreview() {
     doGenerateProductImage(selectedProductCombos[currentProductComboIndex], productImageChanges);
   }, [productImageChanges, selectedProductCombos, currentProductComboIndex, doGenerateProductImage, setShowProductImageChanges]);
 
-  const imageUrl = currentProductImage?.imageUrl || null;
+  const imageUrl = currentProductImage?.imageUrl?.replace('?thumb=true', '') || null;
 
   return (
     <div className="flex flex-col h-full">

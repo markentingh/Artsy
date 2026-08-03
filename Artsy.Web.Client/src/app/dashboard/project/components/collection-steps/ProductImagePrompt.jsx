@@ -77,13 +77,14 @@ export default function ProductImagePrompt() {
   }, [combo, allProductImages, collectionId]);
 
   const allImages = useMemo(() => {
-    const productImg = existingProductImage ? [existingProductImage] : [];
+    const productImg = existingProductImage ? [`${existingProductImage}?thumb=true`] : [];
     return [...productImg, ...mockupImages, ...artworkImages.map(a => a.thumbUrl)];
   }, [existingProductImage, mockupImages, artworkImages]);
 
   const fullSizeImages = useMemo(() => {
     const productImg = existingProductImage ? [existingProductImage] : [];
-    return [...productImg, ...mockupImages, ...artworkImages.map(a => a.url)];
+    const mockupFull = mockupImages.map(url => url.replace('&thumb=true', ''));
+    return [...productImg, ...mockupFull, ...artworkImages.map(a => a.url)];
   }, [existingProductImage, mockupImages, artworkImages]);
 
   const handleImageError = useCallback(async (index) => {

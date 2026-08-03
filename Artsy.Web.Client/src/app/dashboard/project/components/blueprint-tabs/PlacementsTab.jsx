@@ -190,7 +190,7 @@ export default function PlacementsTab() {
               />
               {settings.source === 'custom' && (
                 <ButtonOutline
-                  onClick={() => setCustomImageSelectorTarget({ position: ph.position, itemId: projectItems[0]?.id })}
+                  onClick={() => setCustomImageSelectorTarget({ position: ph.position })}
                   className="mb-0 mt-2 w-full"
                 >
                   <Icon name="image" className="mr-2" />

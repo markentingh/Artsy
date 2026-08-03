@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
+import { Instagram } from '@/api/user/instagram';
+import { PrintifyProducts } from '@/api/user/printifyProducts';
+import { ImageGeneration } from '@/api/user/imageGeneration';
 
 const CollectionContext = createContext(null);
 
@@ -75,6 +78,9 @@ export function buildStepIndex(hasProjectQuestions) {
 export function CollectionProvider({ children, projectId, project, collectionId: initialCollectionId, collectionTitle, onClose, onSaved }) {
   const session = useSession();
   const api = useMemo(() => Projects(session), [session]);
+  const instagramApi = useMemo(() => Instagram(session), [session]);
+  const printifyProductsApi = useMemo(() => PrintifyProducts(session), [session]);
+  const imageGenerationApi = useMemo(() => ImageGeneration(session), [session]);
 
   const [step, setStep] = useState(STEPS.PROJECT_QUESTIONS);
   const [maxStepIndex, setMaxStepIndex] = useState(0);
@@ -318,7 +324,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     const id = colId || collectionId;
     if (!id) return [];
     try {
-      const res = await api.getMockups(id);
+      const res = await printifyProductsApi.getMockups(id);
       if (res.data.success) {
         const data = res.data.data || [];
         setMockups(data);
@@ -360,7 +366,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
   const loadImageModels = useCallback(async () => {
     try {
-      const res = await api.getActiveImageModels();
+      const res = await imageGenerationApi.getActiveModels();
       if (res.data.success) {
         const models = res.data.data || [];
         setImageModels(models);
@@ -416,7 +422,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
                 if (missing.length === 0) {
                   try {
-                    await api.ensurePrintifyProducts({ collectionId: colId });
+                    await printifyProductsApi.ensureProducts({ collectionId: colId });
                   } catch (e) { /* non-critical */ }
                   setStep(STEPS.CREATE_PRODUCTS);
                   return;
@@ -624,10 +630,10 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         const [ansRes, artRes, ppRes, mkRes, igRes, igPostRes] = await Promise.all([
           api.getCollectionAnswers(existingCollectionId),
           api.getCollectionArtwork(existingCollectionId),
-          api.getPrintifyProductsByCollection(existingCollectionId),
-          api.getMockups(existingCollectionId),
-          api.checkInstagramPosted(existingCollectionId),
-          api.getInstagramPost(existingCollectionId),
+          printifyProductsApi.getByCollection(existingCollectionId),
+          printifyProductsApi.getMockups(existingCollectionId),
+          instagramApi.checkPosted(existingCollectionId),
+          instagramApi.getPost(existingCollectionId),
         ]);
 
         if (ansRes.data.success) {

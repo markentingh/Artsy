@@ -43,6 +43,7 @@ namespace Artsy.API.Controllers
         readonly IProjectCollectionPrintifyProductRepository _printifyProductRepository;
         readonly IProjectCollectionPrintifyProductMockupRepository _mockupRepository;
         readonly IProjectCollectionProductRepository _productRepository;
+        readonly ICustomImageRepository _customImageRepository;
 
         public ProjectsController(
             IProjectRepository projectRepository,
@@ -72,7 +73,8 @@ namespace Artsy.API.Controllers
             IProjectBlueprintProductImageRepository projectBlueprintProductImageRepository,
             IProjectCollectionPrintifyProductRepository printifyProductRepository,
             IProjectCollectionPrintifyProductMockupRepository mockupRepository,
-            IProjectCollectionProductRepository productRepository)
+            IProjectCollectionProductRepository productRepository,
+            ICustomImageRepository customImageRepository)
         {
             _projectRepository = projectRepository;
             _projectCollectionRepository = projectCollectionRepository;
@@ -102,6 +104,7 @@ namespace Artsy.API.Controllers
             _printifyProductRepository = printifyProductRepository;
             _mockupRepository = mockupRepository;
             _productRepository = productRepository;
+            _customImageRepository = customImageRepository;
         }
 
         [HttpGet("get-by-id")]
@@ -155,7 +158,7 @@ namespace Artsy.API.Controllers
                     foreach (var pi in productImagesByProject[p.Id])
                     {
                         if (images.Count >= 5) break;
-                        images.Add($"/api/projects/collection/{pi.CollectionId}/product-image/{pi.Id}");
+                        images.Add($"/api/projects/collection/{pi.CollectionId}/product-image/{pi.Id}?thumb=true");
                     }
 
                     if (images.Count < 5)
@@ -167,7 +170,7 @@ namespace Artsy.API.Controllers
                         foreach (var a in aiArtworks)
                         {
                             if (images.Count >= 5) break;
-                            images.Add($"/api/projects/collection/{a.CollectionId}/item/{a.ItemId}/artwork/{a.Id}");
+                            images.Add($"/api/projects/collection/{a.CollectionId}/item/{a.ItemId}/artwork/{a.Id}?thumb=true");
                         }
 
                         if (images.Count < 5)
@@ -177,7 +180,7 @@ namespace Artsy.API.Controllers
                                 if (images.Count >= 5) break;
                                 if (seenItemIds.Contains(a.ItemId)) continue;
                                 seenItemIds.Add(a.ItemId);
-                                images.Add($"/api/projects/collection/{a.CollectionId}/item/{a.ItemId}/artwork/{a.Id}");
+                                images.Add($"/api/projects/collection/{a.CollectionId}/item/{a.ItemId}/artwork/{a.Id}?thumb=true");
                             }
                         }
                     }

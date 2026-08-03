@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
+import { CustomImages } from '@/api/user/customImages';
 import { ImageGeneration } from '@/api/user/imageGeneration';
 import Modal from '@/components/ui/modal';
 import Tabs from '@/components/ui/tabs';
@@ -26,9 +27,10 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     getItemArtwork, updateItemPrompt, updateItemImageModel, updateItemArtworkType,
     getQuestions, getItemQuestions, createItemQuestion, updateItemQuestion, deleteItemQuestion,
     getItemPreviews, generateItemPreview, deleteItemPreview, getItemPreviewUrl,
-    getItemReferences, uploadItemReference, deleteItemReference, addArtworkReference, getItemReferenceUrl,
+    getItemReferences, uploadItemReference, deleteItemReference, addArtworkReference, addCustomImageReference, getItemReferenceUrl,
     estimateItemTokens, updateItemIgnoredQuestions
   } = Projects(session);
+  const { getCustomImageUrl } = CustomImages(session);
 
   const [title, setTitle] = useState('');
   const [initialTitle, setInitialTitle] = useState('');
@@ -41,6 +43,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const [artworkType, setArtworkType] = useState('ai');
   const [customImageId, setCustomImageId] = useState(null);
   const [showCustomImageSelector, setShowCustomImageSelector] = useState(false);
+  const [showReferenceCustomImageSelector, setShowReferenceCustomImageSelector] = useState(false);
 
   const [questions, setQuestions] = useState([]);
   const [projectQuestions, setProjectQuestions] = useState([]);
@@ -393,6 +396,20 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     }
   };
 
+  const handleSelectReferenceCustomImage = async (img) => {
+    setShowReferenceCustomImageSelector(false);
+    try {
+      const response = await addCustomImageReference({ itemId: item.id, customImageId: img.id });
+      if (response.data.success) {
+        setReferences((prev) => [...prev, response.data.data]);
+      } else {
+        setMessage({ type: 'error', text: response.data.message || 'Failed to add reference' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to add reference' });
+    }
+  };
+
   const handleDeleteReference = async () => {
     if (!deleteReferenceTarget) return;
     try {
@@ -609,7 +626,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       {artworkType === 'custom' && customImageId && (
         <div className="mt-4">
           <img
-            src={getItemReferenceUrl(item.id, customImageId, true)}
+            src={getCustomImageUrl(customImageId, true)}
             alt="Custom image"
             className="w-full rounded-lg object-cover border border-gray-300 dark:border-gray-600"
           />
@@ -827,21 +844,9 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
                 <Icon name="add" className="mr-2" />
                 <span>Artwork Reference</span>
               </ButtonOutline>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png"
-                multiple
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-              <ButtonOutline onClick={() => fileInputRef.current?.click()}>
-                {uploadingReference ? (
-                  <Icon name="progress_activity" spin className="mr-2" />
-                ) : (
-                  <Icon name="add" className="mr-2" />
-                )}
-                <span>Upload Images</span>
+              <ButtonOutline onClick={() => setShowReferenceCustomImageSelector(true)}>
+                <Icon name="add" className="mr-2" />
+                <span>Custom Image</span>
               </ButtonOutline>
             </div>
           </div>
@@ -856,7 +861,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
                     artworkRefPreviews[ref.id] ? (
                       <img
                         src={artworkRefPreviews[ref.id]}
-                        alt={ref.fileName}
+                        alt="Artwork reference"
                         className="w-[150px] h-[150px] object-cover"
                       />
                     ) : (
@@ -866,14 +871,14 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
                     )
                   ) : (
                     <img
-                      src={getItemReferenceUrl(item.id, ref.id, true)}
-                      alt={ref.fileName}
+                      src={getCustomImageUrl(ref.customImageId, true)}
+                      alt=""
                       className="w-[150px] h-[150px] object-cover"
                     />
                   )}
                   {ref.artworkId && (
                     <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs px-2 py-1 truncate">
-                      {ref.fileName}
+                      Artwork Reference
                     </div>
                   )}
                   <button
@@ -943,11 +948,17 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       {showCustomImageSelector && (
         <CustomImageSelector
           show={showCustomImageSelector}
-          itemId={item.id}
-          projectId={item.projectId}
           selectedImageId={customImageId}
           onSelect={handleSelectCustomImage}
           onClose={() => setShowCustomImageSelector(false)}
+        />
+      )}
+
+      {showReferenceCustomImageSelector && (
+        <CustomImageSelector
+          show={showReferenceCustomImageSelector}
+          onSelect={handleSelectReferenceCustomImage}
+          onClose={() => setShowReferenceCustomImageSelector(false)}
         />
       )}
 

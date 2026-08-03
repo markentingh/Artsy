@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSession } from '@/context/session';
-import { Projects } from '@/api/user/projects';
+import { CustomImages } from '@/api/user/customImages';
 import Modal from '@/components/ui/modal';
 import ButtonOutline from '@/components/ui/button-outline';
 import Icon from '@/components/ui/icon';
@@ -9,11 +9,14 @@ import Message from '@/components/ui/message';
 import ConfirmModal from '@/components/ui/confirm-modal';
 import Button from '@/components/ui/button';
 
-export default function CustomImageSelector({ show, itemId, projectId, selectedImageId, onSelect, onClose }) {
+const PAGE_SIZE = 10;
+
+export default function CustomImageSelector({ show, selectedImageId, onSelect, onClose }) {
   const session = useSession();
-  const { getItemReferences, uploadItemReference, deleteItemReference, getItemReferenceUrl } = Projects(session);
+  const { getCustomImages, uploadCustomImage, deleteCustomImage, getCustomImageUrl } = CustomImages(session);
 
   const [images, setImages] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState(null);
@@ -21,25 +24,36 @@ export default function CustomImageSelector({ show, itemId, projectId, selectedI
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    if (!show || !itemId) return;
+    if (!show) return;
     setLoading(true);
     setMessage(null);
     setImages([]);
-    fetchImages();
+    setTotalCount(0);
+    fetchImages(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show, itemId]);
+  }, [show]);
 
-  const fetchImages = async () => {
+  const fetchImages = async (offset) => {
     try {
-      const resp = await getItemReferences(itemId);
+      const resp = await getCustomImages(PAGE_SIZE, offset);
       if (resp.data.success) {
-        setImages(resp.data.data || []);
+        const newImages = resp.data.data.images || [];
+        setTotalCount(resp.data.data.totalCount || 0);
+        if (offset === 0) {
+          setImages(newImages);
+        } else {
+          setImages((prev) => [...prev, ...newImages]);
+        }
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load images' });
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLoadMore = () => {
+    fetchImages(images.length);
   };
 
   const handleFileSelect = async (e) => {
@@ -50,16 +64,16 @@ export default function CustomImageSelector({ show, itemId, projectId, selectedI
     try {
       let lastUploaded = null;
       for (const file of files) {
-        const response = await uploadItemReference(itemId, file);
+        const response = await uploadCustomImage(file);
         if (response.data.success) {
           lastUploaded = response.data.data;
-          setImages((prev) => [...prev, response.data.data]);
         } else {
           setMessage({ type: 'error', text: response.data.message || 'Failed to upload image' });
         }
       }
-      if (lastUploaded && onSelect) {
-        onSelect(lastUploaded);
+      if (lastUploaded) {
+        fetchImages(0);
+        if (onSelect) onSelect(lastUploaded);
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to upload image' });
@@ -83,9 +97,10 @@ export default function CustomImageSelector({ show, itemId, projectId, selectedI
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     try {
-      const resp = await deleteItemReference({ id: deleteTarget.id });
+      const resp = await deleteCustomImage({ id: deleteTarget.id });
       if (resp.data.success) {
         setImages((prev) => prev.filter((i) => i.id !== deleteTarget.id));
+        setTotalCount((prev) => prev - 1);
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to delete image' });
@@ -131,7 +146,7 @@ export default function CustomImageSelector({ show, itemId, projectId, selectedI
         </div>
       </div>
 
-      {loading ? (
+      {loading && images.length === 0 ? (
         <div className="flex items-center justify-center py-12">
           <Spinner className="text-4xl" />
         </div>
@@ -148,7 +163,7 @@ export default function CustomImageSelector({ show, itemId, projectId, selectedI
               onClick={() => handleImageClick(img)}
             >
               <img
-                src={getItemReferenceUrl(itemId, img.id, true)}
+                src={getCustomImageUrl(img.id, true)}
                 alt={img.fileName}
                 className="w-[120px] h-[120px] object-cover"
               />
@@ -162,6 +177,15 @@ export default function CustomImageSelector({ show, itemId, projectId, selectedI
               </button>
             </div>
           ))}
+          {images.length < totalCount && (
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              className="w-[120px] h-[120px] border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center text-sm text-gray-500 dark:text-gray-400 hover:border-primary-500 hover:text-primary-500 transition"
+            >
+              Load More
+            </button>
+          )}
         </div>
       ) : (
         <p className="text-sm text-gray-500 dark:text-gray-400">No custom images uploaded. Click "Upload Images" to add some.</p>

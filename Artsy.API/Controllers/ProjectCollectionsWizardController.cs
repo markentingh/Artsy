@@ -326,9 +326,13 @@ namespace Artsy.API.Controllers
                                 }
                             }
                         }
-                        else
+                        else if (reference.CustomImageId.HasValue)
                         {
-                            imageBytes = await _imageService.GetProjectItemReferenceAsync(reference.ProjectId, reference.Id, reference.Extension);
+                            var customImg = await _customImageRepository.GetByIdAsync(reference.CustomImageId.Value);
+                            if (customImg != null)
+                            {
+                                imageBytes = await _imageService.GetCustomImageAsync(customImg.AppUserId, customImg.Id, customImg.Extension);
+                            }
                         }
 
                         if (imageBytes != null && imageBytes.Length > 0)
@@ -554,12 +558,11 @@ namespace Artsy.API.Controllers
                 if (item == null)
                     return Json(new ApiResponse { success = false, message = "Item not found." });
 
-                var reference = (await _projectItemReferenceRepository.GetByItemIdAsync(request.ItemId))
-                    .FirstOrDefault(r => r.Id == itemArtwork.CustomImageId.Value);
-                if (reference == null)
-                    return Json(new ApiResponse { success = false, message = "Custom reference image not found." });
+                var customImage = await _customImageRepository.GetByIdAsync(itemArtwork.CustomImageId.Value);
+                if (customImage == null)
+                    return Json(new ApiResponse { success = false, message = "Custom image not found." });
 
-                var referenceBytes = await _imageService.GetProjectItemReferenceAsync(reference.ProjectId, reference.Id, reference.Extension);
+                var referenceBytes = await _imageService.GetCustomImageAsync(customImage.AppUserId, customImage.Id, customImage.Extension);
                 if (referenceBytes == null || referenceBytes.Length == 0)
                     return Json(new ApiResponse { success = false, message = "Custom reference image data not found." });
 
@@ -1522,7 +1525,7 @@ namespace Artsy.API.Controllers
                         id = productImage.Id,
                         projectBlueprintId = productImage.ProjectBlueprintId,
                         productImageId = productImage.ProductImageId,
-                        imageUrl = $"/api/projects/collection/{request.CollectionId}/product-image/{productImage.Id}",
+                        imageUrl = $"/api/projects/collection/{request.CollectionId}/product-image/{productImage.Id}?thumb=true",
                         accepted = productImage.Accepted
                     }
                 });
@@ -1578,7 +1581,7 @@ namespace Artsy.API.Controllers
                         accepted = img.Accepted,
                         active = img.Active,
                         prompt = img.Prompt,
-                        imageUrl = $"/api/projects/collection/{collectionId}/product-image/{img.Id}"
+                        imageUrl = $"/api/projects/collection/{collectionId}/product-image/{img.Id}?thumb=true"
                     })
                 });
             }
@@ -1589,7 +1592,7 @@ namespace Artsy.API.Controllers
         }
 
         [HttpGet("collection/{collectionId}/product-image/{productImageId}")]
-        public async Task<IActionResult> GetProductImageFile(Guid collectionId, Guid productImageId)
+        public async Task<IActionResult> GetProductImageFile(Guid collectionId, Guid productImageId, [FromQuery] bool thumb = false)
         {
             var userId = GetUserId();
             if (userId == Guid.Empty)
@@ -1605,7 +1608,12 @@ namespace Artsy.API.Controllers
                 if (project == null)
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
-                var bytes = await _imageService.GetProjectCollectionProductImageAsync(productImage.ProjectId, collectionId, productImageId);
+                byte[] bytes;
+                if (thumb)
+                    bytes = await _imageService.GetProjectCollectionProductImageThumbAsync(productImage.ProjectId, collectionId, productImageId);
+                else
+                    bytes = await _imageService.GetProjectCollectionProductImageAsync(productImage.ProjectId, collectionId, productImageId);
+
                 if (bytes == null || bytes.Length == 0)
                     return NotFound();
 

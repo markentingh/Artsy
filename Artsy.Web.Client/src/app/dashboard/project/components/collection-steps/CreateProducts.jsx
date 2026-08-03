@@ -105,7 +105,7 @@ export default function CreateProducts() {
   const artworkImages = useMemo(() =>
     acceptedArtwork.map(a => ({
       ...a,
-      imageUrl: api.getCollectionArtworkImageUrl(collectionId, a.itemId, a.id),
+      imageUrl: api.getCollectionArtworkThumbUrl(collectionId, a.itemId, a.id),
       type: 'artwork',
     })),
     [acceptedArtwork, collectionId, api]
@@ -298,10 +298,16 @@ export default function CreateProducts() {
     ];
   }, [artworkImages, allImages]);
 
+  const fullSizePreviewImages = useMemo(() => {
+    const artworkFull = acceptedArtwork.map(a => api.getCollectionArtworkImageUrl(collectionId, a.itemId, a.id, true));
+    const productFull = allImages.map(img => (img.imageUrl || '').replace('?thumb=true', ''));
+    return [...artworkFull, ...productFull];
+  }, [acceptedArtwork, allImages, collectionId, api]);
+
   const handleImageClick = useCallback((clickedImg) => {
     const idx = allPreviewImages.indexOf(clickedImg.imageUrl);
-    setArtworkPreview({ images: allPreviewImages, src: clickedImg.imageUrl, _idx: idx >= 0 ? idx : 0 });
-  }, [allPreviewImages, setArtworkPreview]);
+    setArtworkPreview({ images: fullSizePreviewImages, src: fullSizePreviewImages[idx] || clickedImg.imageUrl, _idx: idx >= 0 ? idx : 0 });
+  }, [allPreviewImages, fullSizePreviewImages, setArtworkPreview]);
 
   return (
     <div className="flex flex-col h-full">

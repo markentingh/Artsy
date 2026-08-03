@@ -814,7 +814,7 @@ namespace Artsy.API.Controllers
                     m.Position,
                     m.IsDefault,
                     m.Status,
-                    ImageUrl = $"/api/printify-products/mockup-image?projectId={m.ProjectId}&collectionId={m.CollectionId}&mockupId={m.Id}",
+                    ImageUrl = $"/api/printify-products/mockup-image?projectId={m.ProjectId}&collectionId={m.CollectionId}&mockupId={m.Id}&thumb=true",
                 });
 
                 return Json(new ApiResponse { success = true, data = result });
@@ -826,7 +826,7 @@ namespace Artsy.API.Controllers
         }
 
         [HttpGet("mockup-image")]
-        public async Task<IActionResult> GetMockupImage([FromQuery] Guid projectId, [FromQuery] Guid collectionId, [FromQuery] Guid mockupId)
+        public async Task<IActionResult> GetMockupImage([FromQuery] Guid projectId, [FromQuery] Guid collectionId, [FromQuery] Guid mockupId, [FromQuery] bool thumb = false)
         {
             var userId = GetUserId();
             if (userId == Guid.Empty)
@@ -837,7 +837,9 @@ namespace Artsy.API.Controllers
 
             try
             {
-                var imgBytes = await _imageService.GetProjectCollectionMockupAsync(projectId, collectionId, mockupId);
+                var imgBytes = thumb
+                    ? await _imageService.GetProjectCollectionMockupThumbAsync(projectId, collectionId, mockupId)
+                    : await _imageService.GetProjectCollectionMockupAsync(projectId, collectionId, mockupId);
                 if (imgBytes == null || imgBytes.Length == 0)
                     return NotFound();
 

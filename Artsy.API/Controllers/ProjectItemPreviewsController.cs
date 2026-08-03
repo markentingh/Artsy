@@ -133,9 +133,13 @@ namespace Artsy.API.Controllers
                                 imageBytes = await _imageService.GetProjectItemPreviewAsync(reference.ProjectId, reference.ArtworkId.Value, newestPreview.Id);
                             }
                         }
-                        else
+                        else if (reference.CustomImageId.HasValue)
                         {
-                            imageBytes = await _imageService.GetProjectItemReferenceAsync(reference.ProjectId, reference.Id, reference.Extension);
+                            var customImg = await _customImageRepository.GetByIdAsync(reference.CustomImageId.Value);
+                            if (customImg != null)
+                            {
+                                imageBytes = await _imageService.GetCustomImageAsync(customImg.AppUserId, customImg.Id, customImg.Extension);
+                            }
                         }
 
                         if (imageBytes != null && imageBytes.Length > 0)

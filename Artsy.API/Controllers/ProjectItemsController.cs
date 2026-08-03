@@ -42,7 +42,11 @@ namespace Artsy.API.Controllers
                 {
                     var thumbnails = new List<string>();
 
-                    if (previewThumbsByItem.TryGetValue(i.Id, out var previews))
+                    if (artworkByItem.TryGetValue(i.Id, out var art) && art.ArtworkType == "custom" && art.CustomImageId.HasValue)
+                    {
+                        thumbnails.Add($"/api/custom-images/custom-image/{art.CustomImageId.Value}?thumb=true");
+                    }
+                    else if (previewThumbsByItem.TryGetValue(i.Id, out var previews))
                         foreach (var p in previews)
                             thumbnails.Add($"/api/projects/item/{i.Id}/preview/{p.Id}?thumb=true");
 
@@ -59,7 +63,7 @@ namespace Artsy.API.Controllers
                         SocialMedia = i.SocialMedia,
                         ProductCount = i.ProductCount,
                         QuestionCount = i.QuestionCount,
-                        ArtworkType = artworkByItem.TryGetValue(i.Id, out var art) ? art.ArtworkType : "ai",
+                        ArtworkType = artworkByItem.TryGetValue(i.Id, out var artwork) ? artwork.ArtworkType : "ai",
                         Thumbnails = thumbnails
                     });
                 }
