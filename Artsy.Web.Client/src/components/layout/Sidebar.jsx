@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSession } from '@/context/session';
 import ThemeToggle from '@/components/ui/theme-toggle';
+import { AITokens } from '@/api/user/aiTokens';
 
 export default function Sidebar() {
   const { logout, user } = useSession();
   const location = useLocation();
+  const [availableTokens, setAvailableTokens] = useState(null);
 
   const isAdmin = user?.roles?.includes('admin') ?? false;
 
@@ -16,10 +18,20 @@ export default function Sidebar() {
     ...(isAdmin ? [
       { path: '/dashboard/printify', label: 'Printify' },
       { path: '/dashboard/openai', label: 'OpenAI' },
+      { path: '/dashboard/billing', label: 'Billing' },
       { path: '/dashboard/services', label: 'Services' },
       { path: '/dashboard/users', label: 'Users' }
     ] : [])
   ];
+
+  useEffect(() => {
+    if (!user) return;
+    const session = { token: localStorage.getItem('token') };
+    const api = AITokens(session);
+    api.getBalance().then(res => {
+      if (res.data.success) setAvailableTokens(res.data.data);
+    }).catch(() => {});
+  }, [user]);
 
   return (
     <aside className="w-64 h-screen fixed left-0 top-0 flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
@@ -51,6 +63,12 @@ export default function Sidebar() {
         </ul>
       </nav>
       <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+        {availableTokens != null && (
+          <div className="mb-4 text-sm">
+            <span className="text-gray-600 dark:text-gray-400">Available Tokens: </span>
+            <span className="font-semibold text-primary-600 dark:text-primary-500">{availableTokens.toLocaleString()}</span>
+          </div>
+        )}
         <div className="mb-4">
           <ThemeToggle />
         </div>

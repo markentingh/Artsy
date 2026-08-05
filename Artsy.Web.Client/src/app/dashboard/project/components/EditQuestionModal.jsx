@@ -26,11 +26,11 @@ export default function EditQuestionModal({
         autoFocus
       />
       <div className="buttons mt-6 flex justify-end gap-2">
-        <ButtonOutline onClick={onClose} className="cancel">
+        <ButtonOutline color="gray" onClick={onClose} className="cancel">
           Cancel
         </ButtonOutline>
         <ButtonOutline onClick={onSave}>
-          Save
+          {editingQuestionId ? 'Save' : 'Create Question'}
         </ButtonOutline>
       </div>
     </Modal>

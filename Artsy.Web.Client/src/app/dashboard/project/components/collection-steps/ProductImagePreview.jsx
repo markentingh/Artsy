@@ -145,7 +145,7 @@ export default function ProductImagePreview() {
         )}
       </div>
       <div className="buttons flex justify-end gap-2 mt-4 mt-auto">
-        <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+        <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
       </div>
     </div>
   );

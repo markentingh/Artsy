@@ -18,8 +18,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             generation.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectImageGenerations"" (""Id"", ""ProjectId"", ""ItemId"", ""CollectionId"", ""BlueprintId"", ""InputTextTokens"", ""InputImageTokens"", ""OutputTokens"", ""ImageModel"", ""Prompt"", ""Filename"", ""HasThumbnail"", ""IsFullSize"", ""DateCreated"")
-                VALUES (@Id, @ProjectId, @ItemId, @CollectionId, @BlueprintId, @InputTextTokens, @InputImageTokens, @OutputTokens, @ImageModel, @Prompt, @Filename, @HasThumbnail, @IsFullSize, @DateCreated)
+                INSERT INTO public.""ProjectImageGenerations"" (""Id"", ""ProjectId"", ""ItemId"", ""CollectionId"", ""BlueprintId"", ""AppUserId"", ""ImageGenerationId"", ""InputTextTokens"", ""InputImageTokens"", ""OutputTokens"", ""Tokens"", ""ImageModel"", ""Prompt"", ""Filename"", ""IsFullSize"")
+                VALUES (@Id, @ProjectId, @ItemId, @CollectionId, @BlueprintId, @AppUserId, @ImageGenerationId, @InputTextTokens, @InputImageTokens, @OutputTokens, @Tokens, @ImageModel, @Prompt, @Filename, @IsFullSize)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectImageGeneration>(query, generation);
         }

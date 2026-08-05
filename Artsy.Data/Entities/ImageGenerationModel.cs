@@ -11,8 +11,12 @@ namespace Artsy.Data.Entities
         public decimal CPMITTokens { get; set; }
         public decimal CPMIITokens { get; set; }
         public decimal CPMOTokens { get; set; }
+        public int Type { get; set; } = 0;
+        public decimal CP1K { get; set; }
+        public decimal CP2K { get; set; }
+        public decimal CP4K { get; set; }
+        public decimal CP8K { get; set; }
         public bool Active { get; set; } = true;
-        public decimal TokenConversion { get; set; } = 10;
         public DateTime DateCreated { get; set; }
         public DateTime DateUpdated { get; set; }
     }

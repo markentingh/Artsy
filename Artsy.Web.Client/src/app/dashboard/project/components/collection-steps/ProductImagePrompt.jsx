@@ -242,23 +242,15 @@ export default function ProductImagePrompt() {
             <Spinner className="text-sm" />
             <span>Estimating token cost...</span>
           </div>
-        ) : tokenEstimate ? (
-          <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 space-y-1">
-            <div>
-              <span className="font-medium">{tokenEstimate.totalTokens.toLocaleString()}</span> tokens
-              {tokenEstimate.estimatedCostUSD > 0 && (
-                <span> · est. ${tokenEstimate.estimatedCostUSD.toFixed(4)} USD</span>
-              )}
-            </div>
-            <div className="text-xs">
-              {tokenEstimate.textInputTokens.toLocaleString()} text input · {tokenEstimate.imageInputTokens.toLocaleString()} image input · {tokenEstimate.imageOutputTokens.toLocaleString()} output · {tokenEstimate.inputImageCount} reference image{tokenEstimate.inputImageCount !== 1 ? 's' : ''}
-            </div>
+        ) : tokenEstimate != null ? (
+          <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            <span className="font-medium">{tokenEstimate.toLocaleString()}</span> tokens
           </div>
         ) : null}
       </div>
 
       <div className="buttons flex justify-end gap-2 mt-auto">
-        <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+        <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         <ButtonOutline onClick={handleSkip}>
           Skip
         </ButtonOutline>

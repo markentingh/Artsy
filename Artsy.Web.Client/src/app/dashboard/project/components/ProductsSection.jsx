@@ -9,6 +9,7 @@ import Carousel from '@/components/ui/carousel';
 import Tooltip from '@/components/ui/tooltip';
 import Message from '@/components/ui/message';
 import Checked from '@/components/ui/checked';
+import CarouselElements from '@/components/ui/carousel-elements';
 import ConfirmModal from '@/components/ui/confirm-modal';
 import FindPrintifyBlueprintModal from './FindPrintifyBlueprintModal';
 import ConfigureProductBlueprint from './ConfigureProductBlueprint';
@@ -127,7 +128,7 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-1">
           <h2 className="text-xl font-semibold">Product Blueprints</h2>
-          <Tooltip text="Products are the physical items you'll sell, sourced from print-on-demand providers. Find a product blueprint, configure its variants and placements, and assign artworks to each print area." />
+          <Tooltip text="Products are the physical items you'll sell, sourced from print-on-demand providers. Find a product blueprint, configure its variants and placements, and assign artworks to each print area. Your products will then be created for each collection you publish." />
         </div>
         <ButtonOutline onClick={() => setShowFindBlueprint(true)}>
           <Icon name="search" />
@@ -139,12 +140,13 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
           No Products configured for this project
         </div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,250px)] gap-4 mb-8">
-          {blueprints.map((bp) => (
+        <CarouselElements
+          className="mb-8"
+          elements={blueprints.map((bp) => (
             <div
               key={bp.id}
               onClick={() => handleEditBlueprint(bp)}
-              className="rounded-lg bg-white dark:bg-gray-800 shadow hover:shadow-md cursor-pointer overflow-hidden transition"
+              className="w-[250px] rounded-lg bg-white dark:bg-gray-800 shadow hover:shadow-md cursor-pointer overflow-hidden transition"
             >
               <div className="aspect-square w-full relative">
                 <Carousel
@@ -178,7 +180,7 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
               </div>
             </div>
           ))}
-        </div>
+        />
       )}
 
       <FindPrintifyBlueprintModal

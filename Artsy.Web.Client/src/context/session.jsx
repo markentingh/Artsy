@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { jwtDecode } from 'jwt-decode';
+import { UseAxios } from '@/api/Axios';
+import { Auth } from '@/api/account/auth';
 
 const SessionContext = createContext(null);
 
@@ -9,7 +11,9 @@ export function SessionProvider({ children }) {
     return saved ? JSON.parse(saved) : null;
   });
   const [token, setToken] = useState(() => localStorage.getItem('token') || null);
+  const [refreshToken, setRefreshToken] = useState(() => localStorage.getItem('refreshToken') || null);
   const [isReady, setIsReady] = useState(false);
+  const keepaliveRef = useRef(null);
 
   useEffect(() => {
     setIsReady(true);
@@ -40,22 +44,52 @@ export function SessionProvider({ children }) {
     }
   }, [token]);
 
+  useEffect(() => {
+    if (refreshToken) {
+      localStorage.setItem('refreshToken', refreshToken);
+    } else {
+      localStorage.removeItem('refreshToken');
+    }
+  }, [refreshToken]);
+
+  useEffect(() => {
+    if (!token || !refreshToken) return;
+
+    const doKeepalive = async () => {
+      try {
+        const api = Auth(UseAxios({}));
+        const res = await api.refreshToken(refreshToken);
+        if (res.data.success && res.data.data?.token) {
+          setToken(res.data.data.token);
+        }
+      } catch {
+        // token refresh failed, will retry next interval
+      }
+    };
+
+    keepaliveRef.current = setInterval(doKeepalive, 60 * 60 * 1000);
+    return () => { if (keepaliveRef.current) clearInterval(keepaliveRef.current); };
+  }, [token, refreshToken]);
+
   const login = (userData, authToken) => {
     setUser(userData);
     setToken(authToken);
+    if (userData.refreshToken) setRefreshToken(userData.refreshToken);
   };
 
   const logout = () => {
     setUser(null);
     setToken(null);
+    setRefreshToken(null);
     localStorage.removeItem('user');
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
   };
 
   const isAuthenticated = !!token && !!user;
 
   return (
-    <SessionContext.Provider value={{ user, setUser, token, setToken, login, logout, isAuthenticated, isReady }}>
+    <SessionContext.Provider value={{ user, setUser, token, setToken, refreshToken, login, logout, isAuthenticated, isReady }}>
       {children}
     </SessionContext.Provider>
   );

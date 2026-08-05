@@ -211,7 +211,7 @@ export default function PublishProductsStep() {
         </div>
       )}
       <div className="buttons flex justify-end gap-2 mt-auto">
-        <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+        <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         {allPublished ? (
           <Button onClick={handleNext}>Next</Button>
         ) : (

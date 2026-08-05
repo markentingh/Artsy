@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Artsy.API.Models;
 using Artsy.API.Models.Projects;
 using Artsy.API.Services;
@@ -313,18 +314,13 @@ namespace Artsy.API.Controllers
                     inputImages
                 );
 
-                var conversion = model.TokenConversion > 0 ? (1000 * model.TokenConversion) : 1000;
+                var tokenCost = _tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m;
+                var artsyTokens = Math.Max(1, (int)Math.Round(result.EstimatedCostUSD / tokenCost));
 
                 return Json(new ApiResponse
                 {
                     success = true,
-                    data = new
-                    {
-                        textInputTokens = Math.Max(1, (int)(result.TextInputTokens / conversion)),
-                        imageInputTokens = Math.Max(1, (int)(result.ImageInputTokens / conversion)),
-                        imageOutputTokens = Math.Max(1, (int)(result.ImageOutputTokens / conversion)),
-                        estimatedCostUSD = result.EstimatedCostUSD
-                    }
+                    data = artsyTokens
                 });
             }
             catch (Exception ex)

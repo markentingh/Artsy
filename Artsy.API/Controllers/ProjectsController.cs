@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using System.Text.Json;
 using Artsy.API.Models;
 using Artsy.API.Models.Projects;
@@ -44,6 +45,8 @@ namespace Artsy.API.Controllers
         readonly IProjectCollectionPrintifyProductMockupRepository _mockupRepository;
         readonly IProjectCollectionProductRepository _productRepository;
         readonly ICustomImageRepository _customImageRepository;
+        readonly TokenCostOptions _tokenCostOptions;
+        readonly IAITokenService _aiTokenService;
 
         public ProjectsController(
             IProjectRepository projectRepository,
@@ -74,7 +77,9 @@ namespace Artsy.API.Controllers
             IProjectCollectionPrintifyProductRepository printifyProductRepository,
             IProjectCollectionPrintifyProductMockupRepository mockupRepository,
             IProjectCollectionProductRepository productRepository,
-            ICustomImageRepository customImageRepository)
+            ICustomImageRepository customImageRepository,
+            IOptions<TokenCostOptions> tokenCostOptions,
+            IAITokenService aiTokenService)
         {
             _projectRepository = projectRepository;
             _projectCollectionRepository = projectCollectionRepository;
@@ -105,6 +110,8 @@ namespace Artsy.API.Controllers
             _mockupRepository = mockupRepository;
             _productRepository = productRepository;
             _customImageRepository = customImageRepository;
+            _tokenCostOptions = tokenCostOptions.Value;
+            _aiTokenService = aiTokenService;
         }
 
         [HttpGet("get-by-id")]

@@ -31,7 +31,11 @@ namespace Artsy.API.Controllers
                     cpmitTokens = m.CPMITTokens,
                     cpmiiTokens = m.CPMIITokens,
                     cpmoTokens = m.CPMOTokens,
-                    tokenConversion = m.TokenConversion
+                    type = m.Type,
+                    cp1k = m.CP1K,
+                    cp2k = m.CP2K,
+                    cp4k = m.CP4K,
+                    cp8k = m.CP8K
                 }).ToList();
 
                 return Json(new ApiResponse { success = true, data = result });

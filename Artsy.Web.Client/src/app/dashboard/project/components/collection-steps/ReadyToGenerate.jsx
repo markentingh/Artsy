@@ -160,7 +160,7 @@ export default function ReadyToGenerate() {
                 {generationError}
               </p>
               <div className="buttons flex justify-center gap-2">
-                <ButtonOutline className="cancel" onClick={handleCancelGeneration}>Cancel</ButtonOutline>
+                <ButtonOutline color="gray" className="cancel" onClick={handleCancelGeneration}>Cancel</ButtonOutline>
                 <ButtonOutline onClick={handleTryAgain}>Try Again</ButtonOutline>
               </div>
             </>
@@ -179,7 +179,7 @@ export default function ReadyToGenerate() {
                 {generatingProgress}% complete
               </p>
               <div className="buttons flex justify-center">
-                <ButtonOutline className="cancel" onClick={handleCancelGeneration}>Cancel</ButtonOutline>
+                <ButtonOutline color="gray" className="cancel" onClick={handleCancelGeneration}>Cancel</ButtonOutline>
               </div>
             </>
           )}
@@ -190,7 +190,7 @@ export default function ReadyToGenerate() {
             Upscaling complete! {generatedArtworks.length} artwork{generatedArtworks.length !== 1 ? 's' : ''} upscaled to full size.
           </p>
           <div className="buttons flex justify-end gap-2">
-            <ButtonOutline className="cancel" onClick={onClose}>Close</ButtonOutline>
+            <ButtonOutline color="gray" className="cancel" onClick={onClose}>Close</ButtonOutline>
             <ButtonOutline onClick={handleNext}>Next</ButtonOutline>
           </div>
         </>
@@ -211,7 +211,7 @@ export default function ReadyToGenerate() {
             </>
           )}
           <div className="buttons flex justify-end gap-2 mt-auto">
-            <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+            <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
             {pendingCount > 0 && (
               <ButtonOutline onClick={handleGenerateArtworks}>Upscale Artworks</ButtonOutline>
             )}

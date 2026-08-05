@@ -34,8 +34,12 @@ namespace Artsy.API.Controllers.Admin
                     cpmitTokens = m.CPMITTokens,
                     cpmiiTokens = m.CPMIITokens,
                     cpmoTokens = m.CPMOTokens,
-                    active = m.Active,
-                    tokenConversion = m.TokenConversion
+                    type = m.Type,
+                    cp1k = m.CP1K,
+                    cp2k = m.CP2K,
+                    cp4k = m.CP4K,
+                    cp8k = m.CP8K,
+                    active = m.Active
                 }).ToList();
 
                 return Json(new ApiResponse { success = true, data = result });
@@ -68,8 +72,12 @@ namespace Artsy.API.Controllers.Admin
                         existing.CPMITTokens = request.CPMITTokens;
                         existing.CPMIITokens = request.CPMIITokens;
                         existing.CPMOTokens = request.CPMOTokens;
+                        existing.Type = request.Type;
+                        existing.CP1K = request.CP1K;
+                        existing.CP2K = request.CP2K;
+                        existing.CP4K = request.CP4K;
+                        existing.CP8K = request.CP8K;
                         existing.Active = request.Active;
-                        existing.TokenConversion = request.TokenConversion;
                         await _repo.UpdateAsync(existing);
                     }
                 }
@@ -83,8 +91,12 @@ namespace Artsy.API.Controllers.Admin
                         CPMITTokens = request.CPMITTokens,
                         CPMIITokens = request.CPMIITokens,
                         CPMOTokens = request.CPMOTokens,
-                        Active = request.Active,
-                        TokenConversion = request.TokenConversion
+                        Type = request.Type,
+                        CP1K = request.CP1K,
+                        CP2K = request.CP2K,
+                        CP4K = request.CP4K,
+                        CP8K = request.CP8K,
+                        Active = request.Active
                     };
                     await _repo.CreateAsync(model);
                 }

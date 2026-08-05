@@ -16,7 +16,7 @@ export function List({ children, className = '', hover = true, inModal = false, 
   );
 }
 
-export function Item({ children, hover = true, inModal = false, bg = true, className = '' }) {
+export function Item({ children, hover = true, inModal = false, bg = true, className = '', ...rest }) {
   const hoverClass = hover
     ? inModal
       ? 'hover:bg-gray-200 dark:hover:bg-gray-700/70'
@@ -29,6 +29,7 @@ export function Item({ children, hover = true, inModal = false, bg = true, class
     : '';
   return (
     <div
+      {...rest}
       className={`flex items-center rounded-lg ${bgClass} p-3 transition ${hoverClass} ${className}`}
     >
       {children}

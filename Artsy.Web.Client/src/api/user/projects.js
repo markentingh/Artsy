@@ -39,6 +39,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     deleteItemPreview: (request) => api.post(`${apiPath}/delete-item-preview`, request),
     getItemPreviewUrl: (itemId, previewId, thumb = false) => `${apiPath}/item/${itemId}/preview/${previewId}${thumb ? '?thumb=true' : ''}`,
     getItemReferences: (itemId) => api.get(`${apiPath}/get-item-references?itemId=${itemId}`),
+    getAllItemReferences: (projectId) => api.get(`${apiPath}/get-all-item-references?projectId=${projectId}`),
     uploadItemReference: (itemId, file) => {
       const formData = new FormData();
       formData.append('file', file);

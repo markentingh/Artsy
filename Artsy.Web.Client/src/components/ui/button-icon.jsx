@@ -14,6 +14,7 @@ export default function ButtonIcon({ name, onClick, title, color, className = ''
 
   return (
     <button
+      type="button"
       onClick={onClick}
       title={title}
       className={`icon w-8 h-8 flex items-center justify-center ${colorClasses} rounded transition ${className}`}

@@ -26,6 +26,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddHttpClient("ImageGeneration", c => c.Timeout = TimeSpan.FromMinutes(5));
 builder.Services.AddHttpClient("Upscaler", c => c.Timeout = TimeSpan.FromMinutes(5));
 builder.Services.Configure<Artsy.API.Services.ImageGenerationOptions>(builder.Configuration.GetSection("ImageGeneration"));
+builder.Services.Configure<Artsy.API.Services.TokenCostOptions>(builder.Configuration.GetSection("Tokens"));
 builder.Services.Configure<Artsy.API.Services.UpscalerOptions>(builder.Configuration.GetSection("Upscaler"));
 builder.Services.AddTransient<Artsy.API.Services.IImageGeneration, Artsy.API.Services.ImageGenerationForOpenAI>();
 builder.Services.AddTransient<Artsy.API.Services.IImageUpscaler, Artsy.API.Services.ImageUpscaler>();
@@ -51,6 +52,7 @@ builder.Services.AddScoped<Artsy.API.Services.ITelegramService, Artsy.API.Servic
 builder.Services.AddScoped<Artsy.API.Services.IImageService, Artsy.API.Services.ImageService>();
 builder.Services.AddScoped<Artsy.API.Services.ITrendResearchService, Artsy.API.Services.TrendResearchService>();
 builder.Services.AddScoped<Artsy.API.Services.IPrintifyService, Artsy.API.Services.PrintifyService>();
+builder.Services.AddScoped<Artsy.API.Services.IAITokenService, Artsy.API.Services.AITokenService>();
 
 builder.Services.AddSwaggerGen(e =>
 {

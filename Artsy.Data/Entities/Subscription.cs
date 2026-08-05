@@ -1,0 +1,15 @@
+namespace Artsy.Data.Entities
+{
+    public class Subscription
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = "";
+        public int? MonthlyProductId { get; set; }
+        public int? YearlyProductId { get; set; }
+        public bool Archived { get; set; }
+        public string? FeaturesJson { get; set; }
+        public int SortIndex { get; set; }
+        public bool Featured { get; set; }
+        public DateTime DateCreated { get; set; }
+    }
+}

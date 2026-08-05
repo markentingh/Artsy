@@ -280,7 +280,7 @@ export default function ProductImagesTab() {
             />
           </div>
           <div className="buttons flex justify-end gap-2">
-            <ButtonOutline className="cancel" onClick={() => setShowAddProductImage(false)}>
+            <ButtonOutline color="gray" className="cancel" onClick={() => setShowAddProductImage(false)}>
               Cancel
             </ButtonOutline>
             <ButtonOutline onClick={handleAddProductImage} disabled={saving}>

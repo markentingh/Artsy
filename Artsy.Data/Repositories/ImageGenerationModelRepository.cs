@@ -41,8 +41,8 @@ namespace Artsy.Data.Repositories
         public async Task<ImageGenerationModel> CreateAsync(ImageGenerationModel model)
         {
             const string query = @"
-                INSERT INTO public.""ImageGeneration"" (""ModelKey"", ""Name"", ""Model"", ""CPMITTokens"", ""CPMIITokens"", ""CPMOTokens"", ""Active"", ""TokenConversion"")
-                VALUES (@ModelKey, @Name, @Model, @CPMITTokens, @CPMIITokens, @CPMOTokens, @Active, @TokenConversion)
+                INSERT INTO public.""ImageGeneration"" (""ModelKey"", ""Name"", ""Model"", ""CPMITTokens"", ""CPMIITokens"", ""CPMOTokens"", ""Type"", ""CP1K"", ""CP2K"", ""CP4K"", ""CP8K"", ""Active"")
+                VALUES (@ModelKey, @Name, @Model, @CPMITTokens, @CPMIITokens, @CPMOTokens, @Type, @CP1K, @CP2K, @CP4K, @CP8K, @Active)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ImageGenerationModel>(query, model);
         }
@@ -53,7 +53,8 @@ namespace Artsy.Data.Repositories
                 UPDATE public.""ImageGeneration""
                 SET ""ModelKey"" = @ModelKey, ""Name"" = @Name, ""Model"" = @Model,
                     ""CPMITTokens"" = @CPMITTokens, ""CPMIITokens"" = @CPMIITokens, ""CPMOTokens"" = @CPMOTokens,
-                    ""Active"" = @Active, ""TokenConversion"" = @TokenConversion, ""DateUpdated"" = CURRENT_TIMESTAMP
+                    ""Type"" = @Type, ""CP1K"" = @CP1K, ""CP2K"" = @CP2K, ""CP4K"" = @CP4K, ""CP8K"" = @CP8K,
+                    ""Active"" = @Active, ""DateUpdated"" = CURRENT_TIMESTAMP
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, model);
         }

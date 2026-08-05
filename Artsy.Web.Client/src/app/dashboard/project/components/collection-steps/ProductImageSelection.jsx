@@ -208,7 +208,7 @@ export default function ProductImageSelection() {
       </div>
 
       <div className="buttons flex justify-end gap-2 mt-4 mt-auto">
-        <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+        <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         {checkedComboList.length > 0 && (
           <ButtonOutline onClick={handleNext} disabled={!imagesLoaded}>
             Next ({checkedComboList.length} selected)

@@ -370,10 +370,13 @@ export default function AdminOpenAI() {
                             <th className="px-4 py-3 w-12"></th>
                             <th className="px-4 py-3">Name</th>
                             <th className="px-4 py-3">Model</th>
-                            <th className="px-4 py-3">CPM Text Input</th>
-                            <th className="px-4 py-3">CPM Image Input</th>
+                            <th className="px-4 py-3">Cost</th>
+                            <th className="px-4 py-3">CPM Text</th>
+                            <th className="px-4 py-3">CPM Image</th>
                             <th className="px-4 py-3">CPM Output</th>
-                            <th className="px-4 py-3">Token Conversion</th>
+                            <th className="px-4 py-3">CP 1K</th>
+                            <th className="px-4 py-3">CP 2K</th>
+                            <th className="px-4 py-3">CP 4K</th>
                             <th className="px-4 py-3 w-24"></th>
                         </tr>
                     </thead>
@@ -391,21 +394,26 @@ export default function AdminOpenAI() {
                                 </td>
                                 <td className="px-4 py-3">{model.name || '(not configured)'}</td>
                                 <td className="px-4 py-3">{model.model || '-'}</td>
-                                <td className="px-4 py-3">${model.cpmitTokens}</td>
-                                <td className="px-4 py-3">${model.cpmiiTokens}</td>
-                                <td className="px-4 py-3">${model.cpmoTokens}</td>
-                                <td className="px-4 py-3">1000 * {model.tokenConversion || 0} = {(1000 * (model.tokenConversion || 0)).toLocaleString()}</td>
-                                <td className="px-4 py-3 space-x-2" onClick={(e) => e.stopPropagation()}>
-                                    <ButtonIcon name="edit" onClick={() => handleImageModelClick(model)} title="Edit model" />
-                                    {model.id && (
-                                        <ButtonIcon name="delete" color="red" onClick={() => handleImageModelDelete(model)} title="Delete model" />
-                                    )}
+                                <td className="px-4 py-3">{model.type === 1 ? 'Per Megapixel' : 'Per Million'}</td>
+                                <td className="px-4 py-3">{model.type === 1 ? '-' : `$${model.cpmitTokens}`}</td>
+                                <td className="px-4 py-3">{model.type === 1 ? '-' : `$${model.cpmiiTokens}`}</td>
+                                <td className="px-4 py-3">{model.type === 1 ? '-' : `$${model.cpmoTokens}`}</td>
+                                <td className="px-4 py-3">{model.type === 1 ? `$${model.cp1k}` : '-'}</td>
+                                <td className="px-4 py-3">{model.type === 1 ? `$${model.cp2k}` : '-'}</td>
+                                <td className="px-4 py-3">{model.type === 1 ? `$${model.cp4k}` : '-'}</td>
+                                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center gap-2">
+                                        <ButtonIcon name="edit" onClick={() => handleImageModelClick(model)} title="Edit model" />
+                                        {model.id && (
+                                            <ButtonIcon name="delete" color="red" onClick={() => handleImageModelDelete(model)} title="Delete model" />
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
                         ))}
                         {imageModels.length === 0 && (
                             <tr>
-                                <td colSpan="8" className="text-center py-8 text-gray-600 dark:text-gray-400">
+                                <td colSpan="11" className="text-center py-8 text-gray-600 dark:text-gray-400">
                                     No image generation models configured.
                                 </td>
                             </tr>

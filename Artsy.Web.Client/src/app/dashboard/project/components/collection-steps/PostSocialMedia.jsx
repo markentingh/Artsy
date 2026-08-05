@@ -334,7 +334,7 @@ export default function PostSocialMedia() {
           Instagram posting is not enabled for this project.
         </p>
         <div className="buttons flex justify-end gap-2 mt-auto">
-          <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+          <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         </div>
       </div>
     );
@@ -445,7 +445,7 @@ export default function PostSocialMedia() {
       )}
 
       <div className="buttons flex justify-end gap-2 mt-auto">
-        <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+        <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         {!instagramPosted && (
           <Button onClick={handlePost} disabled={posting || orderedImages.filter(img => socialMediaSelectedImages[img.id]).length === 0}>
             {posting ? (

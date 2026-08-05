@@ -189,7 +189,7 @@ export default function SummaryStep() {
       </div>
 
       <div className="buttons flex justify-end gap-2 mt-auto">
-        <ButtonOutline className="cancel" onClick={onClose}>Close</ButtonOutline>
+        <ButtonOutline color="gray" className="cancel" onClick={onClose}>Close</ButtonOutline>
       </div>
     </div>
   );

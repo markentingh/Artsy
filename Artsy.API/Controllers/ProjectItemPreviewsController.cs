@@ -73,6 +73,9 @@ namespace Artsy.API.Controllers
                 if (genModel == null)
                     return Json(new ApiResponse { success = false, message = "Image model not found in database." });
 
+                if (!await _aiTokenService.HasEnoughTokensAsync(userId, 1))
+                    return Json(new ApiResponse { success = false, message = "Not enough tokens to generate the preview. Please purchase more tokens before continuing." });
+
                 var jsonOptions = new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true,
@@ -182,13 +185,19 @@ namespace Artsy.API.Controllers
                     {
                         ProjectId = item.ProjectId,
                         ItemId = request.ItemId,
+                        AppUserId = userId,
+                        ImageGenerationId = genModel.Id,
                         InputTextTokens = genResult.InputTokens,
                         InputImageTokens = 0,
                         OutputTokens = genResult.OutputTokens,
+                        Tokens = Math.Max(1, (int)Math.Round(((genResult.InputTokens + genResult.OutputTokens) / 1_000_000m * (genModel.CPMITTokens + genModel.CPMOTokens)) / _tokenCostOptions.Cost)),
                         ImageModel = genModel.Model,
                         Prompt = finalPrompt,
                         Filename = $"{createdPreview.Id}.jpg"
                     });
+
+                    var tokensToDeduct = Math.Max(1, (int)Math.Round(((genResult.InputTokens + genResult.OutputTokens) / 1_000_000m * (genModel.CPMITTokens + genModel.CPMOTokens)) / _tokenCostOptions.Cost));
+                    await _aiTokenService.UseTokensAsync(userId, tokensToDeduct);
                 }
                 catch
                 {

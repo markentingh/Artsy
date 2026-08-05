@@ -119,7 +119,7 @@ export default function QuestionsSection({ projectId, onChecklistChanged }) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-1">
           <h2 className="text-xl font-semibold">Questions</h2>
-          <Tooltip text="Questions guide the AI when generating your artwork. Project questions apply to all artworks, while artwork-specific questions are asked during the collection wizard. Answers shape the style, context, and details of generated images." />
+          <Tooltip text="Project Questions guide the AI when generating your artworks. Answers shape the style, context, and details of generated images. Project Questions apply to all artworks, unless you specify which project questions to ignore for your individual artworks. " />
         </div>
         <ButtonOutline onClick={handleOpenNewQuestion}>
           <Icon name="add" />

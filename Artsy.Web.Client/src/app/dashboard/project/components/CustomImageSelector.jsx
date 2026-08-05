@@ -7,7 +7,6 @@ import Icon from '@/components/ui/icon';
 import Spinner from '@/components/ui/spinner';
 import Message from '@/components/ui/message';
 import ConfirmModal from '@/components/ui/confirm-modal';
-import Button from '@/components/ui/button';
 
 const PAGE_SIZE = 10;
 
@@ -178,13 +177,9 @@ export default function CustomImageSelector({ show, selectedImageId, onSelect, o
             </div>
           ))}
           {images.length < totalCount && (
-            <button
-              type="button"
-              onClick={handleLoadMore}
-              className="w-[120px] h-[120px] border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center text-sm text-gray-500 dark:text-gray-400 hover:border-primary-500 hover:text-primary-500 transition"
-            >
+            <ButtonOutline onClick={handleLoadMore} className="w-[120px] h-[120px] flex items-center justify-center">
               Load More
-            </button>
+            </ButtonOutline>
           )}
         </div>
       ) : (
@@ -192,9 +187,9 @@ export default function CustomImageSelector({ show, selectedImageId, onSelect, o
       )}
 
       <div className="buttons flex justify-end gap-2 mt-4">
-        <Button color="gray" className="cancel" onClick={onClose}>
+        <ButtonOutline color="gray" className="cancel" onClick={onClose}>
           Cancel
-        </Button>
+        </ButtonOutline>
       </div>
 
       <ConfirmModal

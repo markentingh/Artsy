@@ -1,10 +1,14 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useEffect, useState, useRef } from 'react';
+import { useSession } from '@/context/session';
 import { useCollection } from '@/context/collection';
+import { CustomImages } from '@/api/user/customImages';
 import TextArea from '@/components/forms/textarea';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 
 export default function ArtworkQuestions() {
+  const session = useSession();
+  const { getCustomImageUrl } = CustomImages(session);
   const {
     aiItems, currentItemIndex, currentItem,
     currentItemQuestions, itemAnswers, setItemAnswers,
@@ -12,6 +16,53 @@ export default function ArtworkQuestions() {
     setStep, doGeneratePreview, STEPS, onClose,
     collectionArtwork, collectionId, api, setArtworkPreview,
   } = useCollection();
+
+  const [previews, setPreviews] = useState([]);
+  const [referencePreviews, setReferencePreviews] = useState([]);
+  const [customImageRefs, setCustomImageRefs] = useState([]);
+
+  const latestRef = useRef({});
+  latestRef.current = { collectionArtwork, collectionId, getCustomImageUrl };
+
+  useEffect(() => {
+    if (!currentItem || !api) return;
+    let cancelled = false;
+
+    api.getItemPreviews(currentItem.id).then((res) => {
+      if (!cancelled && res.data.success) {
+        setPreviews(res.data.data || []);
+      }
+    }).catch(() => {});
+
+    api.getItemReferences(currentItem.id).then(async (res) => {
+      if (!cancelled && res.data.success) {
+        const refs = res.data.data || [];
+        const artworkRefs = refs.filter(r => r.artworkId);
+        const customRefs = refs.filter(r => r.customImageId);
+        const { collectionArtwork: ca, collectionId: cId, getCustomImageUrl: getUrl } = latestRef.current;
+
+        if (!cancelled) {
+          const refArtworks = [];
+          for (const r of artworkRefs) {
+            const generated = ca.filter(a => a.active && String(a.itemId) === String(r.artworkId));
+            for (const a of generated) {
+              refArtworks.push({
+                thumb: api.getCollectionArtworkThumbUrl(cId, r.artworkId, a.id),
+                full: api.getCollectionArtworkImageUrl(cId, r.artworkId, a.id, !!a.fullSize),
+              });
+            }
+          }
+          setReferencePreviews(refArtworks);
+          setCustomImageRefs(customRefs.map(r => ({
+            thumb: getUrl(r.customImageId, true),
+            full: getUrl(r.customImageId, false),
+          })));
+        }
+      }
+    }).catch(() => {});
+
+    return () => { cancelled = true; };
+  }, [currentItem]);
 
   const handleItemAnswerChange = useCallback((questionId, value) => {
     setItemAnswers((prev) => ({ ...prev, [questionId]: value }));
@@ -39,6 +90,22 @@ export default function ArtworkQuestions() {
   const thumbImages = useMemo(() => existingArtworks.map(a => a.thumbUrl), [existingArtworks]);
   const fullImages = useMemo(() => existingArtworks.map(a => a.fullUrl), [existingArtworks]);
 
+  const previewThumbImages = useMemo(() => {
+    if (!currentItem) return [];
+    const refThumbs = referencePreviews.map(r => r.thumb);
+    const customThumbs = customImageRefs.map(r => r.thumb);
+    const ownThumbs = previews.map(p => api.getItemPreviewUrl(currentItem.id, p.id, true));
+    return [...refThumbs, ...customThumbs, ...ownThumbs];
+  }, [currentItem, previews, referencePreviews, customImageRefs, api]);
+
+  const previewFullImages = useMemo(() => {
+    if (!currentItem) return [];
+    const refFulls = referencePreviews.map(r => r.full);
+    const customFulls = customImageRefs.map(r => r.full);
+    const ownFulls = previews.map(p => api.getItemPreviewUrl(currentItem.id, p.id, false));
+    return [...refFulls, ...customFulls, ...ownFulls];
+  }, [currentItem, previews, referencePreviews, customImageRefs, api]);
+
   return (
     <div className="flex flex-col h-full">
       <h3 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
@@ -54,6 +121,19 @@ export default function ArtworkQuestions() {
             imageClassName="!max-h-none w-full h-full object-contain"
             onImageClick={(_src, index) => setArtworkPreview({ images: fullImages, src: fullImages[index], alt: 'Artwork Preview' })}
             placeholder="No Thumbnail"
+          />
+        </div>
+      )}
+      {thumbImages.length === 0 && previewThumbImages.length > 0 && (
+        <div className="w-full max-w-[300px] mx-auto rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 mb-4">
+          <Carousel
+            images={previewThumbImages}
+            alt="Artwork Previews"
+            singleImage
+            infiniteScroll
+            imageClassName="!max-h-none w-full h-full object-contain"
+            onImageClick={(_src, index) => setArtworkPreview({ images: previewFullImages, src: previewFullImages[index], alt: 'Artwork Preview' })}
+            placeholder="No Previews"
           />
         </div>
       )}
@@ -78,7 +158,7 @@ export default function ArtworkQuestions() {
         )}
       </div>
       <div className="buttons flex justify-end gap-2 mt-4 mt-auto">
-        <ButtonOutline className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+        <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         <ButtonOutline onClick={handleNext}>Next</ButtonOutline>
       </div>
     </div>

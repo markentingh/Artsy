@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-export default function ButtonOutline({ to, children, onClick, disabled, color, size, className = '' }) {
+export default function ButtonOutline({ to, children, onClick, disabled, color, size, type = 'button', className = '' }) {
   const colorClasses = color === 'green'
     ? 'border-green-600 text-green-600 dark:text-green-500 hover:bg-green-600 hover:text-white dark:hover:bg-green-700 dark:hover:text-white'
     : color === 'red'
@@ -25,7 +25,7 @@ export default function ButtonOutline({ to, children, onClick, disabled, color, 
   }
 
   return (
-    <button type="button" onClick={onClick} disabled={disabled} className={classes}>
+    <button type={type} onClick={onClick} disabled={disabled} className={classes}>
       {children}
     </button>
   );

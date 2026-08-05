@@ -3,7 +3,7 @@ import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import Modal from '@/components/ui/modal';
 import Carousel from '@/components/ui/carousel';
-import Button from '@/components/ui/button';
+import ButtonOutline from '@/components/ui/button-outline';
 import Spinner from '@/components/ui/spinner';
 import Message from '@/components/ui/message';
 
@@ -114,9 +114,9 @@ export default function ArtworkSelector({ show, projectId, currentIndex, onSelec
       )}
 
       <div className="buttons flex justify-end gap-2 mt-4">
-        <Button color="gray" className="cancel" onClick={onClose}>
+        <ButtonOutline color="gray" className="cancel" onClick={onClose}>
           Cancel
-        </Button>
+        </ButtonOutline>
       </div>
     </Modal>
   );

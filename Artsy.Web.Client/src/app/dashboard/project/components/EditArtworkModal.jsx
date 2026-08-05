@@ -765,10 +765,10 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
           </ButtonOutline>
         </div>
       )}
-      {previewEstimatedCost && (
+      {previewEstimatedCost != null && (
         <div className="mb-4">
           <span className="text-sm text-gray-600 dark:text-gray-400">
-            Estimated Cost: {previewEstimatedCost.textInputTokens + previewEstimatedCost.imageInputTokens + previewEstimatedCost.imageOutputTokens} tokens
+            Estimated Cost: {previewEstimatedCost} tokens
           </span>
         </div>
       )}
@@ -979,7 +979,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         >
           <p className="text-sm">Do you really want to delete this reference image? This cannot be undone.</p>
           <div className="buttons mt-4 flex justify-end gap-2">
-            <ButtonOutline className="cancel" onClick={() => setDeleteReferenceTarget(null)}>
+            <ButtonOutline color="gray" className="cancel" onClick={() => setDeleteReferenceTarget(null)}>
               Cancel
             </ButtonOutline>
             <ButtonOutline onClick={handleDeleteReference}>

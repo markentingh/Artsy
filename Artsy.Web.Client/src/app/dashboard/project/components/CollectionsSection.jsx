@@ -6,6 +6,7 @@ import ButtonOutline from '@/components/ui/button-outline';
 import ButtonIcon from '@/components/ui/button-icon';
 import Message from '@/components/ui/message';
 import Carousel from '@/components/ui/carousel';
+import CarouselElements from '@/components/ui/carousel-elements';
 import Tooltip from '@/components/ui/tooltip';
 import ConfirmModal from '@/components/ui/confirm-modal';
 import CollectionModal from './CollectionModal';
@@ -145,8 +146,8 @@ export default function CollectionsSection({ projectId, project, showNewButton =
           No Collections exist for this project
         </div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,300px)] gap-4">
-          {collections.map((collection) => {
+        <CarouselElements
+          elements={collections.map((collection) => {
             const artworkImages = (collection.artwork || [])
               .filter(a => a.active)
               .map(a => getCollectionArtworkThumbUrl(collection.id, a.itemId, a.id));
@@ -158,7 +159,7 @@ export default function CollectionsSection({ projectId, project, showNewButton =
               <div
                 key={collection.id}
                 onClick={() => handleResumeCollection(collection)}
-                className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 hover:shadow-md transition cursor-pointer"
+                className="w-[300px] bg-white dark:bg-gray-800 rounded-lg shadow p-4 hover:shadow-md transition cursor-pointer"
               >
                 <div className="w-full mb-3 rounded-lg overflow-hidden">
                   <Carousel
@@ -207,7 +208,7 @@ export default function CollectionsSection({ projectId, project, showNewButton =
               </div>
             );
           })}
-        </div>
+        />
       )}
 
       <CollectionModal

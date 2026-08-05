@@ -38,6 +38,31 @@ namespace Artsy.API.Controllers
             }
         }
 
+        [HttpGet("get-all-item-references")]
+        public async Task<IActionResult> GetProjectReferences([FromQuery] Guid projectId)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (projectId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Project ID is required." });
+
+            try
+            {
+                var project = await _projectRepository.GetByIdAsync(projectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                var references = await _projectItemReferenceRepository.GetByProjectIdAsync(projectId);
+                return Json(new ApiResponse { success = true, data = references });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
         [HttpPost("upload-item-reference")]
         public async Task<IActionResult> UploadItemReference([FromForm] IFormFile file, [FromForm] Guid itemId)
         {

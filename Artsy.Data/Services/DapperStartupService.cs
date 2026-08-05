@@ -54,6 +54,11 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<IProjectCollectionInstagramPostRepository, ProjectCollectionInstagramPostRepository>();
             builder.Services.AddTransient<IProjectCollectionInstagramPostImageRepository, ProjectCollectionInstagramPostImageRepository>();
             builder.Services.AddTransient<ICustomImageRepository, CustomImageRepository>();
+            builder.Services.AddTransient<IProductRepository, ProductRepository>();
+            builder.Services.AddTransient<ISubscriptionRepository, SubscriptionRepository>();
+            builder.Services.AddTransient<IInvoiceRepository, InvoiceRepository>();
+            builder.Services.AddTransient<IAppUserSubscriptionRepository, AppUserSubscriptionRepository>();
+            builder.Services.AddTransient<IAppUserAITokenRepository, AppUserAITokenRepository>();
         }
     }
 }
