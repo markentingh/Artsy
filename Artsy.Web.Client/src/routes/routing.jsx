@@ -4,6 +4,7 @@ import { useSession } from '@/context/session';
 import appRoutes from './app-routes';
 import dashboardRoutes from './dashboard-routes';
 import RootLayout from '@/app/layout';
+import HomeLayout from '@/app/home/layout';
 import DashboardLayout from '@/app/dashboard/layout';
 
 function ProtectedRoute({ children }) {
@@ -41,7 +42,7 @@ const RouteElement = ({ path, Element, layout: Layout }) => {
 export default function Routing() {
   return (
     <Routes>
-      {appRoutes.map((route) => RouteElement({ ...route, layout: RootLayout }))}
+      {appRoutes.map((route) => RouteElement({ ...route, layout: route.path === '/' ? HomeLayout : RootLayout }))}
       {dashboardRoutes.map((route) => RouteElement({ ...route, layout: DashboardLayout }))}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

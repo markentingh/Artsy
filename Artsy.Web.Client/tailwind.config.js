@@ -9,6 +9,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ['"Noto Sans"', 'sans-serif'],
+        serif: ['"Libertinus Serif"', 'serif'],
       },
       colors: {
         primary: {
