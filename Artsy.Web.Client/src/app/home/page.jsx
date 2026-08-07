@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useSession } from '@/context/session';
+import ShinyImage from '@/components/ui/shiny-image';
 
 function LearnMoreButton() {
   return (
@@ -34,6 +36,7 @@ const PurpleGlow = React.forwardRef(({ position, vertical = 50 }, ref) => {
 });
 
 export default function Home() {
+  const { isAuthenticated } = useSession();
   const logoRef = useRef(null);
   const heroTextRef = useRef(null);
   const glow1Ref = useRef(null);
@@ -70,6 +73,14 @@ export default function Home() {
           backgroundImage: 'url(/home/hero-01.webp)'
         }}
       >
+        <div className="sticky top-6 z-20 w-full flex justify-end px-6">
+          <Link
+            to={isAuthenticated ? '/dashboard' : '/login'}
+            className="text-sm font-medium text-white/80 hover:text-white transition"
+          >
+            {isAuthenticated ? 'Dashboard' : 'Log In'}
+          </Link>
+        </div>
         <div className="relative z-10 max-w-7xl mx-auto px-6 min-h-screen flex flex-col">
           <div className="flex-1 flex items-center justify-center ml-20">
             <img
@@ -111,7 +122,11 @@ export default function Home() {
 
 
         <div className="relative z-10 max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-12 items-center">
-          <img src="/home/flow-diagram.svg" alt="Concept to campaign workflow" className="w-full h-auto" />
+          <ShinyImage
+            src="/home/flow-diagram.png"
+            alt="Concept to campaign workflow"
+            className="w-full h-auto rounded-2xl overflow-hidden"
+          />
           <div className="lg:pl-12">
             <h2 className="text-2xl sm:text-4xl md:text-5xl font-semibold tracking-tight mb-6">
               From Concept to Campaign on Autopilot
@@ -130,7 +145,9 @@ export default function Home() {
         <PurpleGlow ref={glow1Ref} position="60%" />
 
         <div className="relative z-10 max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-12 items-center">
-          <Placeholder label="Product catalog placeholder" />
+          <div className="flex justify-center w-full mb-8">
+            <img src="/home/printify-logo.svg" alt="Printify" className="w-1/2 sm:w-2/5 md:w-1/4 h-auto rounded-2xl" />
+          </div>
           <div className="lg:pl-12">
             <h2 className="text-2xl sm:text-4xl md:text-5xl font-semibold tracking-tight mb-6">
               1,790+ Premium Products at Your Fingertips
@@ -141,7 +158,17 @@ export default function Home() {
               network of print providers and publish directly to your online store — no inventory,
               no upfront costs.
             </p>
-            <LearnMoreButton />
+            <div className="flex flex-wrap items-center gap-4">
+              <LearnMoreButton />
+              <a
+                href="https://printify.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center px-6 py-3 border border-white/40 text-white rounded-full hover:bg-white/10 transition"
+              >
+                Visit Printify
+              </a>
+            </div>
           </div>
         </div>
       </section>

@@ -24,6 +24,7 @@ function ConfigureModal({ show, onClose }) {
     message, setMessage, published, saving, loading,
     allImagesHaveVariants, hasSettingsChanged,
     handleSave, handlePublish, handleUnpublish,
+    saveMessage,
   } = usePrintifyBlueprint();
 
   if (!show) return null;
@@ -45,7 +46,7 @@ function ConfigureModal({ show, onClose }) {
 
       <div className="buttons flex justify-between gap-2 mt-4">
         <div className="flex gap-2">
-          {allImagesHaveVariants && !published && (
+          {!published && (
             <ButtonOutline
               onClick={handlePublish}
               disabled={saving || loading}
@@ -64,7 +65,12 @@ function ConfigureModal({ show, onClose }) {
             </ButtonOutline>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {saveMessage && (
+            <span className="text-sm text-green-600 dark:text-green-400 mr-2 transition-opacity duration-500">
+              {saveMessage}
+            </span>
+          )}
           <ButtonOutline className="cancel" onClick={onClose}>
             Cancel
           </ButtonOutline>

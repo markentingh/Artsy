@@ -11,5 +11,6 @@ namespace Artsy.Data.Entities.Projects
         public string Description { get; set; } = "";
         public string SafetyInfo { get; set; } = "";
         public string PricingJson { get; set; } = "[]";
+        public bool Active { get; set; } = true;
     }
 }

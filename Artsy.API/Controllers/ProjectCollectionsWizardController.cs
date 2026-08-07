@@ -1829,5 +1829,71 @@ namespace Artsy.API.Controllers
             }
         }
 
+        [HttpPost("update-collection-products-active")]
+        public async Task<IActionResult> UpdateCollectionProductsActive([FromBody] UpdateCollectionProductsActiveRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.CollectionId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Collection ID is required." });
+
+            try
+            {
+                var collection = await _projectCollectionRepository.GetByIdAsync(request.CollectionId);
+                if (collection == null)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var products = request.Products.Select(p => new ProjectCollectionProduct
+                {
+                    CollectionId = request.CollectionId,
+                    ProjectBlueprintId = p.ProjectBlueprintId,
+                    Active = p.Active
+                });
+
+                await _productRepository.BulkUpdateActiveAsync(request.CollectionId, products);
+                return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("get-collection-products")]
+        public async Task<IActionResult> GetCollectionProducts([FromQuery] Guid collectionId)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (collectionId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Collection ID is required." });
+
+            try
+            {
+                var products = await _productRepository.GetByCollectionIdAsync(collectionId);
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = products.Select(p => new
+                    {
+                        id = p.Id,
+                        projectId = p.ProjectId,
+                        collectionId = p.CollectionId,
+                        projectBlueprintId = p.ProjectBlueprintId,
+                        blueprintId = p.BlueprintId,
+                        name = p.Name,
+                        active = p.Active
+                    })
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
     }
 }

@@ -36,8 +36,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             product.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectCollectionProducts"" (""Id"", ""ProjectId"", ""CollectionId"", ""ProjectBlueprintId"", ""BlueprintId"", ""Name"", ""Description"", ""SafetyInfo"", ""PricingJson"")
-                VALUES (@Id, @ProjectId, @CollectionId, @ProjectBlueprintId, @BlueprintId, @Name, @Description, @SafetyInfo, @PricingJson)
+                INSERT INTO public.""ProjectCollectionProducts"" (""Id"", ""ProjectId"", ""CollectionId"", ""ProjectBlueprintId"", ""BlueprintId"", ""Name"", ""Description"", ""SafetyInfo"", ""PricingJson"", ""Active"")
+                VALUES (@Id, @ProjectId, @CollectionId, @ProjectBlueprintId, @BlueprintId, @Name, @Description, @SafetyInfo, @PricingJson, @Active)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectCollectionProduct>(query, product);
         }
@@ -49,9 +49,28 @@ namespace Artsy.Data.Repositories.Projects
                     ""Name"" = @Name,
                     ""Description"" = @Description,
                     ""SafetyInfo"" = @SafetyInfo,
-                    ""PricingJson"" = @PricingJson
+                    ""PricingJson"" = @PricingJson,
+                    ""Active"" = @Active
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, product);
+        }
+
+        public async Task BulkUpdateActiveAsync(Guid collectionId, IEnumerable<ProjectCollectionProduct> products)
+        {
+            const string query = @"
+                UPDATE public.""ProjectCollectionProducts"" SET
+                    ""Active"" = @Active
+                WHERE ""CollectionId"" = @CollectionId AND ""ProjectBlueprintId"" = @ProjectBlueprintId";
+
+            foreach (var product in products)
+            {
+                await _dbConnection.ExecuteAsync(query, new
+                {
+                    CollectionId = collectionId,
+                    product.ProjectBlueprintId,
+                    product.Active
+                });
+            }
         }
 
         public async Task DeleteAsync(Guid id)

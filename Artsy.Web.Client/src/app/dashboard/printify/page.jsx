@@ -135,9 +135,10 @@ export default function DashboardPrintify() {
     setSelectedBlueprint(null);
   };
 
-  const handleConfigSave = () => {
-    setSelectedBlueprint(null);
-    handleSearch(search, brand);
+  const handleConfigSave = (published) => {
+    if (typeof published === 'boolean' && selectedBlueprint) {
+      setResults((prev) => prev.map((bp) => (bp.id === selectedBlueprint.id ? { ...bp, published } : bp)));
+    }
   };
 
   return (

@@ -53,6 +53,7 @@ export function PrintifyBlueprintProvider({ children, show, blueprint, onClose, 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
+  const [saveMessage, setSaveMessage] = useState(null);
   const [published, setPublished] = useState(false);
   const [imageSettings, setImageSettings] = useState({});
   const [initialImageSettings, setInitialImageSettings] = useState({});
@@ -225,6 +226,8 @@ export function PrintifyBlueprintProvider({ children, show, blueprint, onClose, 
       await saveBlueprintImages(blueprint.id, { images, published, imagePrompt });
       setInitialImageSettings(JSON.parse(JSON.stringify(imageSettings)));
       setInitialImagePrompt(imagePrompt);
+      setSaveMessage('Changes saved successfully');
+      setTimeout(() => setSaveMessage(null), 5000);
       if (onSave) onSave();
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save' });
@@ -242,7 +245,7 @@ export function PrintifyBlueprintProvider({ children, show, blueprint, onClose, 
       setPublished(true);
       setInitialImageSettings(JSON.parse(JSON.stringify(imageSettings)));
       setInitialImagePrompt(imagePrompt);
-      if (onSave) onSave();
+      if (onSave) onSave(true);
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to publish' });
     } finally {
@@ -257,7 +260,7 @@ export function PrintifyBlueprintProvider({ children, show, blueprint, onClose, 
       const images = buildImagesPayload();
       await saveBlueprintImages(blueprint.id, { images, published: false, imagePrompt });
       setPublished(false);
-      if (onSave) onSave();
+      if (onSave) onSave(false);
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to unpublish' });
     } finally {
@@ -281,7 +284,7 @@ export function PrintifyBlueprintProvider({ children, show, blueprint, onClose, 
   const value = {
     show, blueprint, onClose, onSave,
     detail, printProviders, variants, selectedProvider,
-    loading, saving, message, setMessage,
+    loading, saving, message, setMessage, saveMessage,
     published, imageSettings, initialImageSettings,
     descriptionExpanded, setDescriptionExpanded,
     outOfStockIds, scrollRef, scrollMaxHeight,

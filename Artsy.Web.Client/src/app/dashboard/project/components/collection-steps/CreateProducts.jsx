@@ -26,6 +26,7 @@ export default function CreateProducts() {
   const [creating, setCreating] = useState(false);
   const [downloadingMockups, setDownloadingMockups] = useState(false);
   const [artworkUploadState, setArtworkUploadState] = useState({});
+  const [activeMap, setActiveMap] = useState({});
 
   const createdBlueprints = useMemo(() => {
     const map = {};
@@ -75,6 +76,38 @@ export default function CreateProducts() {
     );
   }, [blueprintsWithImages, imagesByBlueprint]);
 
+  const activeBlueprints = useMemo(() =>
+    blueprintsWithImages.filter(bp => activeMap[bp.id] !== false),
+    [blueprintsWithImages, activeMap]
+  );
+
+  const activeItemIds = useMemo(() => {
+    const ids = new Set();
+    for (const bp of activeBlueprints) {
+      if (bp.placementJson) {
+        try {
+          const placements = typeof bp.placementJson === 'string' ? JSON.parse(bp.placementJson) : bp.placementJson;
+          if (placements && Array.isArray(placements)) {
+            for (const p of placements) {
+              if (p.source === 'item' && p.itemId) ids.add(String(p.itemId));
+            }
+          }
+        } catch { /* ignore */ }
+      }
+    }
+    return ids;
+  }, [activeBlueprints]);
+
+  const activeAllImages = useMemo(() =>
+    activeBlueprints.flatMap(bp =>
+      (imagesByBlueprint[bp.id] || []).map(img => ({
+        ...img,
+        blueprintName: bp.name,
+      }))
+    ),
+    [activeBlueprints, imagesByBlueprint]
+  );
+
   useEffect(() => {
     if (collectionId) {
       loadMockups(collectionId);
@@ -93,14 +126,24 @@ export default function CreateProducts() {
     }
   }, [collectionArtwork]);
 
+  useEffect(() => {
+    setActiveMap(prev => {
+      const next = { ...prev };
+      for (const bp of blueprintsWithImages) {
+        if (next[bp.id] === undefined || createdBlueprints[bp.id]) next[bp.id] = true;
+      }
+      return next;
+    });
+  }, [blueprintsWithImages, createdBlueprints]);
+
   const acceptedArtwork = useMemo(() =>
     (collectionArtwork || []).filter(a => a.accepted && a.active && blueprintItemIds.has(String(a.itemId))),
     [collectionArtwork, blueprintItemIds]
   );
 
   const allCreated = useMemo(() => {
-    return blueprintsWithImages.length > 0 && blueprintsWithImages.every(bp => createdBlueprints[bp.id]);
-  }, [blueprintsWithImages, createdBlueprints]);
+    return activeBlueprints.length === 0 || activeBlueprints.every(bp => createdBlueprints[bp.id]);
+  }, [activeBlueprints, createdBlueprints]);
 
   const artworkImages = useMemo(() =>
     acceptedArtwork.map(a => ({
@@ -109,6 +152,11 @@ export default function CreateProducts() {
       type: 'artwork',
     })),
     [acceptedArtwork, collectionId, api]
+  );
+
+  const activeArtworkImages = useMemo(() =>
+    artworkImages.filter(art => activeItemIds.has(String(art.itemId))),
+    [artworkImages, activeItemIds]
   );
 
   const handleUploadImages = useCallback(async () => {
@@ -120,7 +168,7 @@ export default function CreateProducts() {
     setUploading(true);
     setMessage(null);
 
-    for (const art of artworkImages) {
+    for (const art of activeArtworkImages) {
       if (artworkUploadState[art.id]?.status === 'done') continue;
 
       setArtworkUploadState(prev => ({ ...prev, [art.id]: { status: 'uploading' } }));
@@ -144,13 +192,13 @@ export default function CreateProducts() {
     }
 
     setUploading(false);
-  }, [collectionId, project, artworkImages, artworkUploadState, printifyApi, setMessage]);
+  }, [collectionId, project, activeArtworkImages, artworkUploadState, printifyApi, setMessage]);
 
   const allImagesUploaded = useMemo(() => {
-    const artworkDone = artworkImages.length > 0 && artworkImages.every(art => artworkUploadState[art.id]?.status === 'done');
-    const artworkReady = artworkImages.length === 0 || artworkDone;
+    const artworkDone = activeArtworkImages.length > 0 && activeArtworkImages.every(art => artworkUploadState[art.id]?.status === 'done');
+    const artworkReady = activeArtworkImages.length === 0 || artworkDone;
     return artworkReady;
-  }, [artworkImages, artworkUploadState]);
+  }, [activeArtworkImages, artworkUploadState]);
 
   const handleCreateProducts = useCallback(async () => {
     if (!collectionId || !project?.printifyStoreId) {
@@ -164,7 +212,7 @@ export default function CreateProducts() {
     let successCount = 0;
     let processedCount = 0;
 
-    for (const bp of blueprintsWithImages) {
+    for (const bp of activeBlueprints) {
       const variantCount = variantCountByBlueprint[bp.id] || 0;
       if (variantCount === 0) continue;
 
@@ -218,7 +266,7 @@ export default function CreateProducts() {
     } catch { /* ignore */ }
 
     setCreating(false);
-  }, [collectionId, project, blueprintsWithImages, variantCountByBlueprint, printifyProducts, printifyApi, setMessage, setPrintifyProducts, loadMockups]);
+  }, [collectionId, project, activeBlueprints, variantCountByBlueprint, printifyProducts, printifyApi, setMessage, setPrintifyProducts, loadMockups]);
 
   const handleNext = useCallback(async () => {
     const colId = collectionId || await ensureCollection();
@@ -232,7 +280,7 @@ export default function CreateProducts() {
 
     try {
       const allPbImages = [];
-      for (const bp of blueprints) {
+      for (const bp of activeBlueprints) {
         try {
           const pbiResp = await api.getProductBlueprintImages(bp.id);
           if (pbiResp.data.success) {
@@ -280,16 +328,23 @@ export default function CreateProducts() {
     } catch (e) { }
 
     setStep(STEPS.PRODUCT_IMAGE_PROMPT);
-  }, [collectionId, ensureCollection, printifyProducts, blueprints, api, setProductBlueprintImages, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex, setProductImagePrompt, setStep, STEPS, setMessage]);
+  }, [collectionId, ensureCollection, printifyProducts, activeBlueprints, api, setProductBlueprintImages, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex, setProductImagePrompt, setStep, STEPS, setMessage]);
 
   const handleStart = useCallback(async () => {
+    if (!collectionId) return;
+    const products = blueprintsWithImages.map(bp => ({
+      projectBlueprintId: bp.id,
+      active: activeMap[bp.id] !== false,
+    }));
+    await printifyApi.updateCollectionProductsActive({ collectionId, products });
+
     if (allImagesUploaded) {
       await handleCreateProducts();
     } else {
       await handleUploadImages();
       await handleCreateProducts();
     }
-  }, [allImagesUploaded, handleUploadImages, handleCreateProducts]);
+  }, [collectionId, blueprintsWithImages, activeMap, printifyApi, allImagesUploaded, handleUploadImages, handleCreateProducts]);
 
   const allPreviewImages = useMemo(() => {
     return [
@@ -324,8 +379,13 @@ export default function CreateProducts() {
               const isUploading = state?.status === 'uploading';
               const isDone = state?.status === 'done';
               const isError = state?.status === 'error';
+              const isArtworkActive = activeItemIds.has(String(art.itemId));
               return (
-                <div key={art.id} className="relative w-[120px] h-[120px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 cursor-pointer" onClick={() => handleImageClick(art)}>
+                <div
+                  key={art.id}
+                  className={`relative w-[120px] h-[120px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 ${isArtworkActive ? 'cursor-pointer' : 'opacity-40 cursor-not-allowed'}`}
+                  onClick={isArtworkActive ? () => handleImageClick(art) : undefined}
+                >
                   <img
                     src={art.imageUrl}
                     alt="Artwork"
@@ -358,16 +418,26 @@ export default function CreateProducts() {
           {blueprintsWithImages.map((bp) => {
             const variantCount = variantCountByBlueprint[bp.id] || 0;
             const isCreated = createdBlueprints[bp.id] || false;
+            const isActive = activeMap[bp.id] !== false;
             return (
               <Item key={bp.id}>
                 <div className="flex items-center w-full">
-                  <Checked checked={isCreated} />
-                  <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    disabled={isCreated}
+                    onChange={() => !isCreated && setActiveMap(prev => ({ ...prev, [bp.id]: !isActive }))}
+                    className={`mr-3 w-4 h-4 accent-blue-600 ${isCreated ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                  />
+                  <span className={`text-sm font-medium ${isActive ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500 line-through'}`}>
                     {bp.name}
                   </span>
-                  <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">
-                    {variantCount} {variantCount === 1 ? 'variant' : 'variants'}
-                  </span>
+                  <div className="ml-auto flex items-center gap-3">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      {variantCount} {variantCount === 1 ? 'variant' : 'variants'}
+                    </span>
+                    <Checked checked={isCreated} />
+                  </div>
                 </div>
               </Item>
             );
@@ -378,7 +448,7 @@ export default function CreateProducts() {
       <div className="buttons flex justify-end gap-2 mt-auto">
         <Button
           onClick={allCreated ? handleNext : handleStart}
-          disabled={uploading || creating || !project?.printifyStoreId}
+          disabled={uploading || creating || !project?.printifyStoreId || activeBlueprints.length === 0}
         >
           {uploading ? (
             <>

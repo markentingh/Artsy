@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { usePrintifyBlueprint, TYPE_OPTIONS, POSITION_OPTIONS, POSITION_FRONT } from '@/context/printifyBlueprint';
 import Select from '@/components/forms/select';
 import SelectChecklist from '@/components/ui/select-checklist';
@@ -8,6 +8,8 @@ export default function ImagesTab() {
     detail, blueprint, imageSettings, handleImageSettingChange,
     variants, outOfStockIds, api,
   } = usePrintifyBlueprint();
+
+  const hasAutoChecked = useRef(false);
 
   const variantColorOptions = useMemo(() => {
     const colorMap = new Map();
@@ -29,11 +31,38 @@ export default function ImagesTab() {
     );
   }, [variants, outOfStockIds]);
 
+  useEffect(() => {
+    if (hasAutoChecked.current || variantColorOptions.length !== 1 || !detail?.imageCount) return;
+    hasAutoChecked.current = true;
+    const color = variantColorOptions[0].value;
+    for (let i = 0; i < detail.imageCount; i++) {
+      const settings = imageSettings[i] || {};
+      if (!settings.variantColors || settings.variantColors.length === 0) {
+        handleImageSettingChange(i, 'variantColors', [color]);
+      }
+    }
+  }, [variantColorOptions, detail?.imageCount, imageSettings, handleImageSettingChange]);
+
   if (!detail || detail.imageCount === 0) return null;
+
+  const handleUncheckAll = () => {
+    for (let i = 0; i < detail.imageCount; i++) {
+      handleImageSettingChange(i, 'variantColors', []);
+    }
+  };
 
   return (
     <div>
-      <label className="block text-sm font-medium mb-2">Images</label>
+      <div className="flex items-center justify-between mb-2">
+        <label className="block text-sm font-medium">Images</label>
+        <button
+          type="button"
+          onClick={handleUncheckAll}
+          className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
+        >
+          Uncheck All
+        </button>
+      </div>
       <div className="grid grid-cols-[repeat(auto-fill,300px)] gap-4">
         {Array.from({ length: detail.imageCount }, (_, i) => {
           const settings = imageSettings[i] || { variantColors: [], type: '0', position: String(POSITION_FRONT) };

@@ -9,6 +9,7 @@ namespace Artsy.Data.Interfaces.Projects
         Task<IEnumerable<ProjectCollectionProduct>> GetByCollectionIdAsync(Guid collectionId);
         Task<ProjectCollectionProduct> CreateAsync(ProjectCollectionProduct product);
         Task UpdateAsync(ProjectCollectionProduct product);
+        Task BulkUpdateActiveAsync(Guid collectionId, IEnumerable<ProjectCollectionProduct> products);
         Task DeleteAsync(Guid id);
     }
 }

@@ -8,5 +8,8 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionProducts"
     "Name" VARCHAR(64) NOT NULL DEFAULT '',
     "Description" TEXT NOT NULL DEFAULT '',
     "SafetyInfo" TEXT NOT NULL DEFAULT '',
-    "PricingJson" TEXT NOT NULL DEFAULT '[]'
+    "PricingJson" TEXT NOT NULL DEFAULT '[]',
+    "Active" BOOLEAN NOT NULL DEFAULT TRUE
 );
+
+ALTER TABLE public."ProjectCollectionProducts" ADD COLUMN IF NOT EXISTS "Active" BOOLEAN NOT NULL DEFAULT TRUE;

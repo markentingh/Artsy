@@ -34,10 +34,6 @@ Q 699.05 55.75 682.4 54.15 Z"/>
 </g>
 
 <g id="Layer1_0_FILL">
-<path fill="#162772" fill-opacity="0.24705882352941178" stroke="none" d="
-M 352 37.95
-L 342 37.95 351.7 54.7 361.35 37.95 352 37.95 Z"/>
-
 <path fill="#0066FF" fill-opacity="0.996078431372549" stroke="none" d="
 M 104.7 381.7
 L 114.35 364.95 104.7 364.95 95 364.95 104.7 381.7
@@ -51,10 +47,14 @@ M 594.35 234.95
 L 584.7 234.95 575 234.95 584.7 251.7 594.35 234.95 Z"/>
 
 <path fill="#FF6666" fill-opacity="0.996078431372549" stroke="none" d="
-M 335 364.95
-L 344.7 381.7 354.35 364.95 344.7 364.95 335 364.95
-M 344.7 234.95
-L 335 234.95 344.7 251.7 354.35 234.95 344.7 234.95 Z"/>
+M 344.7 381.7
+L 354.35 364.95 344.7 364.95 335 364.95 344.7 381.7
+M 354.35 234.95
+L 344.7 234.95 335 234.95 344.7 251.7 354.35 234.95 Z"/>
+
+<path fill="#162772" fill-opacity="0.24705882352941178" stroke="none" d="
+M 361.35 37.95
+L 352 37.95 342 37.95 351.7 54.7 361.35 37.95 Z"/>
 </g>
 
 <g id="Layer1_0_STROKES_1_FILL">
@@ -562,10 +562,10 @@ L 584.7 364.95"/>
 
 <g transform="matrix( 1.26666259765625, 0, 0, 1.26666259765625, 31.8,418.6) ">
 <clipPath id="Mask_Mask_2">
-<rect x="2.3" y="-2" width="117.6" height="23.05" fill="#FFFFFF" stroke="none"/>
+<rect x="5.85" y="-2" width="110.5" height="23.05" fill="#FFFFFF" stroke="none"/>
 </clipPath>
 
-<text clip-path="url(#Mask_Mask_2)" writing-mode="lr"><tspan x="4.35" y="13.9" baseline-shift="0%" font-family="Microsoft Tai Le" font-size="15" fill="#0099FF" fill-opacity="0.996078431372549" xml:space="preserve">Create Questions</tspan></text>
+<text clip-path="url(#Mask_Mask_2)" writing-mode="lr"><tspan x="7.95" y="13.9" baseline-shift="0%" font-family="Microsoft Tai Le" font-size="15" fill="#0099FF" fill-opacity="0.996078431372549" xml:space="preserve">Write Questions</tspan></text>
 </g>
 
 <g transform="matrix( 1.26666259765625, 0, 0, 1.26666259765625, 48.95,143.65) ">
