@@ -47,7 +47,7 @@ namespace Artsy.AI
             }
         }
 
-        public static async Task<string> Prompt(string system, string assistant, string user, int modelId = 0)
+        public static async Task<string> Prompt(string system, string assistant, string user, int modelId = 0, double temperature = 0.6, long? seed = null)
         {
             var preferredModelId = modelId > 0 ? modelId : PreferredModel > 0 ? PreferredModel : 0;
             if (preferredModelId == 0 || !Available.TryGetValue(preferredModelId, out var myLLM))
@@ -77,7 +77,9 @@ namespace Artsy.AI
             var requestBody = new ChatCompletionRequest
             {
                 Model = myLLM.Model,
-                Messages = messages
+                Messages = messages,
+                Temperature = temperature,
+                Seed = seed
             };
 
             if (myLLM.ExtraBody?.Count > 0)
@@ -116,37 +118,5 @@ namespace Artsy.AI
             return completionResponse.Choices[0].Message.Content;
         }
 
-        private class ChatMessage
-        {
-            [JsonPropertyName("role")]
-            public string Role { get; set; }
-
-            [JsonPropertyName("content")]
-            public string Content { get; set; }
-        }
-
-        private class ChatCompletionRequest
-        {
-            [JsonPropertyName("model")]
-            public string Model { get; set; }
-
-            [JsonPropertyName("messages")]
-            public List<ChatMessage> Messages { get; set; }
-
-            [JsonPropertyName("extra_body")]
-            public Dictionary<string, object> ExtraBody { get; set; }
-        }
-
-        private class ChatCompletionResponse
-        {
-            [JsonPropertyName("choices")]
-            public List<ChatChoice> Choices { get; set; }
-        }
-
-        private class ChatChoice
-        {
-            [JsonPropertyName("message")]
-            public ChatMessage Message { get; set; }
-        }
     }
 }

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useSession } from '@/context/session';
 
 export default function Navbar({ showOnScroll }) {
+  const { isAuthenticated } = useSession();
   const [isVisible, setIsVisible] = useState(showOnScroll === undefined);
 
   useEffect(() => {
@@ -35,13 +37,19 @@ export default function Navbar({ showOnScroll }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link to="/login" className="px-4 py-2 text-sm text-white/80 hover:text-white transition">Log In</Link>
-            <Link
-              to="/subscriptions"
-              className="px-4 py-2 text-sm bg-white text-slate-950 rounded-full font-medium hover:bg-white/90 transition"
-            >
-              Sign Up
-            </Link>
+            {isAuthenticated ? (
+              <Link to="/dashboard" className="px-4 py-2 text-sm text-white/80 hover:text-white transition">Dashboard</Link>
+            ) : (
+              <>
+                <Link to="/login" className="px-4 py-2 text-sm text-white/80 hover:text-white transition">Log In</Link>
+                <Link
+                  to="/subscriptions"
+                  className="px-4 py-2 text-sm bg-white text-slate-950 rounded-full font-medium hover:bg-white/90 transition"
+                >
+                  Sign Up
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </div>

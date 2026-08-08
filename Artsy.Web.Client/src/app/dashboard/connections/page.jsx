@@ -4,6 +4,7 @@ import { Connections } from '@/api/user/connections';
 import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';
 import Button from '@/components/ui/button';
+import ReconnectInstagramModal from '@/components/modals/ReconnectInstagramModal';
 
 const staticServices = [
   { key: 'telegram', name: 'Telegram', color: 'bg-blue-400' },
@@ -45,6 +46,7 @@ export default function DashboardConnections() {
   const [loadingInstagram, setLoadingInstagram] = useState(true);
   const [connectingInstagram, setConnectingInstagram] = useState(false);
   const [message, setMessage] = useState(null);
+  const [showReconnectModal, setShowReconnectModal] = useState(false);
 
   const staticApiMap = {
     telegram: { getStatus: getTelegramStatus, connect: connectTelegram },
@@ -262,7 +264,7 @@ export default function DashboardConnections() {
     >
       <div className="w-16 h-16 rounded-full bg-pink-600 flex items-center justify-center text-white text-2xl mb-4 overflow-hidden">
         {account.profilePictureUrl ? (
-          <img src={account.profilePictureUrl} alt="IG" className="w-full h-full object-cover" />
+          <img src={account.profilePictureUrl} alt="IG" className="w-full h-full object-cover" onError={() => setShowReconnectModal(true)} />
         ) : (
           'I'
         )}
@@ -352,6 +354,11 @@ export default function DashboardConnections() {
           : instagramAccounts.map((account) => renderInstagramCard(account))}
         {!loadingInstagram && instagramAccounts.length > 0 && renderAddInstagramCard()}
       </div>
+      <ReconnectInstagramModal
+        show={showReconnectModal}
+        onClose={() => setShowReconnectModal(false)}
+        onReconnected={() => setShowReconnectModal(false)}
+      />
     </div>
   );
 }

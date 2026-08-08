@@ -114,6 +114,12 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     deleteProductBlueprintImage: (request) => api.post(`${apiPath}/delete-product-blueprint-image`, request),
     updateSocialMediaConfig: (request) => api.post(`${apiPath}/update-social-media-config`, request),
     generateSocialMediaDescription: (request) => api.post(`${apiPath}/generate-social-media-description`, request),
+    getIdeas: (projectId) => api.get(`${apiPath}/${projectId}/ideas`),
+    getIdea: (projectId, ideaId) => api.get(`${apiPath}/${projectId}/ideas/${ideaId}`),
+    createIdea: (projectId, request) => api.post(`${apiPath}/${projectId}/ideas/create-idea`, request),
+    deleteIdea: (projectId, ideaId) => api.delete(`${apiPath}/${projectId}/ideas/${ideaId}`),
+    makeIdeaCollection: (projectId, ideaId, request) => api.post(`${apiPath}/${projectId}/ideas/${ideaId}/collection`, request),
+
   };
 });
 

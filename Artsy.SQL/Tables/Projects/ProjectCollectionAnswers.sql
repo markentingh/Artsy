@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionAnswers"
     "CollectionId" UUID NOT NULL REFERENCES public."ProjectCollections"("Id"),
     "QuestionId" UUID NULL,
     "ItemId" UUID NULL REFERENCES public."ProjectItems"("Id"),
-    "Answer" VARCHAR(255) NOT NULL DEFAULT ''
+    "Answer" TEXT NOT NULL DEFAULT ''
 );
 
 ALTER TABLE public."ProjectCollectionAnswers" ADD COLUMN IF NOT EXISTS "QuestionId" UUID NULL;

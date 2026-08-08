@@ -10,6 +10,7 @@ import Message from '@/components/ui/message';
 import Button from '@/components/ui/button';
 import ButtonOutline from '@/components/ui/button-outline';
 import Select from '@/components/forms/select';
+import ReconnectInstagramModal from '@/components/modals/ReconnectInstagramModal';
 import ConfigureSocialMediaPosts from './ConfigureSocialMediaPosts';
 
 const platforms = [
@@ -33,6 +34,7 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
   const [instagramAccounts, setInstagramAccounts] = useState([]);
   const [selectedInstagramAccountId, setSelectedInstagramAccountId] = useState('');
   const [showConfigureModal, setShowConfigureModal] = useState(false);
+  const [showReconnectModal, setShowReconnectModal] = useState(false);
 
   const apiMap = {
     printify: { getStatus: getPrintifyStatus, connect: connectPrintify },
@@ -241,7 +243,7 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
             {(() => {
               const selectedAcc = instagramAccounts.find(a => a.id === selectedInstagramAccountId);
               if (selectedAcc?.profilePictureUrl)
-                return <img src={selectedAcc.profilePictureUrl} alt={selectedAcc.username || 'IG'} className="w-full h-full object-cover" />;
+                return <img src={selectedAcc.profilePictureUrl} alt={selectedAcc.username || 'IG'} className="w-full h-full object-cover" onError={() => setShowReconnectModal(true)} />;
               return platform.name[0];
             })()}
           </div>
@@ -377,6 +379,11 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
         onSaved={(updated) => {
           if (onProjectUpdated) onProjectUpdated(updated);
         }}
+      />
+      <ReconnectInstagramModal
+        show={showReconnectModal}
+        onClose={() => setShowReconnectModal(false)}
+        onReconnected={() => setShowReconnectModal(false)}
       />
     </div>
   );

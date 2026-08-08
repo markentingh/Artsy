@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSession } from '@/context/session';
 import ShinyImage from '@/components/ui/shiny-image';
@@ -41,6 +41,8 @@ export default function Home() {
   const heroTextRef = useRef(null);
   const glow1Ref = useRef(null);
   const glow2Ref = useRef(null);
+  const heroRef = useRef(null);
+  const [showTopLink, setShowTopLink] = useState(true);
 
   useEffect(() => {
     const onScroll = () => {
@@ -65,18 +67,32 @@ export default function Home() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  useEffect(() => {
+    if (!heroRef.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setShowTopLink(entry.isIntersecting),
+      { threshold: 0 }
+    );
+    observer.observe(heroRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="font-serif bg-slate-950 text-white">
       <section
+        ref={heroRef}
         className="relative min-h-screen overflow-hidden bg-cover bg-center bg-no-repeat"
         style={{
           backgroundImage: 'url(/home/hero-01.webp)'
         }}
       >
-        <div className="sticky top-6 z-20 w-full flex justify-end px-6">
+        <div
+          className={`fixed top-6 right-6 z-20 transition-opacity duration-300 ${
+            showTopLink ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}>
           <Link
             to={isAuthenticated ? '/dashboard' : '/login'}
-            className="text-sm font-medium text-white/80 hover:text-white transition"
+            className="font-medium text-white/80 hover:text-white transition"
           >
             {isAuthenticated ? 'Dashboard' : 'Log In'}
           </Link>

@@ -29,6 +29,8 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<IProjectItemArtworkRepository, ProjectItemArtworkRepository>();
             builder.Services.AddTransient<IProjectItemQuestionRepository, ProjectItemQuestionRepository>();
             builder.Services.AddTransient<IProjectQuestionRepository, ProjectQuestionRepository>();
+            builder.Services.AddTransient<IProjectIdeaRepository, ProjectIdeaRepository>();
+            builder.Services.AddTransient<IProjectIdeaVariationRepository, ProjectIdeaVariationRepository>();
             builder.Services.AddTransient<IProjectCollectionArtworkRepository, ProjectCollectionArtworkRepository>();
             builder.Services.AddTransient<IProjectCollectionProductImageRepository, ProjectCollectionProductImageRepository>();
             builder.Services.AddTransient<IProjectBlueprintProductImageRepository, ProjectBlueprintProductImageRepository>();

@@ -6,7 +6,7 @@ import ButtonOutline from '@/components/ui/button-outline';
 import Button from '@/components/ui/button';
 import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';
-import ReconnectInstagramModal from '../ReconnectInstagramModal';
+import ReconnectInstagramModal from '@/components/modals/ReconnectInstagramModal';
 
 export default function PostSocialMedia() {
   const session = useSession();

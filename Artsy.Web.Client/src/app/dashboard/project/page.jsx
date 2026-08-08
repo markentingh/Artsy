@@ -12,6 +12,7 @@ import CollectionsSection from './components/CollectionsSection';
 import ProjectChecklist from './components/ProjectChecklist';
 import ArtworksSection from './components/ArtworksSection';
 import QuestionsSection from './components/QuestionsSection';
+import IdeaWorkshopSection from './components/IdeaWorkshopSection';
 import PublishingSection from './components/PublishingSection';
 import ProductsSection from './components/ProductsSection';
 
@@ -163,6 +164,13 @@ export default function DashboardProject() {
       <QuestionsSection
         projectId={projectId}
         onChecklistChanged={fetchChecklist}
+      />
+
+      <hr className="border-gray-200 dark:border-gray-700 mb-8" />
+
+      <IdeaWorkshopSection
+        projectId={projectId}
+        project={project}
       />
 
       <hr className="border-gray-200 dark:border-gray-700 mb-8" />

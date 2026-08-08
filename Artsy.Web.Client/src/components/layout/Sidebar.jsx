@@ -35,7 +35,9 @@ export default function Sidebar() {
   return (
     <aside className="w-64 h-screen fixed left-0 top-0 flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
       <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <img src="/logo-inline.svg" alt="Artsy" className="h-10 mb-4 w-auto" />
+        <Link to="/">
+          <img src="/logo-inline.svg" alt="Artsy" className="h-10 mb-4 w-auto" />
+        </Link>
         {user && <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{user.displayName}</p>}
       </div>
       <nav className="flex-1 p-4">
