@@ -13,8 +13,9 @@ import CollectionModal from './CollectionModal';
 
 export default function CollectionsSection({ projectId, project, showNewButton = true }) {
   const session = useSession();
-  const { getCollections, getCollectionArtworkThumbUrl, deleteCollection, updateCollectionTitle } = Projects(session);
+  const { getCollections, getItems, getCollectionArtworkThumbUrl, deleteCollection, updateCollectionTitle } = Projects(session);
   const [collections, setCollections] = useState([]);
+  const [items, setItems] = useState([]);
   const [mount, setMount] = useState(false);
   const [message, setMessage] = useState(null);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
@@ -26,11 +27,17 @@ export default function CollectionsSection({ projectId, project, showNewButton =
 
   const fetchCollections = async () => {
     try {
-      const response = await getCollections(projectId);
-      if (response.data.success) {
-        setCollections(response.data.data || []);
+      const [collectionsRes, itemsRes] = await Promise.all([
+        getCollections(projectId),
+        getItems(projectId),
+      ]);
+      if (collectionsRes.data.success) {
+        setCollections(collectionsRes.data.data || []);
       } else {
-        setMessage({ type: 'error', text: response.data.message || 'Failed to load collections' });
+        setMessage({ type: 'error', text: collectionsRes.data.message || 'Failed to load collections' });
+      }
+      if (itemsRes.data.success) {
+        setItems(itemsRes.data.data || []);
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load collections' });
@@ -154,7 +161,11 @@ export default function CollectionsSection({ projectId, project, showNewButton =
             const productImages = (collection.productImages || [])
               .filter(p => p.active)
               .map(p => p.imageUrl);
-            const images = [...productImages, ...artworkImages];
+            const hasCollectionImages = productImages.length > 0 || artworkImages.length > 0;
+            const previewImages = !hasCollectionImages
+              ? (items || []).flatMap((i) => i.thumbnails || [])
+              : [];
+            const images = [...productImages, ...artworkImages, ...previewImages];
             return (
               <div
                 key={collection.id}
@@ -189,7 +200,10 @@ export default function CollectionsSection({ projectId, project, showNewButton =
                       </div>
                     ) : (
                       <>
-                        <h3 className="font-medium mb-1">
+                        <h3
+                          className="font-medium mb-1 truncate"
+                          title={collection.title || `Collection #${collection.sequence}`}
+                        >
                           {collection.title || `Collection #${collection.sequence}`}
                         </h3>
                         <p className="text-sm text-gray-500 dark:text-gray-400">

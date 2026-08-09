@@ -137,6 +137,7 @@ namespace Artsy.API.Controllers.Admin
                     existing.MonthlyProductId = request.MonthlyProductId;
                     existing.YearlyProductId = request.YearlyProductId;
                     existing.FeaturesJson = request.FeaturesJson;
+                    existing.Status = request.Status;
                     await _subscriptionRepository.UpdateAsync(existing);
                     return Json(new ApiResponse { success = true, data = existing });
                 }
@@ -147,7 +148,8 @@ namespace Artsy.API.Controllers.Admin
                         Title = request.Title,
                         MonthlyProductId = request.MonthlyProductId,
                         YearlyProductId = request.YearlyProductId,
-                        FeaturesJson = request.FeaturesJson
+                        FeaturesJson = request.FeaturesJson,
+                        Status = request.Status
                     });
                     return Json(new ApiResponse { success = true, data = subscription });
                 }
@@ -236,6 +238,76 @@ namespace Artsy.API.Controllers.Admin
             {
                 await _appUserSubscriptionRepository.CancelAsync(request.Id);
                 return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("user-subscriptions/start")]
+        public async Task<IActionResult> StartUserSubscription([FromBody] StartUserSubscriptionRequest request)
+        {
+            try
+            {
+                var user = await _appUserRepository.FindByGuidAsync(request.AppUserId, true);
+                if (user == null)
+                    return Json(new ApiResponse { success = false, message = "User not found." });
+
+                var subscription = await _subscriptionRepository.GetByIdAsync(request.SubscriptionId);
+                if (subscription == null)
+                    return Json(new ApiResponse { success = false, message = "Subscription not found." });
+
+                var productId = request.Period == "yearly" ? subscription.YearlyProductId : subscription.MonthlyProductId;
+                if (!productId.HasValue)
+                    return Json(new ApiResponse { success = false, message = "Selected plan product not configured." });
+
+                var product = await _productRepository.GetByIdAsync(productId.Value);
+                if (product == null)
+                    return Json(new ApiResponse { success = false, message = "Product not found." });
+
+                var startDate = DateTime.UtcNow;
+                var endDate = request.Period == "yearly" ? startDate.AddYears(1) : startDate.AddMonths(1);
+
+                await _appUserSubscriptionRepository.CreateAsync(new AppUserSubscription
+                {
+                    AppUserId = user.Id!.Value,
+                    SubscriptionId = subscription.Id,
+                    StartDate = startDate,
+                    EndDate = endDate,
+                    Cancelled = false
+                });
+
+                var invoice = await _invoiceRepository.CreateAsync(new Invoice
+                {
+                    AppUserId = user.Id!.Value,
+                    SubscriptionId = subscription.Id,
+                    ProductId = product.Id,
+                    Price = product.Price
+                });
+
+                var billingMonth = new DateTime(startDate.Year, startDate.Month, 1);
+                await _appUserAITokenRepository.CreateAsync(new AppUserAIToken
+                {
+                    AppUserId = user.Id!.Value,
+                    InvoiceId = invoice.Id,
+                    BillingMonth = billingMonth,
+                    Tokens = product.Tokens,
+                    TokensUsed = 0
+                });
+
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = new
+                    {
+                        subscriptionTitle = subscription.Title,
+                        email = user.Email,
+                        period = request.Period,
+                        tokens = product.Tokens,
+                        invoiceId = invoice.Id
+                    }
+                });
             }
             catch (Exception ex)
             {

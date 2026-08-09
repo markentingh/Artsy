@@ -7,6 +7,9 @@ namespace Artsy.API.Models.Projects
         [JsonPropertyName("itemId")]
         public Guid ItemId { get; set; }
 
+        [JsonPropertyName("modelId")]
+        public int ModelId { get; set; }
+
         [JsonPropertyName("answers")]
         public List<GenerateProjectItemPreviewAnswer> Answers { get; set; } = new();
     }

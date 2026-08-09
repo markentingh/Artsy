@@ -22,7 +22,7 @@ export default function Input({
   return (
     <div className={`${formPadding ? 'mb-4 ' : ''}${className}`}>
       {(label || labelAction) && (
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center justify-between mb-2">
           {label && (
             <label htmlFor={name} title={title} className="block text-sm font-medium">
               {label}{required ? ' *' : ''}

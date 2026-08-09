@@ -1,13 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useSession } from '@/context/session';
 import { Users } from '@/api/admin/users';
-import Modal from '@/components/ui/modal';
 import Icon from '@/components/ui/icon';
-import Input from '@/components/forms/input';
-import ButtonOutline from '@/components/ui/button-outline';
-import Button from '@/components/ui/button';
 import Pagination from '@/components/ui/pagination';
 import Message from '@/components/ui/message';
+import UserDetailsModal from './UserDetailsModal';
 
 const formatDate = (value) => {
   if (!value) return 'N/A';
@@ -17,7 +14,7 @@ const formatDate = (value) => {
 
 export default function DashboardUsers() {
   const session = useSession();
-  const { getAllFiltered, updateFullName, sendPasswordReset } = Users(session);
+  const { getAllFiltered } = Users(session);
 
   const [users, setUsers] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -29,7 +26,6 @@ export default function DashboardUsers() {
     length: 50
   });
   const [selectedUser, setSelectedUser] = useState(null);
-  const [fullName, setFullName] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -68,39 +64,11 @@ export default function DashboardUsers() {
 
   const handleRowClick = (person) => {
     setSelectedUser(person);
-    setFullName(person.fullName || '');
-    setMessage(null);
   };
 
   const handleCloseModal = () => {
     setSelectedUser(null);
     setMessage(null);
-  };
-
-  const handleSaveFullName = () => {
-    updateFullName({ Id: selectedUser.id, FullName: fullName }).then((response) => {
-      if (response.data.success) {
-        setMessage({ type: 'info', text: 'Full name updated' });
-        setSelectedUser((prev) => ({ ...prev, fullName }));
-        fetchUsers();
-      } else {
-        setMessage({ type: 'error', text: response.data.message || 'Failed to update full name' });
-      }
-    }).catch((error) => {
-      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to update full name' });
-    });
-  };
-
-  const handleSendPasswordReset = () => {
-    sendPasswordReset(selectedUser.id).then((response) => {
-      if (response.data.success) {
-        setMessage({ type: 'info', text: response.data.message || 'Password reset email sent' });
-      } else {
-        setMessage({ type: 'error', text: response.data.message || 'Failed to send password reset' });
-      }
-    }).catch((error) => {
-      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to send password reset' });
-    });
   };
 
   const totalPages = Math.ceil(totalCount / filter.length);
@@ -204,42 +172,7 @@ export default function DashboardUsers() {
         onPageChange={(page) => setFilter((prev) => ({ ...prev, start: (page - 1) * prev.length }))}
       />
       {selectedUser && (
-        <Modal title="User Details" onClose={handleCloseModal}>
-          {message && (
-            <Message type={message.type} onClose={() => setMessage(null)}>
-              {message.text}
-            </Message>
-          )}
-          <Input
-            name="fullName"
-            label="Full Name"
-            value={fullName}
-            onInput={(e) => setFullName(e.target.value)}
-          />
-          <div className="mb-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Email</p>
-            <p className="font-medium">{selectedUser.email}</p>
-          </div>
-          <div className="mb-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Created</p>
-            <p>{formatDate(selectedUser.created)}</p>
-          </div>
-          <div className="mb-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Last Login</p>
-            <p>{formatDate(selectedUser.lastLogin)}</p>
-          </div>
-          <div className="buttons flex flex-wrap gap-2">
-            <Button onClick={handleSaveFullName} disabled={fullName === selectedUser.fullName}>
-              Save Changes
-            </Button>
-            <ButtonOutline onClick={handleSendPasswordReset}>
-              Send Password Reset
-            </ButtonOutline>
-            <Button color="gray" className="cancel" onClick={handleCloseModal}>
-              Cancel
-            </Button>
-          </div>
-        </Modal>
+        <UserDetailsModal user={selectedUser} onClose={handleCloseModal} />
       )}
     </div>
   );

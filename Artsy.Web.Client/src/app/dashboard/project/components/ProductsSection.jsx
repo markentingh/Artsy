@@ -172,7 +172,7 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
                 </div>
               </div>
               <div className="p-3">
-                <p className="text-sm font-medium truncate">{bp.name}</p>
+                <p className="text-sm font-medium truncate" title={bp.name}>{bp.name}</p>
                 <div className="flex items-center justify-between mt-1">
                   <span className="text-xs text-gray-500 dark:text-gray-400">Blueprint #{bp.blueprintId}</span>
                   <ButtonIcon name="delete" color="red" onClick={(e) => handleDeleteBlueprint(bp, e)} title="Remove product" />

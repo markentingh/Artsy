@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '@/context/session';
+import { useDashboard } from '@/context/dashboard';
 import { Projects } from '@/api/user/projects';
 import { CustomImages } from '@/api/user/customImages';
 import { ImageGeneration } from '@/api/user/imageGeneration';
@@ -22,6 +23,7 @@ import ConfirmModal from '@/components/ui/confirm-modal';
 
 export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const session = useSession();
+  const { refreshTokens } = useDashboard();
   const {
     updateItemTitle, updateItemSocialMedia,
     getItemArtwork, updateItemPrompt, updateItemImageModel, updateItemArtworkType,
@@ -59,6 +61,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const [message, setMessage] = useState(null);
 
   const [imageModels, setImageModels] = useState([]);
+  const selectedImageModelId = useMemo(() => imageModels.find(m => m.model === imageModel)?.id, [imageModels, imageModel]);
   const [estimatedCost, setEstimatedCost] = useState(null);
   const [estimating, setEstimating] = useState(false);
   const estimateTimerRef = useRef(null);
@@ -263,7 +266,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       return;
     }
     setEstimating(true);
-    estimateItemTokens(item.id, 3840, 3840).then(response => {
+    estimateItemTokens(item.id, 3840, 3840, selectedImageModelId).then(response => {
       if (response.data.success) {
         setEstimatedCost(response.data.data);
       } else {
@@ -474,6 +477,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
 
       const response = await generateItemPreview({
         itemId: item.id,
+        modelId: selectedImageModelId,
         answers: answerList,
       });
       if (response.data.success) {
@@ -481,6 +485,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         if (updated.data.success) {
           const list = updated.data.data || [];
           setPreviews(list);
+          refreshTokens();
         }
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to generate preview' });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Modal from '@/components/ui/modal';
 import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
@@ -12,6 +12,7 @@ import Message from '@/components/ui/message';
 import Tabs from '@/components/ui/tabs';
 import Checked from '@/components/ui/checked';
 import ImageGenerationModal from './ImageGenerationModal';
+import ImageGenerationsTab from './ImageGenerationsTab';
 import { useSession } from '@/context/session';
 import { OpenAI } from '@/api/admin/openai';
 
@@ -433,9 +434,12 @@ export default function AdminOpenAI() {
         </div>
     );
 
+    const imageGenerationsContent = useMemo(() => <ImageGenerationsTab />, []);
+
     const tabs = [
         { id: 'endpoints', label: 'LLM Endpoints', content: llmEndpointsContent },
-        { id: 'image-gen', label: 'Image Generation', content: imageGenerationContent },
+        { id: 'image-gen', label: 'Image Endpoints', content: imageGenerationContent },
+        { id: 'image-generations', label: 'Image Generations', content: imageGenerationsContent },
     ];
 
     return (

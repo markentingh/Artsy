@@ -7,5 +7,6 @@ namespace Artsy.API.Models.Billing
         public int? MonthlyProductId { get; set; }
         public int? YearlyProductId { get; set; }
         public string? FeaturesJson { get; set; }
+        public int Status { get; set; } = 1;
     }
 }

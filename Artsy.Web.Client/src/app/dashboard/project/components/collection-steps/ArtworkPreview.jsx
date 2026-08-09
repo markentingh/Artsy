@@ -3,6 +3,7 @@ import { useCollection } from '@/context/collection';
 import TextArea from '@/components/forms/textarea';
 import ButtonOutline from '@/components/ui/button-outline';
 import Spinner from '@/components/ui/spinner';
+import Tooltip from '@/components/ui/tooltip';
 
 export default function ArtworkPreview() {
   const {
@@ -13,8 +14,12 @@ export default function ArtworkPreview() {
     collectionId, ensureCollection,
     doGeneratePreview, advanceToNextItem,
     setCollectionArtwork,
-    api, onClose,
+    api, onClose, setArtworkPreview, setStep, STEPS,
   } = useCollection();
+
+  const handleTryAgain = useCallback(() => {
+    setStep(STEPS.ARTWORK_QUESTIONS);
+  }, [setStep, STEPS]);
 
   const handleMakeChanges = useCallback(() => {
     setShowChanges(true);
@@ -67,19 +72,13 @@ export default function ArtworkPreview() {
             <img
               src={previewImageData}
               alt="Preview"
-              className="w-full h-full object-contain"
+              className="w-full h-full object-contain cursor-pointer"
+              onClick={() => setArtworkPreview({ images: [previewImageData], src: previewImageData })}
             />
           ) : (
             <span className="text-sm text-gray-500 dark:text-gray-400">No preview generated yet.</span>
           )}
         </div>
-
-        {!showChanges && !isGenerating && previewImageData && (
-          <div className="buttons flex gap-2">
-            <ButtonOutline onClick={handleMakeChanges}>Make Changes</ButtonOutline>
-            <ButtonOutline onClick={handleAccept}>Accept</ButtonOutline>
-          </div>
-        )}
 
         {showChanges && !isGenerating && (
           <div className="w-full max-w-[512px]">
@@ -91,15 +90,23 @@ export default function ArtworkPreview() {
               placeholder="Describe the changes you want..."
               rows={4}
             />
-            <div className="buttons flex justify-end gap-2">
-              <ButtonOutline onClick={handleSubmitChanges} disabled={!requestedChanges.trim()}>
-                Regenerate
-              </ButtonOutline>
-            </div>
           </div>
         )}
       </div>
-      <div className="buttons flex justify-end gap-2 mt-4 mt-auto">
+      <div className="buttons flex justify-end gap-2 items-center pt-4 mt-auto">
+        {!showChanges && !isGenerating && previewImageData && (
+          <>
+            <Tooltip text="Either make changes to the generated artwork using a prompt to edit the artwork, accept the currently generated artwork, or try again by changing the original prompt text." className="pr-8" />
+            <ButtonOutline color="gray" onClick={handleMakeChanges}>Make Changes</ButtonOutline>
+            <ButtonOutline onClick={handleAccept}>Accept</ButtonOutline>
+            <ButtonOutline color="red" onClick={handleTryAgain}>Try Again</ButtonOutline>
+          </>
+        )}
+        {showChanges && !isGenerating && (
+          <ButtonOutline onClick={handleSubmitChanges} disabled={!requestedChanges.trim()}>
+            Regenerate
+          </ButtonOutline>
+        )}
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
       </div>
     </div>

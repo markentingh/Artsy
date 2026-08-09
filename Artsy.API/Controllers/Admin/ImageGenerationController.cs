@@ -3,8 +3,12 @@ using Artsy.API.Models.ImageGeneration;
 using Artsy.Auth.Policies;
 using Artsy.Data.Entities;
 using Artsy.Data.Interfaces;
+using Artsy.Data.Interfaces.Projects;
+using Artsy.Data.Interfaces.Auth;
+using Dapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Data;
 
 namespace Artsy.API.Controllers.Admin
 {
@@ -13,10 +17,23 @@ namespace Artsy.API.Controllers.Admin
     public class ImageGenerationController : ApiController
     {
         readonly IImageGenerationModelRepository _repo;
+        readonly IProjectImageGenerationRepository _projectImageGenRepo;
+        readonly IAppUserRepository _userRepo;
+        readonly IProjectRepository _projectRepo;
+        readonly IDbConnection _dbConnection;
 
-        public ImageGenerationController(IImageGenerationModelRepository repo)
+        public ImageGenerationController(
+            IImageGenerationModelRepository repo,
+            IProjectImageGenerationRepository projectImageGenRepo,
+            IAppUserRepository userRepo,
+            IProjectRepository projectRepo,
+            IDbConnection dbConnection)
         {
             _repo = repo;
+            _projectImageGenRepo = projectImageGenRepo;
+            _userRepo = userRepo;
+            _projectRepo = projectRepo;
+            _dbConnection = dbConnection;
         }
 
         [HttpGet("get-models")]
@@ -136,6 +153,78 @@ namespace Artsy.API.Controllers.Admin
 
                 await _repo.DeleteAsync(request.Id);
                 return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("get-generations")]
+        public async Task<IActionResult> GetGenerations([FromQuery] int start = 0, [FromQuery] int length = 25)
+        {
+            try
+            {
+                const string query = @"
+                    SELECT pig.*, u.""Email"" AS ""UserEmail"", p.""Title"" AS ""ProjectTitle"", igm.""Name"" AS ""ModelName""
+                    FROM public.""ProjectImageGenerations"" pig
+                    LEFT JOIN public.""AppUsers"" u ON pig.""AppUserId"" = u.""Id""
+                    LEFT JOIN public.""Projects"" p ON pig.""ProjectId"" = p.""Id""
+                    LEFT JOIN public.""ImageGeneration"" igm ON pig.""ImageGenerationId"" = igm.""Id""
+                    ORDER BY pig.""DateCreated"" DESC
+                    OFFSET @start LIMIT @length";
+
+                var rows = await _dbConnection.QueryAsync(query, new { start, length });
+
+                const string countQuery = @"SELECT COUNT(*) FROM public.""ProjectImageGenerations""";
+                var totalCount = await _dbConnection.ExecuteScalarAsync<int>(countQuery);
+
+                var items = rows.Select(r => new
+                {
+                    id = r.Id,
+                    projectId = r.ProjectId,
+                    itemId = r.ItemId,
+                    collectionId = r.CollectionId,
+                    blueprintId = r.BlueprintId,
+                    appUserId = r.AppUserId,
+                    userEmail = (string?)r.UserEmail,
+                    projectTitle = (string?)r.ProjectTitle,
+                    modelName = (string?)r.ModelName,
+                    inputTextTokens = r.InputTextTokens,
+                    inputImageTokens = r.InputImageTokens,
+                    outputTokens = r.OutputTokens,
+                    tokens = r.Tokens,
+                    cost = r.Cost,
+                    prompt = r.Prompt,
+                    filename = r.Filename,
+                    resolution = r.Resolution,
+                    inputImages = r.InputImages,
+                    inputImageJson = r.InputImageJson,
+                    type = r.Type,
+                    dateCreated = r.DateCreated
+                }).ToList();
+
+                return Json(new ApiResponse { success = true, data = new { items, totalCount } });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("get-daily-costs")]
+        public async Task<IActionResult> GetDailyCosts([FromQuery] int days = 30)
+        {
+            try
+            {
+                var results = await _projectImageGenRepo.GetDailyCostsAsync(days);
+                var items = results.Select(r => new
+                {
+                    date = r.Date.ToString("yyyy-MM-dd"),
+                    totalCost = r.TotalCost
+                }).ToList();
+
+                return Json(new ApiResponse { success = true, data = items });
             }
             catch (Exception ex)
             {

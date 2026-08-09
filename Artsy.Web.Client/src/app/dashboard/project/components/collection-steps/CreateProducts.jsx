@@ -7,6 +7,7 @@ import Button from '@/components/ui/button';
 import List, { Item } from '@/components/ui/list';
 import Checked from '@/components/ui/checked';
 import Icon from '@/components/ui/icon';
+import Tooltip from '@/components/ui/tooltip';
 
 export default function CreateProducts() {
   const session = useSession();
@@ -414,6 +415,7 @@ export default function CreateProducts() {
       )}
 
       <div className="mb-6">
+        <h3 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">Products</h3>
         <List inModal={true}>
           {blueprintsWithImages.map((bp) => {
             const variantCount = variantCountByBlueprint[bp.id] || 0;
@@ -445,7 +447,10 @@ export default function CreateProducts() {
         </List>
       </div>
 
-      <div className="buttons flex justify-end gap-2 mt-auto">
+      <div className="buttons flex justify-end gap-2 mt-auto items-center">
+        {!allCreated && (
+          <Tooltip text="This will upload the selected images to Printify, then create new products for your store on Printify. This will not publish products to your connected store on Printify." className="pr-8" />
+        )}
         <Button
           onClick={allCreated ? handleNext : handleStart}
           disabled={uploading || creating || !project?.printifyStoreId || activeBlueprints.length === 0}

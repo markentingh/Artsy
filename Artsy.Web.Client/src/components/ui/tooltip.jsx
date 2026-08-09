@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import ButtonIcon from '@/components/ui/button-icon';
 
 export default function Tooltip({ text, className = '', marginTop = 4 }) {
@@ -29,7 +30,8 @@ export default function Tooltip({ text, className = '', marginTop = 4 }) {
   useLayoutEffect(() => {
     if (!show || !ref.current || !bubbleRef.current) return;
 
-    const iconRect = ref.current.getBoundingClientRect();
+    const iconEl = ref.current.querySelector('button');
+    const iconRect = iconEl ? iconEl.getBoundingClientRect() : ref.current.getBoundingClientRect();
     const bubbleRect = bubbleRef.current.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
@@ -50,16 +52,16 @@ export default function Tooltip({ text, className = '', marginTop = 4 }) {
       leftPx = viewportWidth - halfWidth - margin;
     }
 
-    const topPx = placement === 'bottom' ? iconRect.bottom + gap : iconRect.top - gap;
+    const topPx = placement === 'bottom' ? iconRect.bottom + gap : iconRect.top - gap - bubbleRect.height;
     const shiftX = leftPx - iconCenterX;
 
     setPos({ placement, left: leftPx, top: topPx, shiftX });
   }, [show, text]);
 
-  const arrowUp = 'border-l-8 border-r-8 border-b-8 border-l-transparent border-r-transparent border-b-primary-700';
-  const arrowUpInner = 'border-l-8 border-r-8 border-b-8 border-l-transparent border-r-transparent border-b-primary-600';
-  const arrowDown = 'border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-primary-700';
-  const arrowDownInner = 'border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-primary-600';
+  const arrowUp = 'border-l-8 border-r-8 border-b-8 border-l-transparent border-r-transparent border-b-[#003cbf]';
+  const arrowUpInner = 'border-l-8 border-r-8 border-b-8 border-l-transparent border-r-transparent border-b-[#003cbf]';
+  const arrowDown = 'border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-[#003cbf]';
+  const arrowDownInner = 'border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-[#003cbf]';
 
   return (
     <div ref={ref} className={`relative inline-flex ${className}`} style={{ marginTop: `${marginTop}px` }}>
@@ -68,17 +70,17 @@ export default function Tooltip({ text, className = '', marginTop = 4 }) {
         onClick={() => setShow(s => !s)}
         title="More info"
       />
-      {show && (
+      {show && createPortal(
         <div
           ref={bubbleRef}
-          className="fixed z-50 w-72"
+          className="fixed z-[60] w-72"
           style={{
             left: `${pos.left}px`,
             top: `${pos.top}px`,
             transform: 'translateX(-50%)',
           }}
         >
-          <div className="relative bg-primary-600 border border-primary-700 rounded-lg shadow-lg p-3 text-sm text-white">
+          <div className="relative bg-[#003cbf] border border-[#003cbf] rounded-lg shadow-lg p-3 text-sm text-white">
             {pos.placement === 'bottom' ? (
               <>
                 <div className={`absolute -top-2 w-0 h-0 ${arrowUp}`} style={{ left: `calc(50% - ${pos.shiftX}px)`, transform: 'translateX(-50%)' }} />
@@ -92,7 +94,8 @@ export default function Tooltip({ text, className = '', marginTop = 4 }) {
             )}
             {text}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

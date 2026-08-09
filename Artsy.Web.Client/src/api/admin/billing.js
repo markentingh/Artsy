@@ -13,6 +13,7 @@ const Billing = (args) => Api({ ...args, useToken: true }).endpoints(({ api }) =
     setFeaturedSubscription: (id) => api.post(`${apiPath}/subscriptions/set-featured`, { id }),
     getUserSubscriptions: () => api.get(`${apiPath}/user-subscriptions`),
     cancelUserSubscription: (id) => api.post(`${apiPath}/user-subscriptions/cancel`, { id }),
+    startUserSubscription: (request) => api.post(`${apiPath}/user-subscriptions/start`, request),
     getInvoices: () => api.get(`${apiPath}/invoices`),
   };
 });

@@ -3,6 +3,7 @@ import { useSession } from '@/context/session';
 import { useCollection } from '@/context/collection';
 import { CustomImages } from '@/api/user/customImages';
 import TextArea from '@/components/forms/textarea';
+import Select from '@/components/forms/select';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 
@@ -15,11 +16,16 @@ export default function ArtworkQuestions() {
     ensureCollection, saveAnswers,
     setStep, doGeneratePreview, STEPS, onClose,
     collectionArtwork, collectionId, api, setArtworkPreview,
+    currentArtwork,
+    imageModels, selectedImageModel, setSelectedImageModel, loadImageModels,
   } = useCollection();
 
   const [previews, setPreviews] = useState([]);
   const [referencePreviews, setReferencePreviews] = useState([]);
   const [customImageRefs, setCustomImageRefs] = useState([]);
+  const [calculatedTokens, setCalculatedTokens] = useState(null);
+  const [estimatingTokens, setEstimatingTokens] = useState(false);
+  const estimateTimerRef = useRef(null);
 
   const latestRef = useRef({});
   latestRef.current = { collectionArtwork, collectionId, getCustomImageUrl };
@@ -98,6 +104,51 @@ export default function ArtworkQuestions() {
     return [...refThumbs, ...customThumbs, ...ownThumbs];
   }, [currentItem, previews, referencePreviews, customImageRefs, api]);
 
+  useEffect(() => {
+    loadImageModels();
+  }, [loadImageModels]);
+
+  useEffect(() => {
+    if (imageModels.length && currentArtwork?.imageModel) {
+      const found = imageModels.find(m => m.model === currentArtwork.imageModel);
+      if (found) setSelectedImageModel(found);
+    }
+  }, [currentArtwork, imageModels, setSelectedImageModel]);
+
+  useEffect(() => {
+    if (!currentItem || !selectedImageModel) {
+      setCalculatedTokens(null);
+      return;
+    }
+    if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current);
+    setEstimatingTokens(true);
+    estimateTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await api.estimateItemTokens(currentItem.id, 2048, 2048, selectedImageModel.id);
+        if (res.data.success) {
+          setCalculatedTokens(res.data.data);
+        } else {
+          setCalculatedTokens(null);
+        }
+      } catch {
+        setCalculatedTokens(null);
+      } finally {
+        setEstimatingTokens(false);
+      }
+    }, 500);
+    return () => { if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current); };
+  }, [currentItem, selectedImageModel, api]);
+
+  const modelOptions = useMemo(() =>
+    (imageModels || []).map((m) => ({ value: m.id, label: m.name })),
+  [imageModels]);
+
+  const handleModelChange = useCallback((e) => {
+    const id = parseInt(e.target.value);
+    const model = (imageModels || []).find((m) => m.id === id);
+    setSelectedImageModel(model || null);
+  }, [imageModels, setSelectedImageModel]);
+
   const previewFullImages = useMemo(() => {
     if (!currentItem) return [];
     const refFulls = referencePreviews.map(r => r.full);
@@ -137,6 +188,25 @@ export default function ArtworkQuestions() {
           />
         </div>
       )}
+      <div className="flex flex-wrap items-end gap-4 justify-between mb-4">
+        <div className="min-w-[200px]">
+          <Select
+            label="AI Image Model"
+            name="imageModel"
+            value={selectedImageModel?.id || ''}
+            onChange={handleModelChange}
+            options={modelOptions}
+            fitContent
+          />
+        </div>
+        {estimatingTokens ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Estimating tokens...</p>
+        ) : calculatedTokens !== null ? (
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+            Calculated Tokens: {calculatedTokens}
+          </p>
+        ) : null}
+      </div>
       <div className="max-h-[40vh] overflow-y-auto">
         {currentItemQuestions.length === 0 ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">No questions for this artwork.</p>
@@ -159,7 +229,7 @@ export default function ArtworkQuestions() {
       </div>
       <div className="buttons flex justify-end gap-2 mt-4 mt-auto">
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
-        <ButtonOutline onClick={handleNext}>Next</ButtonOutline>
+        <ButtonOutline onClick={handleNext}>Generate Artwork</ButtonOutline>
       </div>
     </div>
   );

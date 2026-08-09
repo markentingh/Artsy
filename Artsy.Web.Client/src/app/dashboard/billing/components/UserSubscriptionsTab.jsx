@@ -1,15 +1,35 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ButtonIcon from '@/components/ui/button-icon';
+import ButtonOutline from '@/components/ui/button-outline';
+import Icon from '@/components/ui/icon';
+import SubscribeModal from './SubscribeModal';
 
 export default function UserSubscriptionsTab({ api, showMessage }) {
   const [subscriptions, setSubscriptions] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [allSubscriptions, setAllSubscriptions] = useState([]);
+  const [showSubscribeModal, setShowSubscribeModal] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
-    const res = await api.getUserSubscriptions();
-    if (res.data.success) setSubscriptions(res.data.data);
+    setLoading(true);
+    const [userRes, subRes, prodRes] = await Promise.all([
+      api.getUserSubscriptions(),
+      api.getSubscriptions(),
+      api.getProducts(),
+    ]);
+    if (userRes.data.success) setSubscriptions(userRes.data.data);
+    if (subRes.data.success) setAllSubscriptions(subRes.data.data);
+    if (prodRes.data.success) setProducts(prodRes.data.data);
+    setLoading(false);
   }, [api]);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleStarted = (result) => {
+    showMessage('info', `User Subscription ${result.subscriptionTitle} successfully added for ${result.email}`);
+    load();
+  };
 
   const handleCancel = async (id) => {
     const res = await api.cancelUserSubscription(id);
@@ -21,6 +41,22 @@ export default function UserSubscriptionsTab({ api, showMessage }) {
 
   return (
     <div>
+      <div className="tool-bar mb-4">
+        <div className="right-side">
+          <ButtonOutline onClick={() => setShowSubscribeModal(true)}>
+            <Icon name="add" />
+            <span className="ml-2">Subscribe</span>
+          </ButtonOutline>
+        </div>
+      </div>
+      <SubscribeModal
+        show={showSubscribeModal}
+        subscriptions={allSubscriptions}
+        products={products}
+        api={api}
+        onClose={() => setShowSubscribeModal(false)}
+        onStarted={handleStarted}
+      />
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead className="bg-gray-100 dark:bg-gray-700">

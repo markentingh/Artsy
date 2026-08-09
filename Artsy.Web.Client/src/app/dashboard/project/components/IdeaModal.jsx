@@ -7,13 +7,14 @@ import ButtonOutline from '@/components/ui/button-outline';
 import ButtonIcon from '@/components/ui/button-icon';
 import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';
+import ProgressBar from '@/components/ui/progress-bar';
 import Carousel from '@/components/ui/carousel';
 import { List, Item } from '@/components/ui/list';
 
 export default function IdeaModal({ projectId, ideaId, onClose, onIdeaCreated, onCollectionCreated }) {
   const session = useSession();
   const {
-    getIdea, createIdea, makeIdeaCollection,
+    getIdea, createIdea, createIdeaVariation, deleteIdea, makeIdeaCollection,
     getQuestions, getItems, getItemQuestions,
   } = Projects(session);
 
@@ -26,6 +27,9 @@ export default function IdeaModal({ projectId, ideaId, onClose, onIdeaCreated, o
   const [items, setItems] = useState([]);
   const [itemQuestions, setItemQuestions] = useState([]);
   const [openVariationIds, setOpenVariationIds] = useState(new Set());
+  const [progress, setProgress] = useState(0);
+  const [progressMessage, setProgressMessage] = useState('');
+  const [currentVariation, setCurrentVariation] = useState(0);
 
   useEffect(() => {
     const fetchBase = async () => {
@@ -60,8 +64,10 @@ export default function IdeaModal({ projectId, ideaId, onClose, onIdeaCreated, o
       try {
         const res = await getIdea(projectId, ideaId);
         if (res.data.success) {
-          setIdea(res.data.data);
-          setStep('results');
+          const loadedIdea = res.data.data;
+          setIdea(loadedIdea);
+          const variations = loadedIdea?.variations || [];
+          setStep(variations.length < 5 ? 'continue' : 'results');
         } else {
           setMessage({ type: 'error', text: res.data.message || 'Failed to load idea' });
           setStep('input');
@@ -103,32 +109,102 @@ export default function IdeaModal({ projectId, ideaId, onClose, onIdeaCreated, o
     });
   }, [idea]);
 
-  const firstProjectAnswers = parsedVariations[0]?.parsed?.project?.answers || [];
-
   const handleExpandIdea = async () => {
     const trimmed = prompt.trim();
     if (!trimmed) {
       setMessage({ type: 'error', text: 'Please enter an idea first.' });
       return;
     }
-    setGenerating(true);
     setStep('generating');
     setMessage(null);
+    setProgress(0);
+    setCurrentVariation(0);
+    setProgressMessage('Generating idea details...');
+
+    let ideaData;
     try {
-      const res = await createIdea(projectId, { prompt: trimmed });
-      if (res.data.success) {
-        setIdea(res.data.data);
-        setStep('results');
-        if (onIdeaCreated) onIdeaCreated(res.data.data);
-      } else {
-        setMessage({ type: 'error', text: res.data.message || 'Failed to expand idea' });
+      const totalSteps = 1 + 5;
+      const ideaRes = await createIdea(projectId, { prompt: trimmed });
+      if (!ideaRes.data.success) {
+        setMessage({ type: 'error', text: ideaRes.data.message || 'Failed to expand idea' });
         setStep('input');
+        return;
       }
+      ideaData = ideaRes.data.data;
+      setIdea(ideaData);
+      setProgress((1 / totalSteps) * 100);
+
+      for (let i = 0; i < 5; i++) {
+        setCurrentVariation(i + 1);
+        setProgressMessage(`Generating idea variation #${i + 1}`);
+        const variationRes = await createIdeaVariation(projectId, ideaData.id);
+        if (!variationRes.data.success) {
+          setMessage({ type: 'error', text: variationRes.data.message || `Failed to generate variation #${i + 1}` });
+          setStep('input');
+          return;
+        }
+        ideaData = variationRes.data.data;
+        setIdea(ideaData);
+        setProgress(((i + 2) / totalSteps) * 100);
+      }
+
+      setProgress(100);
+      setStep('results');
+      if (onIdeaCreated) onIdeaCreated(ideaData);
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to expand idea' });
       setStep('input');
-    } finally {
-      setGenerating(false);
+    }
+  };
+
+  const handleContinue = async () => {
+    if (!idea) return;
+    setStep('generating');
+    setMessage(null);
+
+    const existing = (idea.variations || []).length;
+    const totalSteps = 5;
+    setCurrentVariation(existing + 1);
+    setProgress((existing / totalSteps) * 100);
+
+    let ideaData = idea;
+    try {
+      for (let i = 0; i < 5 - existing; i++) {
+        const variationNumber = existing + i + 1;
+        setCurrentVariation(variationNumber);
+        setProgressMessage(`Generating idea variation #${variationNumber}`);
+        const variationRes = await createIdeaVariation(projectId, ideaData.id);
+        if (!variationRes.data.success) {
+          setMessage({ type: 'error', text: variationRes.data.message || `Failed to generate variation #${variationNumber}` });
+          setStep('continue');
+          return;
+        }
+        ideaData = variationRes.data.data;
+        setIdea(ideaData);
+        setProgress(((existing + i + 1) / totalSteps) * 100);
+      }
+
+      setProgress(100);
+      setStep('results');
+      if (onIdeaCreated) onIdeaCreated(ideaData);
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to continue idea' });
+      setStep('continue');
+    }
+  };
+
+  const handleDeleteIdea = async () => {
+    if (!idea) return;
+    setMessage(null);
+    try {
+      const res = await deleteIdea(projectId, idea.id);
+      if (res.data.success) {
+        onClose();
+      } else {
+        setMessage({ type: 'error', text: res.data.message || 'Failed to delete idea' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to delete idea' });
     }
   };
 
@@ -155,6 +231,23 @@ export default function IdeaModal({ projectId, ideaId, onClose, onIdeaCreated, o
     });
   };
 
+  const renderContinue = () => (
+    <div className="py-8 text-center">
+      {message && (
+        <div className="mb-4">
+          <Message type={message.type} onClose={() => setMessage(null)}>
+            {message.text}
+          </Message>
+        </div>
+      )}
+      <p className="text-lg text-gray-700 dark:text-gray-300 mb-6">The idea has not yet been fully realized. Continue?</p>
+      <div className="flex justify-center gap-4">
+        <ButtonOutline onClick={handleContinue}>Continue</ButtonOutline>
+        <ButtonOutline onClick={handleDeleteIdea} color="red">Delete Idea</ButtonOutline>
+      </div>
+    </div>
+  );
+
   const renderInput = () => (
     <div>
       {message && (
@@ -178,32 +271,60 @@ export default function IdeaModal({ projectId, ideaId, onClose, onIdeaCreated, o
 
   const renderGenerating = () => (
     <div className="py-12 text-center">
-      <Icon name="progress_activity" spin className="w-8 h-8 mx-auto mb-4" />
-      <p className="text-lg text-gray-600 dark:text-gray-400">Generating idea variations...</p>
-    </div>
-  );
-
-  const renderProjectAnswers = () => (
-    <div className="mb-6">
-      <h3 className="text-lg font-medium mb-2">Project Questions</h3>
-      {firstProjectAnswers.length === 0 ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">No project answers.</p>
-      ) : (
-        <List>
-          {firstProjectAnswers.map((a) => (
-            <Item key={a.id}>
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Question: {projectQuestionById[a.id] || 'Unknown'}</p>
-                <p className="text-sm font-medium">Answer: {a.answer}</p>
+      {message && (
+        <div className="mb-4">
+          <Message type={message.type} onClose={() => setMessage(null)}>
+            {message.text}
+          </Message>
+        </div>
+      )}
+      <div className="max-w-xl mx-auto">
+        <ProgressBar progress={progress} message={progressMessage} />
+        <div className="mt-4 text-left">
+          <List inModal={true}>
+            <Item>
+              <div className="flex items-center gap-2 min-w-0">
+                {idea?.title ? (
+                  <Icon name="check" className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
+                ) : (
+                  <Icon name="progress_activity" spin className="w-4 h-4 text-primary-600 dark:text-primary-400 shrink-0" />
+                )}
+                <span className={(idea?.title ? 'truncate' : 'truncate opacity-50') + ' pl-2'}>
+                  {idea?.title ? `${idea.title} created` : 'Thinking about your idea...'}
+                </span>
               </div>
             </Item>
-          ))}
-        </List>
-      )}
+            {[1, 2, 3, 4, 5].map((n) => {
+              const completed = (idea?.variations || []).length >= n;
+              const variation = idea?.variations?.[n - 1];
+              const isPending = currentVariation === n;
+              return (
+                <Item key={n}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    {completed ? (
+                      <Icon name="check" className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
+                    ) : (
+                      <Icon name="progress_activity" spin className="w-4 h-4 text-primary-600 dark:text-primary-400 shrink-0" />
+                    )}
+                    <span className={(completed ? 'truncate' : 'truncate opacity-50') + ' pl-2'}>
+                      {completed
+                        ? `Idea Variation "${variation?.title || ''}" has been created`
+                        : isPending
+                        ? `Thinking about idea variation #${n}`
+                        : `Waiting for idea variation #${n}`}
+                    </span>
+                  </div>
+                </Item>
+              );
+            })}
+          </List>
+        </div>
+      </div>
     </div>
   );
 
   const renderVariationContent = (v) => {
+    const projectAnswers = v.parsed?.project?.answers || [];
     const allAnswers = v.parsed?.artworks?.answers || [];
     const answersByItem = {};
     allAnswers.forEach((a) => {
@@ -218,6 +339,26 @@ export default function IdeaModal({ projectId, ideaId, onClose, onIdeaCreated, o
 
     return (
       <div className="p-3 mt-2">
+        {projectAnswers.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">No project answers.</p>
+        ) : (
+          <div className="mb-4">
+            <h4 className="font-medium mb-2">Project Questions</h4>
+            <List inModal={true}>
+              {projectAnswers.map((a) => {
+                const q = projectQuestionById[a.id];
+                return (
+                  <Item key={a.id}>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Question: {q || 'Unknown'}</p>
+                      <p className="text-sm font-medium">Answer: {a.answer}</p>
+                    </div>
+                  </Item>
+                );
+              })}
+            </List>
+          </div>
+        )}
         {artworkItems.length === 0 ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">No artwork answers.</p>
         ) : (artworkItems.map((item) => {
@@ -269,7 +410,6 @@ export default function IdeaModal({ projectId, ideaId, onClose, onIdeaCreated, o
           {message.text}
         </Message>
       )}
-      {renderProjectAnswers()}
       <div>
         <h3 className="text-lg font-medium mb-2">Variations</h3>
         <div className="space-y-2">
@@ -297,6 +437,7 @@ export default function IdeaModal({ projectId, ideaId, onClose, onIdeaCreated, o
   const getTitle = () => {
     if (step === 'input') return 'New Idea';
     if (step === 'generating') return 'Expanding Idea';
+    if (step === 'continue') return 'Continue Idea';
     return idea?.title || 'Idea';
   };
 
@@ -308,6 +449,7 @@ export default function IdeaModal({ projectId, ideaId, onClose, onIdeaCreated, o
     );
     if (step === 'input') return renderInput();
     if (step === 'generating') return renderGenerating();
+    if (step === 'continue') return renderContinue();
     return renderResults();
   };
 

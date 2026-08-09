@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useRef, useMemo } from 'react';
 import { useCollection } from '@/context/collection';
+import { useDashboard } from '@/context/dashboard';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 import Checked from '@/components/ui/checked';
@@ -18,6 +19,7 @@ export default function ReadyToGenerate() {
     setStep, loadImageModels,
     ensureCollection,
   } = useCollection();
+  const { refreshTokens } = useDashboard();
 
   const acceptedArtworks = collectionArtwork.filter(a => a.active && a.imageModel !== 'custom');
   const [thumbRetried, setThumbRetried] = useState({});
@@ -42,13 +44,14 @@ export default function ReadyToGenerate() {
       const res = await api.generateArtworkThumbnail({ collectionId, itemId: artwork.itemId });
       if (res.data.success) {
         setThumbRetried(prev => ({ ...prev, [index]: Date.now() }));
+        refreshTokens();
       } else {
         setThumbFailed(prev => ({ ...prev, [index]: true }));
       }
     } catch {
       setThumbFailed(prev => ({ ...prev, [index]: true }));
     }
-  }, [acceptedArtworks, collectionId, api]);
+  }, [acceptedArtworks, collectionId, api, refreshTokens]);
 
   const displayImages = useMemo(() => {
     return artworkImages.map((url, i) => {
@@ -189,7 +192,7 @@ export default function ReadyToGenerate() {
           <p className="text-center text-lg mb-4">
             Upscaling complete! {generatedArtworks.length} artwork{generatedArtworks.length !== 1 ? 's' : ''} upscaled to full size.
           </p>
-          <div className="buttons flex justify-end gap-2">
+          <div className="buttons flex justify-end gap-2 mt-auto">
             <ButtonOutline color="gray" className="cancel" onClick={onClose}>Close</ButtonOutline>
             <ButtonOutline onClick={handleNext}>Next</ButtonOutline>
           </div>

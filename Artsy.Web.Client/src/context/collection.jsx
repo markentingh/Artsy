@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { useSession } from '@/context/session';
+import { useDashboard } from '@/context/dashboard';
 import { Projects } from '@/api/user/projects';
 import { Instagram } from '@/api/user/instagram';
 import { PrintifyProducts } from '@/api/user/printifyProducts';
@@ -77,6 +78,7 @@ export function buildStepIndex(hasProjectQuestions) {
 
 export function CollectionProvider({ children, projectId, project, collectionId: initialCollectionId, collectionTitle, onClose, onSaved }) {
   const session = useSession();
+  const { refreshTokens } = useDashboard();
   const api = useMemo(() => Projects(session), [session]);
   const instagramApi = useMemo(() => Instagram(session), [session]);
   const printifyProductsApi = useMemo(() => PrintifyProducts(session), [session]);
@@ -123,6 +125,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const [allProductImages, setAllProductImages] = useState([]);
   const [imageModels, setImageModels] = useState([]);
   const [selectedImageModel, setSelectedImageModel] = useState(null);
+  const [selectedProductImageModel, setSelectedProductImageModel] = useState(null);
   const [upscaleComplete, setUpscaleComplete] = useState(false);
   const [productBlueprintImages, setProductBlueprintImages] = useState([]);
   const [printifyImageIndexByColor, setPrintifyImageIndexByColor] = useState({});
@@ -235,6 +238,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         height: 2048,
         answers: answerList,
         requestedChanges: showChanges ? requestedChanges : null,
+        modelId: selectedImageModel?.id,
       });
 
       if (res.data.success) {
@@ -244,6 +248,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         setPreviewImageData(url);
         setShowChanges(false);
         setRequestedChanges('');
+        refreshTokens();
       } else {
         setMessage({ type: 'error', text: res.data.message || 'Failed to generate preview' });
       }
@@ -252,7 +257,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     } finally {
       setIsGenerating(false);
     }
-  }, [aiItems, currentItemIndex, itemAnswers, showChanges, requestedChanges, projectId, api, buildProjectAnswers]);
+  }, [aiItems, currentItemIndex, itemAnswers, showChanges, requestedChanges, projectId, api, buildProjectAnswers, selectedImageModel, refreshTokens]);
 
   const loadItemData = useCallback(async (index) => {
     setCurrentItemIndex(index);
@@ -304,13 +309,18 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         }
       }
       setItemAnswers(restoredItemAnswers);
-      setPreviewImageData(null);
       setShowChanges(false);
       setRequestedChanges('');
 
-      if (questions.length > 0) {
+      const existingArt = collectionArtwork.find(a => String(a.itemId) === String(item.id) && a.active);
+      if (existingArt) {
+        setPreviewImageData(api.getCollectionArtworkImageUrl(collectionId, item.id, existingArt.id, false, Date.now()));
+        setStep(STEPS.ARTWORK_PREVIEW);
+      } else if (questions.length > 0) {
+        setPreviewImageData(null);
         setStep(STEPS.ARTWORK_QUESTIONS);
       } else {
+        setPreviewImageData(null);
         setStep(STEPS.ARTWORK_PREVIEW);
         const colId = await ensureCollection();
         if (colId) await doGeneratePreview(colId);
@@ -373,11 +383,14 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         if (models.length > 0 && !selectedImageModel) {
           setSelectedImageModel(models[0]);
         }
+        if (models.length > 0 && !selectedProductImageModel) {
+          setSelectedProductImageModel(models[0]);
+        }
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load image models' });
     }
-  }, [api, selectedImageModel]);
+  }, [api, selectedImageModel, selectedProductImageModel]);
 
   const advanceToNextItem = useCallback((fromIndex = currentItemIndex, artworkOverride = null) => {
     const artwork = artworkOverride || collectionArtwork;
@@ -538,7 +551,8 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     if (!cancelRef.current) {
       setUpscaleComplete(true);
     }
-  }, [estimate, aiItems, projectId, api, buildProjectAnswers, collectionArtwork]);
+    refreshTokens();
+  }, [estimate, aiItems, projectId, api, buildProjectAnswers, collectionArtwork, refreshTokens]);
 
   const reset = useCallback(() => {
     setStep(STEPS.PROJECT_QUESTIONS);
@@ -678,6 +692,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         } else {
           setResumeStep('artwork_resume');
         }
+        setInitialLoading(false);
       } else {
         setInitialLoading(false);
       }
@@ -793,6 +808,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     allProductImages, setAllProductImages,
     loadProductImageVariants, loadImageModels,
     imageModels, selectedImageModel, setSelectedImageModel,
+    selectedProductImageModel, setSelectedProductImageModel,
     upscaleComplete, setUpscaleComplete,
     productBlueprintImages, setProductBlueprintImages,
     printifyImageIndexByColor,

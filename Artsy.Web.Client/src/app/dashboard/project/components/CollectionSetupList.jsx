@@ -126,14 +126,9 @@ export default function CollectionSetupList() {
     reviewStep(STEPS.PRODUCT_IMAGE_PROMPT, combo);
   };
 
-  const firstUnacceptedIdx = aiBlueprintItems.findIndex((item, idx) => {
+  const firstUnacceptedIdx = aiBlueprintItems.findIndex((item) => {
     const art = collectionArtwork.find(a => String(a.itemId) === String(item.id));
-    const accepted = art && art.accepted;
-    if (accepted) return false;
-    return idx > 0 && aiBlueprintItems.slice(0, idx).some(prevItem => {
-      const prevArt = collectionArtwork.find(a => String(a.itemId) === String(prevItem.id));
-      return prevArt && prevArt.accepted;
-    });
+    return !(art && art.accepted);
   });
 
   const artworkContent = (
@@ -247,7 +242,7 @@ export default function CollectionSetupList() {
       ) : null,
     }] : []),
     {
-      title: renderTitle('Generate Artworks using Questions & Answers', acceptedArtwork > 0 && acceptedArtwork === totalArtwork, totalArtwork > 0 ? `${acceptedArtwork}/${totalArtwork}` : null, isCurrent(STEPS.ARTWORK_QUESTIONS)),
+      title: renderTitle('Generate Artworks', acceptedArtwork > 0 && acceptedArtwork === totalArtwork, totalArtwork > 0 ? `${acceptedArtwork}/${totalArtwork}` : null, isCurrent(STEPS.ARTWORK_QUESTIONS)),
       content: artworkContent,
     },
     {

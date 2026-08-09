@@ -8,8 +8,9 @@ import Message from '@/components/ui/message';
 import ConfirmModal from '@/components/ui/confirm-modal';
 import { List, Item } from '@/components/ui/list';
 import IdeaModal from './IdeaModal';
+import CollectionModal from './CollectionModal';
 
-export default function IdeaWorkshopSection({ projectId }) {
+export default function IdeaWorkshopSection({ projectId, project }) {
   const session = useSession();
   const { getIdeas, deleteIdea } = Projects(session);
 
@@ -19,6 +20,9 @@ export default function IdeaWorkshopSection({ projectId }) {
   const [showNew, setShowNew] = useState(false);
   const [selectedIdeaId, setSelectedIdeaId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [showCollectionModal, setShowCollectionModal] = useState(false);
+  const [resumeCollectionId, setResumeCollectionId] = useState(null);
+  const [resumeCollectionTitle, setResumeCollectionTitle] = useState('');
 
   const fetchIdeas = async () => {
     try {
@@ -58,6 +62,15 @@ export default function IdeaWorkshopSection({ projectId }) {
   const handleIdeaCreated = (idea) => {
     setShowNew(false);
     setSelectedIdeaId(idea.id);
+    fetchIdeas();
+  };
+
+  const handleCollectionCreated = (collection) => {
+    setShowNew(false);
+    setSelectedIdeaId(null);
+    setResumeCollectionId(collection.id);
+    setResumeCollectionTitle(collection.title || 'New Collection');
+    setShowCollectionModal(true);
     fetchIdeas();
   };
 
@@ -138,9 +151,19 @@ export default function IdeaWorkshopSection({ projectId }) {
           ideaId={selectedIdeaId}
           onClose={handleCloseModal}
           onIdeaCreated={handleIdeaCreated}
-          onCollectionCreated={fetchIdeas}
+          onCollectionCreated={handleCollectionCreated}
         />
       )}
+
+      <CollectionModal
+        show={showCollectionModal}
+        projectId={projectId}
+        project={project}
+        collectionId={resumeCollectionId}
+        collectionTitle={resumeCollectionTitle}
+        onClose={() => setShowCollectionModal(false)}
+        onSaved={fetchIdeas}
+      />
 
       <ConfirmModal
         show={!!deleteTarget}

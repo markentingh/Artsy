@@ -6,6 +6,7 @@ namespace Artsy.Data.Entities.Projects
         public Guid ProjectId { get; set; }
         public string Title { get; set; } = "";
         public string Prompt { get; set; } = "";
+        public string MetadataJson { get; set; } = "";
         public DateTime Created { get; set; }
     }
 }

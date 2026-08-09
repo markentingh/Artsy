@@ -7,7 +7,7 @@ namespace Artsy.API.Services
     {
         Task<int> GetAvailableTokensAsync(Guid appUserId);
         Task<bool> HasEnoughTokensAsync(Guid appUserId, int tokensNeeded);
-        Task UseTokensAsync(Guid appUserId, int tokensToUse);
+        Task<bool> UseTokensAsync(Guid appUserId, int tokensToUse);
     }
 
     public class AITokenService : IAITokenService
@@ -32,10 +32,19 @@ namespace Artsy.API.Services
             return available >= tokensNeeded;
         }
 
-        public async Task UseTokensAsync(Guid appUserId, int tokensToUse)
+        public async Task<bool> UseTokensAsync(Guid appUserId, int tokensToUse)
         {
+            if (tokensToUse <= 0)
+                return true;
+
             var billingMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
-            var tokens = (await _appUserAITokenRepository.GetByAppUserAndMonthAsync(appUserId, billingMonth)).ToList();
+            var tokens = (await _appUserAITokenRepository.GetByAppUserAndMonthAsync(appUserId, billingMonth))
+                .OrderBy(t => t.DateCreated)
+                .ToList();
+
+            var totalAvailable = tokens.Sum(t => t.Tokens - t.TokensUsed);
+            if (totalAvailable < tokensToUse)
+                return false;
 
             var remaining = tokensToUse;
             foreach (var token in tokens)
@@ -51,6 +60,8 @@ namespace Artsy.API.Services
 
                 await _appUserAITokenRepository.UpdateTokensUsedAsync(token.Id, token.TokensUsed);
             }
+
+            return remaining == 0;
         }
     }
 }

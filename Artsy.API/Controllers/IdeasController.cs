@@ -119,7 +119,6 @@ namespace Artsy.API.Controllers
             if (string.IsNullOrWhiteSpace(request?.Prompt))
                 return Json(new ApiResponse { success = false, message = "Idea prompt is required" });
 
-            var projectQuestions = (await _projectQuestionRepository.GetByProjectIdAsync(projectId)).ToList();
             var items = (await _projectItemRepository.GetByProjectIdAsync(projectId)).ToList();
             var allItemQuestions = (await _projectItemQuestionRepository.GetByProjectIdAsync(projectId)).ToList();
             var allArtwork = (await _projectItemArtworkRepository.GetByProjectIdAsync(projectId)).ToList();
@@ -184,6 +183,46 @@ namespace Artsy.API.Controllers
             if (titleResult == null || string.IsNullOrWhiteSpace(titleResult.Title))
                 return Json(new ApiResponse { success = false, message = "LLM did not return an idea title" });
 
+            var metadata = new IdeaMetadata
+            {
+                ArtworkDescriptions = titleResult.ArtworkDescriptions ?? new Dictionary<string, string>()
+            };
+            var idea = await _projectIdeaRepository.CreateAsync(new ProjectIdea
+            {
+                ProjectId = projectId,
+                Title = titleResult.Title,
+                Prompt = request.Prompt,
+                MetadataJson = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase })
+            });
+
+            return await GetIdea(projectId, idea.Id);
+        }
+
+        [HttpPost("{ideaId}/variations")]
+        public async Task<IActionResult> CreateIdeaVariation(Guid projectId, Guid ideaId)
+        {
+            var userId = GetUserId();
+            var project = await _projectRepository.GetByIdAsync(projectId, userId);
+            if (project == null) return Json(new ApiResponse { success = false, message = "Project not found" });
+
+            var idea = await _projectIdeaRepository.GetByIdAsync(ideaId);
+            if (idea == null || idea.ProjectId != projectId) return Json(new ApiResponse { success = false, message = "Idea not found" });
+
+            var metadata = JsonSerializer.Deserialize<IdeaMetadata>(idea.MetadataJson) ?? new IdeaMetadata();
+
+            var projectQuestions = (await _projectQuestionRepository.GetByProjectIdAsync(projectId)).ToList();
+            var items = (await _projectItemRepository.GetByProjectIdAsync(projectId)).ToList();
+            var allItemQuestions = (await _projectItemQuestionRepository.GetByProjectIdAsync(projectId)).ToList();
+            var allArtwork = (await _projectItemArtworkRepository.GetByProjectIdAsync(projectId)).ToList();
+
+            var itemQuestionMap = allItemQuestions.GroupBy(q => q.ItemId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            var artworkPrompts = allArtwork
+                .Where(a => a.ArtworkType == "ai" && !string.IsNullOrWhiteSpace(a.Prompt))
+                .GroupBy(a => a.ItemId)
+                .ToDictionary(g => g.Key, g => g.First().Prompt);
+
             var artworkList = new List<object>();
             foreach (var item in items)
             {
@@ -192,7 +231,7 @@ namespace Artsy.API.Controllers
                 if (!itemQuestionMap.ContainsKey(item.Id) || itemQuestionMap[item.Id].Count == 0)
                     continue;
 
-                var artworkDescription = titleResult.ArtworkDescriptions != null && titleResult.ArtworkDescriptions.TryGetValue(item.Id.ToString(), out var d) && !string.IsNullOrWhiteSpace(d)
+                var artworkDescription = metadata.ArtworkDescriptions != null && metadata.ArtworkDescriptions.TryGetValue(item.Id.ToString(), out var d) && !string.IsNullOrWhiteSpace(d)
                     ? d
                     : artworkPrompts[item.Id];
 
@@ -215,13 +254,6 @@ namespace Artsy.API.Controllers
                 artworks = artworkList
             };
 
-            var idea = await _projectIdeaRepository.CreateAsync(new ProjectIdea
-            {
-                ProjectId = projectId,
-                Title = titleResult.Title,
-                Prompt = request.Prompt
-            });
-
             var answerSystemPrompt = "You are a creative assistant. Given the user's idea and project context, you must answer all the given questions creatively.\n" +
                 "Every question MUST have an answer that fits the requirements of the user's idea.\n" +
                 "The project answers should influence and affect each artwork answer.\n" +
@@ -235,67 +267,60 @@ namespace Artsy.API.Controllers
 
             var serializedContext = JsonSerializer.Serialize(context, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
-            var usedTitles = new List<string>();
+            var usedTitles = metadata.UsedTitles ?? new List<string>();
+            var previousTitlesText = usedTitles.Count > 0
+                ? $"\n\nUsed idea titles: [{string.Join(", ", usedTitles.Select(t => $"\"{t}\""))}]"
+                : "";
+            var variationUserPrompt = $"Idea: {idea.Prompt}\n\nProject context:\n{serializedContext}\n\nThere are {projectQuestions.Count} project questions and {allItemQuestions.Count} artwork questions in total.{previousTitlesText}";
 
-            for (var i = 0; i < 5; i++)
+            string variationLlmOutput;
+            try
             {
-                var previousTitlesText = usedTitles.Count > 0
-                    ? $"\n\nUsed idea titles: [{string.Join(", ", usedTitles.Select(t => $"\"{t}\""))}]"
-                    : "";
-                var variationUserPrompt = $"Idea: {request.Prompt}\n\nProject context:\n{serializedContext}\n\nThere are {projectQuestions.Count} project questions and {allItemQuestions.Count} artwork questions in total.{previousTitlesText}";
-
-                string variationLlmOutput;
-                try
-                {
-                    variationLlmOutput = await OpenAI.Prompt(answerSystemPrompt, "", variationUserPrompt, seed: (long)Random.Shared.Next(1, int.MaxValue));
-                }
-                catch (Exception ex)
-                {
-                    await _projectIdeaRepository.DeleteAsync(idea.Id);
-                    return Json(new ApiResponse { success = false, message = $"LLM idea generation failed for idea {i + 1}: {ex.Message}" });
-                }
-
-                var variationRawJson = ExtractFirstJsonObject(variationLlmOutput) ?? variationLlmOutput.Trim();
-
-                if (string.IsNullOrWhiteSpace(variationRawJson))
-                {
-                    await _projectIdeaRepository.DeleteAsync(idea.Id);
-                    return Json(new ApiResponse { success = false, message = $"LLM returned an empty response for idea {i + 1}" });
-                }
-
-                IdeaVariationResult? variationResult;
-                try
-                {
-                    variationResult = JsonSerializer.Deserialize<IdeaVariationResult>(variationRawJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true, AllowTrailingCommas = true });
-                }
-                catch (Exception ex)
-                {
-                    await _projectIdeaRepository.DeleteAsync(idea.Id);
-                    return Json(new ApiResponse { success = false, message = $"Failed to parse LLM response for idea {i + 1}: {ex.Message}" });
-                }
-
-                if (variationResult == null)
-                {
-                    await _projectIdeaRepository.DeleteAsync(idea.Id);
-                    return Json(new ApiResponse { success = false, message = $"LLM returned an invalid response for idea {i + 1}" });
-                }
-
-                variationResult.Project ??= new IdeaAnswersResult();
-                variationResult.Artworks ??= new IdeaAnswersResult();
-
-                var variationTitle = variationResult.Title ?? $"Idea {i + 1}";
-                usedTitles.Add(variationTitle);
-
-                var variationEntity = new ProjectIdeaVariation
-                {
-                    ProjectIdeaId = idea.Id,
-                    Title = variationTitle,
-                    Description = "",
-                    IdeaJson = JsonSerializer.Serialize(variationResult, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase })
-                };
-
-                await _projectIdeaVariationRepository.CreateManyAsync(new[] { variationEntity });
+                variationLlmOutput = await OpenAI.Prompt(answerSystemPrompt, "", variationUserPrompt, seed: (long)Random.Shared.Next(1, int.MaxValue));
             }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = $"LLM idea variation generation failed: {ex.Message}" });
+            }
+
+            var variationRawJson = ExtractFirstJsonObject(variationLlmOutput) ?? variationLlmOutput.Trim();
+
+            if (string.IsNullOrWhiteSpace(variationRawJson))
+                return Json(new ApiResponse { success = false, message = "LLM returned an empty variation response" });
+
+            IdeaVariationResult? variationResult;
+            try
+            {
+                variationResult = JsonSerializer.Deserialize<IdeaVariationResult>(variationRawJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true, AllowTrailingCommas = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = $"Failed to parse LLM variation response: {ex.Message}" });
+            }
+
+            if (variationResult == null)
+                return Json(new ApiResponse { success = false, message = "LLM returned an invalid variation response" });
+
+            variationResult.Project ??= new IdeaAnswersResult();
+            variationResult.Artworks ??= new IdeaAnswersResult();
+
+            var nextNumber = usedTitles.Count + 1;
+            var variationTitle = variationResult.Title ?? $"Idea {nextNumber}";
+            usedTitles.Add(variationTitle);
+
+            metadata.UsedTitles = usedTitles;
+            idea.MetadataJson = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            await _projectIdeaRepository.UpdateAsync(idea);
+
+            var variationEntity = new ProjectIdeaVariation
+            {
+                ProjectIdeaId = idea.Id,
+                Title = variationTitle,
+                Description = "",
+                IdeaJson = JsonSerializer.Serialize(variationResult, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase })
+            };
+
+            await _projectIdeaVariationRepository.CreateManyAsync(new[] { variationEntity });
 
             return await GetIdea(projectId, idea.Id);
         }
@@ -353,7 +378,7 @@ namespace Artsy.API.Controllers
             var collection = await _projectCollectionRepository.CreateAsync(new ProjectCollection
             {
                 ProjectId = projectId,
-                Title = idea.Title,
+                Title = !string.IsNullOrWhiteSpace(variation.Title) ? variation.Title : idea.Title,
                 Description = "",
                 Created = DateTime.UtcNow,
                 Status = 1

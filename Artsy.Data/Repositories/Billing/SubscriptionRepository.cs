@@ -17,8 +17,8 @@ namespace Artsy.Data.Repositories
         public async Task<Subscription> CreateAsync(Subscription subscription)
         {
             const string query = @"
-                INSERT INTO public.""Subscriptions"" (""Title"", ""MonthlyProductId"", ""YearlyProductId"", ""FeaturesJson"", ""SortIndex"")
-                VALUES (@Title, @MonthlyProductId, @YearlyProductId, @FeaturesJson, COALESCE((SELECT MAX(""SortIndex"") FROM public.""Subscriptions"") + 1, 0))
+                INSERT INTO public.""Subscriptions"" (""Title"", ""MonthlyProductId"", ""YearlyProductId"", ""FeaturesJson"", ""SortIndex"", ""Status"")
+                VALUES (@Title, @MonthlyProductId, @YearlyProductId, @FeaturesJson, COALESCE((SELECT MAX(""SortIndex"") FROM public.""Subscriptions"") + 1, 0), @Status)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<Subscription>(query, subscription);
         }
@@ -37,14 +37,14 @@ namespace Artsy.Data.Repositories
 
         public async Task<IEnumerable<Subscription>> GetActiveAsync()
         {
-            const string query = @"SELECT * FROM public.""Subscriptions"" WHERE ""Archived"" = FALSE ORDER BY ""SortIndex"" ASC, ""DateCreated"" DESC";
+            const string query = @"SELECT * FROM public.""Subscriptions"" WHERE ""Archived"" = FALSE AND ""Status"" = 1 ORDER BY ""SortIndex"" ASC, ""DateCreated"" DESC";
             return await _dbConnection.QueryAsync<Subscription>(query);
         }
 
         public async Task UpdateAsync(Subscription subscription)
         {
             const string query = @"
-                UPDATE public.""Subscriptions"" SET ""Title"" = @Title, ""MonthlyProductId"" = @MonthlyProductId, ""YearlyProductId"" = @YearlyProductId, ""FeaturesJson"" = @FeaturesJson
+                UPDATE public.""Subscriptions"" SET ""Title"" = @Title, ""MonthlyProductId"" = @MonthlyProductId, ""YearlyProductId"" = @YearlyProductId, ""FeaturesJson"" = @FeaturesJson, ""Status"" = @Status
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, subscription);
         }

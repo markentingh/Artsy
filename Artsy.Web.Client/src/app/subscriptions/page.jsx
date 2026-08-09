@@ -46,7 +46,9 @@ export default function SubscriptionsPage() {
     );
   }
 
-  const subscriptions = (data.subscriptions || []).sort((a, b) => a.sortIndex - b.sortIndex);
+  const subscriptions = (data.subscriptions || [])
+    .filter(s => s.status === 1)
+    .sort((a, b) => a.sortIndex - b.sortIndex);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 text-white">

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useCollection } from '@/context/collection';
+import { useDashboard } from '@/context/dashboard';
 import TextArea from '@/components/forms/textarea';
 import ButtonOutline from '@/components/ui/button-outline';
 import Spinner from '@/components/ui/spinner';
@@ -11,7 +12,9 @@ export default function ProductImagePreview() {
     setStep, setMessage, STEPS, onClose,
     allProductImages, setAllProductImages,
     setCurrentProductComboIndex,
+    selectedProductImageModel,
   } = useCollection();
+  const { refreshTokens } = useDashboard();
 
   const [currentProductImage, setCurrentProductImage] = useState(null);
   const [isGeneratingProductImage, setIsGeneratingProductImage] = useState(false);
@@ -30,6 +33,7 @@ export default function ProductImagePreview() {
         collectionId,
         projectBlueprintId: comboArg.projectBlueprintId,
         productImageId: comboArg.productImageId,
+        modelId: selectedProductImageModel?.id,
         prompt: productImagePrompt,
         requestedChanges: changes,
       });
@@ -37,6 +41,7 @@ export default function ProductImagePreview() {
         setCurrentProductImage(res.data.data);
         setShowProductImageChanges(false);
         setProductImageChanges('');
+        refreshTokens();
       } else {
         setMessage({ type: 'error', text: res.data.message || 'Failed to generate product image' });
       }
@@ -45,7 +50,7 @@ export default function ProductImagePreview() {
     } finally {
       setIsGeneratingProductImage(false);
     }
-  }, [projectId, collectionId, api, productImagePrompt, setIsGeneratingProductImage, setCurrentProductImage, setShowProductImageChanges, setProductImageChanges, setMessage]);
+  }, [projectId, collectionId, api, productImagePrompt, setIsGeneratingProductImage, setCurrentProductImage, setShowProductImageChanges, setProductImageChanges, setMessage, refreshTokens, selectedProductImageModel]);
 
   useEffect(() => {
     if (!currentProductImage && combo && !isGeneratingProductImage) {

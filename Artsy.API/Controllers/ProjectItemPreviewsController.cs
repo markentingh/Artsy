@@ -69,12 +69,12 @@ namespace Artsy.API.Controllers
                 if (artwork == null || string.IsNullOrWhiteSpace(artwork.ImageModel))
                     return Json(new ApiResponse { success = false, message = "No image model configured for this item." });
 
-                var genModel = await _imageGenerationModelRepository.GetByModelKeyAsync(artwork.ImageModel);
+                if (request.ModelId <= 0)
+                    return Json(new ApiResponse { success = false, message = "Model ID is required." });
+
+                var genModel = await _imageGenerationModelRepository.GetByIdAsync(request.ModelId);
                 if (genModel == null)
                     return Json(new ApiResponse { success = false, message = "Image model not found in database." });
-
-                if (!await _aiTokenService.HasEnoughTokensAsync(userId, 1))
-                    return Json(new ApiResponse { success = false, message = "Not enough tokens to generate the preview. Please purchase more tokens before continuing." });
 
                 var jsonOptions = new JsonSerializerOptions
                 {
@@ -121,6 +121,7 @@ namespace Artsy.API.Controllers
 
                 var references = await _projectItemReferenceRepository.GetByItemIdAsync(request.ItemId);
                 var inputImages = new List<byte[]>();
+                var inputImageRefs = new List<object>();
                 if (references != null && references.Any())
                 {
                     foreach (var reference in references)
@@ -148,6 +149,7 @@ namespace Artsy.API.Controllers
                         if (imageBytes != null && imageBytes.Length > 0)
                         {
                             inputImages.Add(imageBytes);
+                            inputImageRefs.Add(new { type = reference.ArtworkId.HasValue ? "artwork" : "custom", id = (reference.ArtworkId ?? reference.CustomImageId).ToString() });
                         }
                     }
                 }
@@ -165,9 +167,9 @@ namespace Artsy.API.Controllers
 
                 try
                 {
-                    var imageGen = _imageGenerations.FirstOrDefault(g => g.ModelKey.Equals(artwork.ImageModel, StringComparison.OrdinalIgnoreCase));
+                    var imageGen = _imageGenerations.FirstOrDefault(g => g.ModelKey.Equals(genModel.ModelKey, StringComparison.OrdinalIgnoreCase));
                     if (imageGen == null)
-                        throw new InvalidOperationException($"Image model '{artwork.ImageModel}' is not supported.");
+                        throw new InvalidOperationException($"Image model '{genModel.ModelKey}' is not supported.");
 
                     var genRequest = new ImageGenerationRequest
                     {
@@ -178,6 +180,22 @@ namespace Artsy.API.Controllers
                         Height = 1024,
                         Quality = "low"
                     };
+
+                    var previewInputDimensions = new List<(int width, int height)>();
+                    foreach (var img in inputImages)
+                    {
+                        var dims = await _imageService.GetImageDimensionsAsync(img);
+                        if (dims.HasValue)
+                            previewInputDimensions.Add(dims.Value);
+                    }
+
+                    var previewTokenCost = _tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m;
+                    var previewTokenizer = imageGen.CreateTokenizer(genModel);
+                    var previewTokenCalc = previewTokenizer.CalculateTokens(finalPrompt, 1024, 1024, "low", previewInputDimensions, "auto", previewTokenCost);
+
+                    if (!await _aiTokenService.UseTokensAsync(userId, previewTokenCalc.PlatformTokens))
+                        throw new InvalidOperationException("Not enough tokens to generate the preview. Please purchase more tokens before continuing.");
+
                     var genResult = await imageGen.GenerateAsync(genRequest);
                     await _imageService.SaveProjectItemPreviewAsync(createdPreview.ProjectId, createdPreview.ItemId, createdPreview.Id, genResult.ImageBytes);
 
@@ -190,14 +208,15 @@ namespace Artsy.API.Controllers
                         InputTextTokens = genResult.InputTokens,
                         InputImageTokens = 0,
                         OutputTokens = genResult.OutputTokens,
-                        Tokens = Math.Max(1, (int)Math.Round(((genResult.InputTokens + genResult.OutputTokens) / 1_000_000m * (genModel.CPMITTokens + genModel.CPMOTokens)) / _tokenCostOptions.Cost)),
-                        ImageModel = genModel.Model,
+                        Tokens = previewTokenCalc.PlatformTokens,
                         Prompt = finalPrompt,
-                        Filename = $"{createdPreview.Id}.jpg"
+                        Filename = $"{createdPreview.Id}.jpg",
+                        Resolution = "1024x1024",
+                        InputImages = inputImages.Count,
+                        InputImageJson = System.Text.Json.JsonSerializer.Serialize(inputImageRefs),
+                        Type = 0,
+                        Cost = (int)Math.Round(previewTokenCalc.EstimatedCostUSD * 100)
                     });
-
-                    var tokensToDeduct = Math.Max(1, (int)Math.Round(((genResult.InputTokens + genResult.OutputTokens) / 1_000_000m * (genModel.CPMITTokens + genModel.CPMOTokens)) / _tokenCostOptions.Cost));
-                    await _aiTokenService.UseTokensAsync(userId, tokensToDeduct);
                 }
                 catch
                 {

@@ -31,10 +31,19 @@ namespace Artsy.Data.Repositories.Projects
             idea.Id = Guid.NewGuid();
             idea.Created = DateTime.UtcNow;
             const string query = @"
-                INSERT INTO public.""ProjectIdeas"" (""Id"", ""ProjectId"", ""Title"", ""Prompt"", ""Created"")
-                VALUES (@Id, @ProjectId, @Title, @Prompt, @Created)
+                INSERT INTO public.""ProjectIdeas"" (""Id"", ""ProjectId"", ""Title"", ""Prompt"", ""MetadataJson"", ""Created"")
+                VALUES (@Id, @ProjectId, @Title, @Prompt, @MetadataJson, @Created)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectIdea>(query, idea);
+        }
+
+        public async Task UpdateAsync(ProjectIdea idea)
+        {
+            const string query = @"
+                UPDATE public.""ProjectIdeas""
+                SET ""Title"" = @Title, ""Prompt"" = @Prompt, ""MetadataJson"" = @MetadataJson
+                WHERE ""Id"" = @Id";
+            await _dbConnection.ExecuteAsync(query, idea);
         }
 
         public async Task DeleteAsync(Guid id)

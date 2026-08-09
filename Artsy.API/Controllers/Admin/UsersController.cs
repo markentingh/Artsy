@@ -82,6 +82,39 @@ namespace Artsy.API.Controllers.Admin
             }
         }
 
+        [HttpGet("get/{userId}")]
+        public async Task<IActionResult> GetById(Guid userId)
+        {
+            try
+            {
+                var user = await _userRepo.FindByGuidAsync(userId);
+                if (user == null)
+                    return Json(new ApiResponse { success = false, message = "User not found." });
+
+                var userRole = user.UserRoles?.FirstOrDefault();
+                var roleName = userRole?.AppRole?.Name ?? "User";
+
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = new
+                    {
+                        id = user.Id,
+                        email = user.Email,
+                        fullName = user.FullName,
+                        created = user.Created,
+                        lastLogin = user.LastLogin,
+                        status = user.Status.ToString(),
+                        roleName = roleName
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
         [HttpPost("update-lock")]
         public async Task<IActionResult> UpdateLock([FromBody] UpdateLockRequest request)
         {

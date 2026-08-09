@@ -52,7 +52,8 @@ namespace Artsy.API.Controllers
                             s.YearlyProductId,
                             s.FeaturesJson,
                             s.Featured,
-                            s.SortIndex
+                            s.SortIndex,
+                            s.Status
                         }),
                         products
                     }

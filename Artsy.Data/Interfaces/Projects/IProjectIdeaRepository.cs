@@ -7,6 +7,7 @@ namespace Artsy.Data.Interfaces.Projects
         Task<IEnumerable<ProjectIdea>> GetByProjectIdAsync(Guid projectId);
         Task<ProjectIdea?> GetByIdAsync(Guid id);
         Task<ProjectIdea> CreateAsync(ProjectIdea idea);
+        Task UpdateAsync(ProjectIdea idea);
         Task DeleteAsync(Guid id);
     }
 }

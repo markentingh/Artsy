@@ -49,7 +49,7 @@ export default function TextArea({
   return (
     <div className={`mb-4 ${className}`}>
       {label && (
-        <label htmlFor={name} className="block text-sm font-medium mb-1">
+        <label htmlFor={name} className="block text-sm font-medium mb-2">
           {label}{required ? ' *' : ''}
         </label>
       )}

@@ -73,7 +73,7 @@ namespace Artsy.API.Services
             var relativePath = Path.Combine("projects", projectId.ToString(), "previews", itemId.ToString(), fileName);
             var thumbFileName = $"{previewId}_thumb.jpg";
             var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "previews", itemId.ToString(), thumbFileName);
-            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
 
             if (_activeStorage == "azure")
             {
@@ -95,13 +95,29 @@ namespace Artsy.API.Services
             {
                 var bytes = await GetFromAzureBlobAsync(relativePath);
                 if (bytes.Length == 0 && thumb)
-                    return await GetFromAzureBlobAsync(Path.Combine("projects", projectId.ToString(), "previews", itemId.ToString(), $"{previewId}.jpg"));
+                {
+                    var fullBytes = await GetFromAzureBlobAsync(Path.Combine("projects", projectId.ToString(), "previews", itemId.ToString(), $"{previewId}.jpg"));
+                    if (fullBytes.Length > 0)
+                    {
+                        var thumbBytes = await GenerateThumbnailAsync(fullBytes);
+                        await SaveToAzureBlobAsync(relativePath, thumbBytes);
+                        return thumbBytes;
+                    }
+                }
                 return bytes;
             }
 
             var fileBytes = await GetFromFileSystemAsync(relativePath);
             if (fileBytes.Length == 0 && thumb)
-                return await GetFromFileSystemAsync(Path.Combine("projects", projectId.ToString(), "previews", itemId.ToString(), $"{previewId}.jpg"));
+            {
+                var fullBytes = await GetFromFileSystemAsync(Path.Combine("projects", projectId.ToString(), "previews", itemId.ToString(), $"{previewId}.jpg"));
+                if (fullBytes.Length > 0)
+                {
+                    var thumbBytes = await GenerateThumbnailAsync(fullBytes);
+                    await SaveToFileSystemAsync(relativePath, thumbBytes);
+                    return thumbBytes;
+                }
+            }
             return fileBytes;
         }
 
@@ -128,7 +144,7 @@ namespace Artsy.API.Services
             var thumbFileName = $"{imageIndex}_thumb.jpg";
             var relativePath = Path.Combine("Printify", "catalog", blueprintId.ToString(), fileName);
             var thumbRelativePath = Path.Combine("Printify", "catalog", blueprintId.ToString(), thumbFileName);
-            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
 
             if (_activeStorage == "azure")
             {
@@ -150,21 +166,41 @@ namespace Artsy.API.Services
             {
                 var bytes = await GetFromAzureBlobAsync(relativePath);
                 if (bytes.Length == 0 && thumb)
-                    return await GetFromAzureBlobAsync(Path.Combine("Printify", "catalog", blueprintId.ToString(), $"{imageIndex}.jpg"));
+                {
+                    var fullBytes = await GetFromAzureBlobAsync(Path.Combine("Printify", "catalog", blueprintId.ToString(), $"{imageIndex}.jpg"));
+                    if (fullBytes.Length > 0)
+                    {
+                        var thumbBytes = await GenerateThumbnailAsync(fullBytes);
+                        await SaveToAzureBlobAsync(relativePath, thumbBytes);
+                        return thumbBytes;
+                    }
+                }
                 return bytes;
             }
 
             var fileBytes = await GetFromFileSystemAsync(relativePath);
             if (fileBytes.Length == 0 && thumb)
-                return await GetFromFileSystemAsync(Path.Combine("Printify", "catalog", blueprintId.ToString(), $"{imageIndex}.jpg"));
+            {
+                var fullBytes = await GetFromFileSystemAsync(Path.Combine("Printify", "catalog", blueprintId.ToString(), $"{imageIndex}.jpg"));
+                if (fullBytes.Length > 0)
+                {
+                    var thumbBytes = await GenerateThumbnailAsync(fullBytes);
+                    await SaveToFileSystemAsync(relativePath, thumbBytes);
+                    return thumbBytes;
+                }
+            }
             return fileBytes;
         }
 
-        async Task<byte[]> GenerateThumbnailAsync(byte[] imageData, int width)
+        async Task<byte[]> GenerateThumbnailAsync(byte[] imageData, int size = 350)
         {
             using var image = Image.Load(imageData);
-            var height = (int)Math.Round(image.Height * (width / (double)image.Width));
-            image.Mutate(x => x.Resize(width, height));
+            image.Mutate(x => x
+                .Resize(new ResizeOptions
+                {
+                    Size = new Size(size, size),
+                    Mode = ResizeMode.Crop
+                }));
             using var stream = new MemoryStream();
             image.SaveAsJpeg(stream, new JpegEncoder { Quality = 85 });
             return stream.ToArray();
@@ -176,7 +212,7 @@ namespace Artsy.API.Services
             var relativePath = Path.Combine("projects", projectId.ToString(), "references", fileName);
             var thumbFileName = $"{referenceId}_thumb.jpg";
             var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "references", thumbFileName);
-            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
 
             if (_activeStorage == "azure")
             {
@@ -196,15 +232,31 @@ namespace Artsy.API.Services
                 var thumbFileName = $"{referenceId}_thumb.jpg";
                 var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "references", thumbFileName);
 
+                byte[] thumbBytes;
                 if (_activeStorage == "azure")
-                {
-                    var thumbBytes = await GetFromAzureBlobAsync(thumbRelativePath);
-                    if (thumbBytes.Length > 0) return thumbBytes;
-                }
+                    thumbBytes = await GetFromAzureBlobAsync(thumbRelativePath);
                 else
+                    thumbBytes = await GetFromFileSystemAsync(thumbRelativePath);
+
+                if (thumbBytes.Length > 0)
+                    return thumbBytes;
+
+                var fullFileName = $"{referenceId}{extension}";
+                var fullRelativePath = Path.Combine("projects", projectId.ToString(), "references", fullFileName);
+                byte[] fullBytes;
+                if (_activeStorage == "azure")
+                    fullBytes = await GetFromAzureBlobAsync(fullRelativePath);
+                else
+                    fullBytes = await GetFromFileSystemAsync(fullRelativePath);
+
+                if (fullBytes.Length > 0)
                 {
-                    var thumbBytes = await GetFromFileSystemAsync(thumbRelativePath);
-                    if (thumbBytes.Length > 0) return thumbBytes;
+                    var generatedThumb = await GenerateThumbnailAsync(fullBytes);
+                    if (_activeStorage == "azure")
+                        await SaveToAzureBlobAsync(thumbRelativePath, generatedThumb);
+                    else
+                        await SaveToFileSystemAsync(thumbRelativePath, generatedThumb);
+                    return generatedThumb;
                 }
             }
 
@@ -331,7 +383,7 @@ namespace Artsy.API.Services
             var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
             var thumbFileName = $"{artworkId}_thumb.jpg";
             var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
-            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
 
             if (_activeStorage == "azure")
             {
@@ -388,7 +440,7 @@ namespace Artsy.API.Services
 
             var thumbFileName = $"{artworkId}_thumb.jpg";
             var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
-            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
 
             if (_activeStorage == "azure")
             {
@@ -479,7 +531,7 @@ namespace Artsy.API.Services
 
             var thumbFileName = $"{productImageId}_thumb.jpg";
             var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "product-images", thumbFileName);
-            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
 
             if (_activeStorage == "azure")
             {
@@ -545,7 +597,7 @@ namespace Artsy.API.Services
 
             var thumbFileName = $"{mockupId}_thumb.jpg";
             var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "mockups", thumbFileName);
-            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
 
             if (_activeStorage == "azure")
             {
@@ -665,7 +717,7 @@ namespace Artsy.API.Services
             var relativePath = Path.Combine("custom-images", appUserId.ToString(), fileName);
             var thumbFileName = $"{imageId}_thumb.jpg";
             var thumbRelativePath = Path.Combine("custom-images", appUserId.ToString(), thumbFileName);
-            var thumbImageData = await GenerateThumbnailAsync(imageData, 300);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
 
             if (_activeStorage == "azure")
             {
@@ -685,15 +737,31 @@ namespace Artsy.API.Services
                 var thumbFileName = $"{imageId}_thumb.jpg";
                 var thumbRelativePath = Path.Combine("custom-images", appUserId.ToString(), thumbFileName);
 
+                byte[] thumbBytes;
                 if (_activeStorage == "azure")
-                {
-                    var thumbBytes = await GetFromAzureBlobAsync(thumbRelativePath);
-                    if (thumbBytes.Length > 0) return thumbBytes;
-                }
+                    thumbBytes = await GetFromAzureBlobAsync(thumbRelativePath);
                 else
+                    thumbBytes = await GetFromFileSystemAsync(thumbRelativePath);
+
+                if (thumbBytes.Length > 0)
+                    return thumbBytes;
+
+                var fullFileName = $"{imageId}{extension}";
+                var fullRelativePath = Path.Combine("custom-images", appUserId.ToString(), fullFileName);
+                byte[] fullBytes;
+                if (_activeStorage == "azure")
+                    fullBytes = await GetFromAzureBlobAsync(fullRelativePath);
+                else
+                    fullBytes = await GetFromFileSystemAsync(fullRelativePath);
+
+                if (fullBytes.Length > 0)
                 {
-                    var thumbBytes = await GetFromFileSystemAsync(thumbRelativePath);
-                    if (thumbBytes.Length > 0) return thumbBytes;
+                    var generatedThumb = await GenerateThumbnailAsync(fullBytes);
+                    if (_activeStorage == "azure")
+                        await SaveToAzureBlobAsync(thumbRelativePath, generatedThumb);
+                    else
+                        await SaveToFileSystemAsync(thumbRelativePath, generatedThumb);
+                    return generatedThumb;
                 }
             }
 

@@ -1,0 +1,425 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSession } from '@/context/session';
+import { OpenAI } from '@/api/admin/openai';
+import Modal from '@/components/ui/modal';
+import Carousel from '@/components/ui/carousel';
+import BarChart from '@/components/ui/bar-chart';
+import ProductImagePreview from '@/app/dashboard/project/components/ProductImagePreview';
+import UserDetailsModal from '@/app/dashboard/users/UserDetailsModal';
+import Icon from '@/components/ui/icon';
+
+const TYPE_LABELS = ['Preview', 'Artwork', 'Product Image', 'Upscale'];
+
+const formatDate = (value) => {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  return date.toLocaleString('en-US', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: 'numeric', minute: '2-digit', second: '2-digit',
+    hour12: true
+  });
+};
+
+const formatCost = (cost) => {
+  if (cost == null) return '$0.00';
+  return `$${(cost / 100).toFixed(2)}`;
+};
+
+function getGeneratedImageUrl(gen) {
+  if (!gen.filename) return null;
+  const base = gen.filename.replace(/\.jpg$/, '');
+  const isFullSize = gen.filename.includes('_fullsize');
+  const id = isFullSize ? base.replace('_fullsize', '') : base;
+
+  switch (gen.type) {
+    case 0: // preview
+      return gen.itemId ? `/api/projects/item/${gen.itemId}/preview/${id}?thumb=true` : null;
+    case 1: // artwork
+      return (gen.collectionId && gen.itemId) ? `/api/projects/collection/${gen.collectionId}/item/${gen.itemId}/artwork/${id}?thumb=true` : null;
+    case 2: // product image
+      return gen.collectionId ? `/api/projects/collection/${gen.collectionId}/product-image/${id}?thumb=true` : null;
+    case 3: // upscale
+      return (gen.collectionId && gen.itemId) ? `/api/projects/collection/${gen.collectionId}/item/${gen.itemId}/artwork/${id}?fullSize=true` : null;
+    default:
+      return null;
+  }
+}
+
+function getGeneratedFullSizeUrl(gen) {
+  if (!gen.filename) return null;
+  const base = gen.filename.replace(/\.jpg$/, '');
+  const isFullSize = gen.filename.includes('_fullsize');
+  const id = isFullSize ? base.replace('_fullsize', '') : base;
+
+  switch (gen.type) {
+    case 0:
+      return gen.itemId ? `/api/projects/item/${gen.itemId}/preview/${id}` : null;
+    case 1:
+      return (gen.collectionId && gen.itemId) ? `/api/projects/collection/${gen.collectionId}/item/${gen.itemId}/artwork/${id}` : null;
+    case 2:
+      return gen.collectionId ? `/api/projects/collection/${gen.collectionId}/product-image/${id}` : null;
+    case 3:
+      return (gen.collectionId && gen.itemId) ? `/api/projects/collection/${gen.collectionId}/item/${gen.itemId}/artwork/${id}?fullSize=true` : null;
+    default:
+      return null;
+  }
+}
+
+function getReferenceImageUrl(ref, gen) {
+  if (!ref || !ref.id) return null;
+  switch (ref.type) {
+    case 'artwork':
+      return (gen.collectionId && gen.itemId) ? `/api/projects/collection/${gen.collectionId}/item/${gen.itemId}/artwork/${ref.id}?thumb=true` : null;
+    case 'custom':
+      return `/api/custom-images/custom-image/${ref.id}?thumb=true`;
+    case 'mockup':
+      return (gen.projectId && gen.collectionId) ? `/api/printify-products/mockup-image?projectId=${gen.projectId}&collectionId=${gen.collectionId}&mockupId=${ref.id}&thumb=true` : null;
+    default:
+      return null;
+  }
+}
+
+function getReferenceFullSizeUrl(ref, gen) {
+  if (!ref || !ref.id) return null;
+  switch (ref.type) {
+    case 'artwork':
+      return (gen.collectionId && gen.itemId) ? `/api/projects/collection/${gen.collectionId}/item/${gen.itemId}/artwork/${ref.id}` : null;
+    case 'custom':
+      return `/api/custom-images/custom-image/${ref.id}`;
+    case 'mockup':
+      return (gen.projectId && gen.collectionId) ? `/api/printify-products/mockup-image?projectId=${gen.projectId}&collectionId=${gen.collectionId}&mockupId=${ref.id}` : null;
+    default:
+      return null;
+  }
+}
+
+export default function ImageGenerationsTab() {
+  const session = useSession();
+  const { getImageGenerations, getDailyCosts } = OpenAI(session);
+  const PAGE_SIZE = 25;
+
+  const [generations, setGenerations] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [selectedGen, setSelectedGen] = useState(null);
+  const [previewImages, setPreviewImages] = useState([]);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [showPreview, setShowPreview] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [dailyCosts, setDailyCosts] = useState(null);
+  const scrollRef = useRef(null);
+  const mountedRef = useRef(false);
+
+  const fetchGenerations = useCallback(async (start, append = false) => {
+    if (append) setLoadingMore(true); else setLoading(true);
+    try {
+      const response = await getImageGenerations(start, PAGE_SIZE);
+      if (response.data.success) {
+        const newItems = response.data.data.items || [];
+        setTotalCount(response.data.data.totalCount || 0);
+        if (append) {
+          setGenerations(prev => [...prev, ...newItems]);
+        } else {
+          setGenerations(newItems);
+        }
+        setHasMore(start + PAGE_SIZE < (response.data.data.totalCount || 0));
+      }
+    } catch (error) {
+      console.error('Error fetching image generations:', error);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }, [getImageGenerations]);
+
+  useEffect(() => {
+    if (mountedRef.current) return;
+    mountedRef.current = true;
+    fetchGenerations(0);
+    getDailyCosts(30).then((response) => {
+      if (response.data.success) {
+        setDailyCosts(response.data.data || []);
+      }
+    }).catch((error) => console.error('Error fetching daily costs:', error));
+  }, []);
+
+  const handleScroll = useCallback((e) => {
+    const el = e.target;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 50 && hasMore && !loadingMore && !loading) {
+      fetchGenerations(generations.length, true);
+    }
+  }, [hasMore, loadingMore, loading, generations.length, fetchGenerations]);
+
+  const handleRowClick = (gen) => {
+    setSelectedGen(gen);
+  };
+
+  const handleUserClick = useCallback((e, userId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (userId) setSelectedUserId(userId);
+  }, []);
+
+  const buildCarouselImages = (gen) => {
+    const images = [];
+    const generatedThumb = getGeneratedImageUrl(gen);
+    if (generatedThumb) images.push(generatedThumb);
+
+    try {
+      const refs = JSON.parse(gen.inputImageJson || '[]');
+      for (const ref of refs) {
+        const refUrl = getReferenceImageUrl(ref, gen);
+        if (refUrl) images.push(refUrl);
+      }
+    } catch { /* ignore */ }
+
+    return images;
+  };
+
+  const buildFullSizeImages = (gen) => {
+    const images = [];
+    const generatedFull = getGeneratedFullSizeUrl(gen);
+    if (generatedFull) images.push(generatedFull);
+
+    try {
+      const refs = JSON.parse(gen.inputImageJson || '[]');
+      for (const ref of refs) {
+        const refUrl = getReferenceFullSizeUrl(ref, gen);
+        if (refUrl) images.push(refUrl);
+      }
+    } catch { /* ignore */ }
+
+    return images;
+  };
+
+  const handleCarouselImageClick = (src, index) => {
+    if (!selectedGen) return;
+    const fullSizeImages = buildFullSizeImages(selectedGen);
+    setPreviewImages(fullSizeImages);
+    setPreviewIndex(index);
+    setShowPreview(true);
+  };
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl">Image Generations</h1>
+      </div>
+
+      {dailyCosts !== null && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+          <div className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-2">Cost (USD) — Past 30 Days</div>
+          <BarChart
+            data={(() => {
+              const costMap = {};
+              dailyCosts.forEach(d => { costMap[d.date] = d.totalCost; });
+              const days = [];
+              const today = new Date();
+              for (let i = 29; i >= 0; i--) {
+                const date = new Date(today);
+                date.setDate(date.getDate() - i);
+                const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                const dd = String(date.getDate()).padStart(2, '0');
+                const fullLabel = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+                days.push({ label: dd, title: fullLabel, value: costMap[key] || 0 });
+              }
+              return days;
+            })()}
+            formatValue={(v) => `$${(v / 100).toFixed(2)}`}
+            height={220}
+          />
+        </div>
+      )}
+
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="overflow-auto bg-white dark:bg-gray-800 rounded-lg shadow"
+        style={{ maxHeight: 'calc(100vh - 250px)' }}
+      >
+        <table className="w-full text-left border-collapse">
+          <thead className="bg-gray-100 dark:bg-gray-700 sticky top-0 z-10">
+            <tr>
+              <th className="px-4 py-3 whitespace-nowrap">User</th>
+              <th className="px-4 py-3 whitespace-nowrap">Type</th>
+              <th className="px-4 py-3 whitespace-nowrap">Model</th>
+              <th className="px-4 py-3 whitespace-nowrap">Text Input</th>
+              <th className="px-4 py-3 whitespace-nowrap">Image Input</th>
+              <th className="px-4 py-3 whitespace-nowrap">Output Tokens</th>
+              <th className="px-4 py-3 whitespace-nowrap">Cost (USD)</th>
+              <th className="px-4 py-3 whitespace-nowrap">Tokens Used</th>
+              <th className="px-4 py-3 whitespace-nowrap">Resolution</th>
+            </tr>
+          </thead>
+          <tbody>
+            {generations.map((gen) => (
+              <tr
+                key={gen.id}
+                onClick={() => handleRowClick(gen)}
+                className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+              >
+                <td className="px-4 py-3 text-sm">{gen.userEmail || 'N/A'}</td>
+                <td className="px-4 py-3 text-sm">{TYPE_LABELS[gen.type] || 'Unknown'}</td>
+                <td className="px-4 py-3 text-sm">{gen.modelName || 'N/A'}</td>
+                <td className="px-4 py-3 text-sm">{gen.inputTextTokens}</td>
+                <td className="px-4 py-3 text-sm">{gen.inputImageTokens}</td>
+                <td className="px-4 py-3 text-sm">{gen.outputTokens}</td>
+                <td className="px-4 py-3 text-sm">{formatCost(gen.cost)}</td>
+                <td className="px-4 py-3 text-sm">{gen.tokens}</td>
+                <td className="px-4 py-3 text-sm">{gen.resolution || '-'}</td>
+              </tr>
+            ))}
+            {generations.length === 0 && !loading && (
+              <tr>
+                <td colSpan="9" className="text-center py-8 text-gray-600 dark:text-gray-400">
+                  No image generations found.
+                </td>
+              </tr>
+            )}
+            {loading && generations.length === 0 && (
+              <tr>
+                <td colSpan="9" className="text-center py-8 text-gray-600 dark:text-gray-400">
+                  <Icon name="progress_activity" spin className="w-5 h-5 inline mr-2" />
+                  Loading...
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        {loadingMore && (
+          <div className="text-center py-4 text-gray-600 dark:text-gray-400">
+            <Icon name="progress_activity" spin className="w-5 h-5 inline mr-2" />
+            Loading more...
+          </div>
+        )}
+      </div>
+
+      {selectedGen && (
+        <Modal title="Image Generation Details" onClose={() => setSelectedGen(null)} className="w-[800px] max-w-full">
+          <ImageGenerationDetail
+            gen={selectedGen}
+            onCarouselImageClick={handleCarouselImageClick}
+            onUserClick={handleUserClick}
+          />
+        </Modal>
+      )}
+
+      {showPreview && previewImages.length > 0 && (
+        <ProductImagePreview
+          show={showPreview}
+          images={previewImages}
+          alt="Image Preview"
+          defaultIndex={previewIndex}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
+
+      {selectedUserId && (
+        <UserDetailsModal userId={selectedUserId} onClose={() => setSelectedUserId(null)} />
+      )}
+    </div>
+  );
+}
+
+function ImageGenerationDetail({ gen, onCarouselImageClick, onUserClick }) {
+  const [promptExpanded, setPromptExpanded] = useState(false);
+  const carouselImages = React.useMemo(() => {
+    const images = [];
+    const generatedThumb = getGeneratedImageUrl(gen);
+    if (generatedThumb) images.push(generatedThumb);
+    try {
+      const refs = JSON.parse(gen.inputImageJson || '[]');
+      for (const ref of refs) {
+        const refUrl = getReferenceImageUrl(ref, gen);
+        if (refUrl) images.push(refUrl);
+      }
+    } catch { /* ignore */ }
+    return images;
+  }, [gen]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-8">
+        <div>
+          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-0.5">User</div>
+          <div className="text-base"><a href="#" onClick={(e) => onUserClick(e, gen.appUserId)} className="text-primary-600 hover:underline">{gen.userEmail || 'N/A'}</a></div>
+        </div>
+        <div>
+          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-0.5">Project</div>
+          <div className="text-base"><a href={`/dashboard/project/${gen.projectId}`} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">{gen.projectTitle || 'N/A'}</a></div>
+        </div>
+      </div>
+
+      <div className="flex gap-8">
+        <div>
+          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-0.5">Type</div>
+          <div className="text-base">{TYPE_LABELS[gen.type] || 'Unknown'}</div>
+        </div>
+        <div>
+          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-0.5">Resolution</div>
+          <div className="text-base">{gen.resolution || '-'}</div>
+        </div>
+        <div>
+          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-0.5">Created</div>
+          <div className="text-base">{formatDate(gen.dateCreated)}</div>
+        </div>
+      </div>
+
+      <div className="flex gap-8">
+        <div>
+          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-0.5">Input Text</div>
+          <div className="text-base">{gen.inputTextTokens}</div>
+        </div>
+        <div>
+          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-0.5">Input Image</div>
+          <div className="text-base">{gen.inputImageTokens}</div>
+        </div>
+        <div>
+          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-0.5">Output Tokens</div>
+          <div className="text-base">{gen.outputTokens}</div>
+        </div>
+        <div>
+          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-0.5">Platform Tokens</div>
+          <div className="text-base">{gen.tokens}</div>
+        </div>
+        <div>
+          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-0.5">Cost (USD)</div>
+          <div className="text-base">{formatCost(gen.cost)}</div>
+        </div>
+      </div>
+
+      {carouselImages.length > 0 && (
+        <div>
+          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">Images</div>
+          <Carousel
+            images={carouselImages}
+            alt="Generated image"
+            onImageClick={onCarouselImageClick}
+            imageWidth="350px"
+            imageHeight="350px"
+            imageClassName="rounded-lg"
+          />
+        </div>
+      )}
+
+      {gen.prompt && (
+        <div>
+          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Prompt</div>
+          <div className={`text-base text-gray-700 dark:text-gray-300 whitespace-pre-wrap ${!promptExpanded ? 'line-clamp-5' : ''}`}>
+            {gen.prompt}
+          </div>
+          {gen.prompt.length > 200 && (
+            <button
+              onClick={() => setPromptExpanded(!promptExpanded)}
+              className="text-primary-600 text-sm hover:underline mt-1"
+            >
+              {promptExpanded ? 'Show Less...' : 'Read More...'}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

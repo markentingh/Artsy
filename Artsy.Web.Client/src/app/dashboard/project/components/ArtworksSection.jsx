@@ -231,7 +231,10 @@ export default function ArtworksSection({ projectId, onArtworkChanged }) {
               <div className="p-3">
                 <div className="flex items-baseline gap-2">
                   <span className="font-bold text-lg">{String(item.index).padStart(2, '0')}</span>
-                  <span className="flex-1 text-sm text-gray-700 dark:text-gray-200 truncate">
+                  <span
+                    className="flex-1 min-w-0 text-sm text-gray-700 dark:text-gray-200 truncate"
+                    title={item.title ? item.title : 'Untitled Artwork'}
+                  >
                     {item.title ? item.title : 'Untitled Artwork'}
                   </span>
                 </div>

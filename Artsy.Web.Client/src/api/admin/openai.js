@@ -14,7 +14,9 @@ const OpenAI = (args) => Api({ ...args, useToken: true }).endpoints(({ api }) =>
     getImageModels: () => api.get(`${imgPath}/get-models`),
     saveImageModel: (model) => api.post(`${imgPath}/save-model`, model),
     toggleImageModelActive: (id, active) => api.post(`${imgPath}/toggle-active`, { id, active }),
-    deleteImageModel: (id) => api.post(`${imgPath}/delete-model`, { id })
+    deleteImageModel: (id) => api.post(`${imgPath}/delete-model`, { id }),
+    getImageGenerations: (start = 0, length = 25) => api.get(`${imgPath}/get-generations?start=${start}&length=${length}`),
+    getDailyCosts: (days = 30) => api.get(`${imgPath}/get-daily-costs?days=${days}`)
   };
 });
 

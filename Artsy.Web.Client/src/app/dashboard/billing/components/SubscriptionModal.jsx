@@ -133,6 +133,7 @@ export default function SubscriptionModal({ show, subscription, products, onSave
   const [form, setForm] = useState({
     id: subscription?.id || 0,
     title: subscription?.title || '',
+    status: subscription?.status ?? 1,
     monthlyProductId: subscription?.monthlyProductId ?? (products[0]?.id ?? 0),
     yearlyProductId: subscription?.yearlyProductId ?? (products[0]?.id ?? 0)
   });
@@ -161,8 +162,10 @@ export default function SubscriptionModal({ show, subscription, products, onSave
   const handleSave = () => {
     const monthlyId = parseInt(form.monthlyProductId);
     const yearlyId = parseInt(form.yearlyProductId);
+    const status = parseInt(form.status);
     onSave({
       ...form,
+      status: isNaN(status) ? 1 : status,
       monthlyProductId: isNaN(monthlyId) ? null : monthlyId,
       yearlyProductId: isNaN(yearlyId) ? null : yearlyId,
       featuresJson: JSON.stringify({
@@ -183,6 +186,18 @@ export default function SubscriptionModal({ show, subscription, products, onSave
       <div>
         <div className="grid grid-cols-1 gap-4">
           <Input label="Title" name="title" value={form.title} onChange={handleChange('title')} required autoFocus />
+          <Select
+            label="Status"
+            name="status"
+            value={form.status}
+            onChange={handleChange('status')}
+            options={[
+              { value: 0, label: 'Inactive' },
+              { value: 1, label: 'Active' },
+              { value: 2, label: 'Private' },
+            ]}
+            fitContent
+          />
         </div>
         <div className="grid grid-cols-2 gap-6 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
           <div>

@@ -16,6 +16,9 @@ namespace Artsy.API.Models.Collections
         [JsonPropertyName("productImageId")]
         public Guid ProductImageId { get; set; }
 
+        [JsonPropertyName("modelId")]
+        public int ModelId { get; set; }
+
         [JsonPropertyName("prompt")]
         public string Prompt { get; set; } = "";
 

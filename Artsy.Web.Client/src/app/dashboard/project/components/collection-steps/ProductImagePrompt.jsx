@@ -1,6 +1,8 @@
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import { useCollection } from '@/context/collection';
+import { useDashboard } from '@/context/dashboard';
 import TextArea from '@/components/forms/textarea';
+import Select from '@/components/forms/select';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 import Spinner from '@/components/ui/spinner';
@@ -17,7 +19,9 @@ export default function ProductImagePrompt() {
     allProductImages,
     setArtworkPreview,
     mockups, printifyProducts, loadMockups,
+    imageModels, selectedProductImageModel, setSelectedProductImageModel,
   } = useCollection();
+  const { refreshTokens } = useDashboard();
 
   const combo = selectedProductCombos[currentProductComboIndex];
 
@@ -33,6 +37,8 @@ export default function ProductImagePrompt() {
     if (!pp) return [];
     return mockups.filter(m => m.printifyProductId === pp.id).map(m => m.imageUrl);
   }, [combo, printifyProducts, mockups]);
+
+  const modelOptions = useMemo(() => imageModels.map(m => ({ value: m.id, label: m.model })), [imageModels]);
 
   const [thumbRetried, setThumbRetried] = useState({});
   const [thumbFailed, setThumbFailed] = useState({});
@@ -104,13 +110,14 @@ export default function ProductImagePrompt() {
       const res = await api.generateArtworkThumbnail({ collectionId, itemId: artwork.itemId });
       if (res.data.success) {
         setThumbRetried(prev => ({ ...prev, [index]: Date.now() }));
+        refreshTokens();
       } else {
         setThumbFailed(prev => ({ ...prev, [index]: true }));
       }
     } catch {
       setThumbFailed(prev => ({ ...prev, [index]: true }));
     }
-  }, [artworkImages, existingProductImage, mockupImages, collectionId, api]);
+  }, [artworkImages, existingProductImage, mockupImages, collectionId, api, refreshTokens]);
 
   const imagesWithRetry = useMemo(() => {
     return allImages.map((url, i) => {
@@ -137,6 +144,7 @@ export default function ProductImagePrompt() {
           projectBlueprintId: combo.projectBlueprintId,
           productImageId: combo.productImageId,
           prompt: productImagePrompt,
+          modelId: selectedProductImageModel?.id,
         });
         if (res.data.success) {
           setTokenEstimate(res.data.data);
@@ -150,7 +158,7 @@ export default function ProductImagePrompt() {
       }
     }, 2000);
     return () => { if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current); };
-  }, [combo, collectionId, projectId, api, productImagePrompt]);
+  }, [combo, collectionId, projectId, api, productImagePrompt, selectedProductImageModel]);
 
   const handleNext = useCallback(() => {
     if (!productImagePrompt.trim()) {
@@ -229,6 +237,31 @@ export default function ProductImagePrompt() {
       )}
 
       <div className="mb-4">
+        <div className="flex flex-wrap items-end gap-4 justify-between mb-2">
+          <div className="min-w-[200px]">
+            <Select
+              label="AI Image Model"
+              name="productImageModel"
+              value={selectedProductImageModel?.id || ''}
+              onChange={(value) => {
+                const model = imageModels.find(m => m.id === value);
+                setSelectedProductImageModel(model || null);
+              }}
+              options={modelOptions}
+              fitContent
+            />
+          </div>
+          {estimatingTokens ? (
+            <div className="flex items-center gap-2 mb-2 text-sm text-gray-500 dark:text-gray-400">
+              <Spinner className="text-sm" />
+              <span>Estimating token cost...</span>
+            </div>
+          ) : tokenEstimate != null ? (
+            <div className="mb-2 text-sm text-gray-500 dark:text-gray-400">
+              <span className="font-medium">{tokenEstimate.toLocaleString()}</span> tokens
+            </div>
+          ) : null}
+        </div>
         <TextArea
           name="productImagePrompt"
           label="Product Image Prompt"
@@ -237,16 +270,6 @@ export default function ProductImagePrompt() {
           placeholder="Describe how the product should be presented..."
           rows={4}
         />
-        {estimatingTokens ? (
-          <div className="flex items-center gap-2 mt-2 text-sm text-gray-500 dark:text-gray-400">
-            <Spinner className="text-sm" />
-            <span>Estimating token cost...</span>
-          </div>
-        ) : tokenEstimate != null ? (
-          <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-            <span className="font-medium">{tokenEstimate.toLocaleString()}</span> tokens
-          </div>
-        ) : null}
       </div>
 
       <div className="buttons flex justify-end gap-2 mt-auto">

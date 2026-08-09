@@ -28,5 +28,8 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("isFullSize")]
         public bool IsFullSize { get; set; }
+
+        [JsonPropertyName("modelId")]
+        public int? ModelId { get; set; }
     }
 }

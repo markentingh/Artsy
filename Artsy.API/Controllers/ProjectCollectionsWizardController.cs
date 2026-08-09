@@ -193,8 +193,8 @@ namespace Artsy.API.Controllers
 
                 var artworkList = await _projectItemArtworkRepository.GetByItemIdAsync(request.ItemId);
                 var artwork = artworkList.FirstOrDefault();
-                if (artwork == null || string.IsNullOrWhiteSpace(artwork.ImageModel))
-                    return Json(new ApiResponse { success = false, message = "No image model configured for this item." });
+                if (artwork == null || string.IsNullOrWhiteSpace(artwork.Prompt))
+                    return Json(new ApiResponse { success = false, message = "No prompt configured for this item." });
 
                 var jsonOptions = new JsonSerializerOptions
                 {
@@ -203,12 +203,12 @@ namespace Artsy.API.Controllers
                     DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
                 };
 
-                var genModel = await _imageGenerationModelRepository.GetByModelKeyAsync(artwork.ImageModel);
+                if (request.ModelId == null || request.ModelId <= 0)
+                    return Json(new ApiResponse { success = false, message = "Image model is required." });
+
+                var genModel = await _imageGenerationModelRepository.GetByIdAsync(request.ModelId.Value);
                 if (genModel == null)
                     return Json(new ApiResponse { success = false, message = "Image model not found in database." });
-
-                if (!await _aiTokenService.HasEnoughTokensAsync(userId, 1))
-                    return Json(new ApiResponse { success = false, message = "Not enough tokens to generate the artwork. Please purchase more tokens before continuing." });
 
                 var modelRequest = new OpenAIImageRequest();
                 modelRequest.Model = genModel.Model;
@@ -311,6 +311,7 @@ namespace Artsy.API.Controllers
 
                 var references = await _projectItemReferenceRepository.GetByItemIdAsync(request.ItemId);
                 var inputImages = new List<byte[]>();
+                var inputImageRefs = new List<object>();
                 if (references != null && references.Any())
                 {
                     foreach (var reference in references)
@@ -341,6 +342,7 @@ namespace Artsy.API.Controllers
                         if (imageBytes != null && imageBytes.Length > 0)
                         {
                             inputImages.Add(imageBytes);
+                            inputImageRefs.Add(new { type = reference.ArtworkId.HasValue ? "artwork" : "custom", id = (reference.ArtworkId ?? reference.CustomImageId).ToString() });
                         }
                     }
                 }
@@ -363,9 +365,9 @@ namespace Artsy.API.Controllers
 
                 try
                 {
-                    var imageGen = _imageGenerations.FirstOrDefault(g => g.ModelKey.Equals(artwork.ImageModel, StringComparison.OrdinalIgnoreCase));
+                    var imageGen = _imageGenerations.FirstOrDefault(g => g.ModelKey.Equals(genModel.ModelKey, StringComparison.OrdinalIgnoreCase));
                     if (imageGen == null)
-                        throw new InvalidOperationException($"Image model '{artwork.ImageModel}' is not supported.");
+                        throw new InvalidOperationException($"Image model '{genModel.ModelKey}' is not supported.");
 
                     string? previousResponseId = null;
                     if (!string.IsNullOrWhiteSpace(request.RequestedChanges) && !string.IsNullOrWhiteSpace(created.ResponseId))
@@ -385,6 +387,22 @@ namespace Artsy.API.Controllers
                         PreviousResponseId = previousResponseId,
                         UseResponsesApi = true
                     };
+
+                    var inputImageDimensions = new List<(int width, int height)>();
+                    foreach (var img in inputImages)
+                    {
+                        var dims = await _imageService.GetImageDimensionsAsync(img);
+                        if (dims.HasValue)
+                            inputImageDimensions.Add(dims.Value);
+                    }
+
+                    var tokenCost = _tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m;
+                    var tokenizer = imageGen.CreateTokenizer(genModel);
+                    var tokenCalc = tokenizer.CalculateTokens(finalPrompt, width, height, genQuality, inputImageDimensions, "auto", tokenCost);
+
+                    if (!await _aiTokenService.UseTokensAsync(userId, tokenCalc.PlatformTokens))
+                        throw new InvalidOperationException("Not enough tokens to generate the artwork. Please purchase more tokens before continuing.");
+
                     var genResult = await imageGen.GenerateAsync(genRequest);
                     if (request.IsFullSize)
                         await _imageService.SaveProjectCollectionArtworkFullSizeAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, genResult.ImageBytes);
@@ -407,15 +425,15 @@ namespace Artsy.API.Controllers
                         InputTextTokens = genResult.InputTokens,
                         InputImageTokens = 0,
                         OutputTokens = genResult.OutputTokens,
-                        Tokens = Math.Max(1, (int)Math.Round(((genResult.InputTokens + genResult.OutputTokens) / 1_000_000m * (genModel.CPMITTokens + genModel.CPMOTokens)) / _tokenCostOptions.Cost)),
-                        ImageModel = genModel.Model,
+                        Tokens = tokenCalc.PlatformTokens,
                         Prompt = finalPrompt,
                         Filename = request.IsFullSize ? $"{created.Id}_fullsize.jpg" : $"{created.Id}.jpg",
-                        IsFullSize = request.IsFullSize
+                        Resolution = $"{width}x{height}",
+                        InputImages = inputImages.Count,
+                        InputImageJson = System.Text.Json.JsonSerializer.Serialize(inputImageRefs),
+                        Type = 1,
+                        Cost = (int)Math.Round(tokenCalc.EstimatedCostUSD * 100)
                     });
-
-                    var artworkTokens = Math.Max(1, (int)Math.Round(((genResult.InputTokens + genResult.OutputTokens) / 1_000_000m * (genModel.CPMITTokens + genModel.CPMOTokens)) / _tokenCostOptions.Cost));
-                    await _aiTokenService.UseTokensAsync(userId, artworkTokens);
                 }
                 catch (Exception genEx)
                 {
@@ -459,7 +477,7 @@ namespace Artsy.API.Controllers
                 if (artwork.FullSize)
                     return Json(new ApiResponse { success = true, data = artwork });
 
-                if (!await _aiTokenService.HasEnoughTokensAsync(userId, 2))
+                if (!await _aiTokenService.UseTokensAsync(userId, 2))
                     return Json(new ApiResponse { success = false, message = "Not enough tokens to generate the artwork. Please purchase more tokens before continuing." });
 
                 var previewBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id);
@@ -484,23 +502,27 @@ namespace Artsy.API.Controllers
                     Created = DateTime.UtcNow
                 });
 
+                var upscaledImageModel = await _imageGenerationModelRepository.GetByModelKeyAsync(artwork.ImageModel);
+
                 await _projectImageGenerationRepository.CreateAsync(new ProjectImageGeneration
                 {
                     ProjectId = request.ProjectId,
                     CollectionId = request.CollectionId,
                     ItemId = request.ItemId,
                     AppUserId = userId,
+                    ImageGenerationId = upscaledImageModel?.Id,
                     InputTextTokens = 0,
                     InputImageTokens = 0,
                     OutputTokens = 0,
                     Tokens = 2,
-                    ImageModel = "",
                     Prompt = "",
                     Filename = $"{artwork.Id}_fullsize.jpg",
-                    IsFullSize = true
+                    Resolution = $"{artwork.Width * 2}x{artwork.Height * 2}",
+                    InputImages = 0,
+                    InputImageJson = "[]",
+                    Type = 3,
+                    Cost = (int)Math.Round(2 * (_tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m) * 100)
                 });
-
-                await _aiTokenService.UseTokensAsync(userId, 2);
 
                 return Json(new ApiResponse { success = true, data = artwork });
             }
@@ -1136,8 +1158,8 @@ namespace Artsy.API.Controllers
                                 int comboTokens;
                                 if (tokenizer != null)
                                 {
-                                    var tokenResult = tokenizer.CalculateTokens(combinedPrompt, 2048, 2048, "medium", inputImages);
-                                    comboTokens = Math.Max(1, (int)Math.Round(tokenResult.EstimatedCostUSD / tokenCost));
+                                    var tokenResult = tokenizer.CalculateTokens(combinedPrompt, 2048, 2048, "medium", inputImages, "auto", tokenCost);
+                                    comboTokens = tokenResult.PlatformTokens;
                                 }
                                 else
                                 {
@@ -1259,14 +1281,17 @@ namespace Artsy.API.Controllers
 
                 var finalPrompt = promptBuilder.ToString().Trim();
 
-                var genModel = await _imageGenerationModelRepository.GetByModelKeyAsync("openai");
+                if (request.ModelId <= 0)
+                    return Json(new ApiResponse { success = false, message = "Model ID is required." });
+
+                var genModel = await _imageGenerationModelRepository.GetByIdAsync(request.ModelId);
                 if (genModel == null)
                     return Json(new ApiResponse { success = false, message = "Image model not found in database." });
 
                 var tokenCost = _tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m;
 
                 IImageTokens? tokenizer = null;
-                var imageGen = _imageGenerations.FirstOrDefault(g => g.ModelKey.Equals("openai", StringComparison.OrdinalIgnoreCase));
+                var imageGen = _imageGenerations.FirstOrDefault(g => g.ModelKey.Equals(genModel.ModelKey, StringComparison.OrdinalIgnoreCase));
                 if (imageGen != null)
                     tokenizer = imageGen.CreateTokenizer(genModel);
 
@@ -1311,12 +1336,12 @@ namespace Artsy.API.Controllers
 
                 if (tokenizer != null)
                 {
-                    var tokenResult = tokenizer.CalculateTokens(finalPrompt, 2048, 2048, "medium", inputImages);
+                    var tokenResult = tokenizer.CalculateTokens(finalPrompt, 2048, 2048, "medium", inputImages, "auto", tokenCost);
                     textInputTokens = tokenResult.TextInputTokens;
                     imageInputTokens = tokenResult.ImageInputTokens;
                     imageOutputTokens = tokenResult.ImageOutputTokens;
                     estimatedCostUSD = tokenResult.EstimatedCostUSD;
-                    totalTokens = Math.Max(1, (int)Math.Round(estimatedCostUSD / tokenCost));
+                    totalTokens = tokenResult.PlatformTokens;
                 }
                 else
                 {
@@ -1394,14 +1419,15 @@ namespace Artsy.API.Controllers
                 promptBuilder.AppendLine("Apply the following artwork designs onto the product shown in the reference image.");
                 promptBuilder.AppendLine("Place the product in a realistic, appealing scenario as described below.");
 
-                var genModel = await _imageGenerationModelRepository.GetByModelKeyAsync("openai");
+                if (request.ModelId <= 0)
+                    return Json(new ApiResponse { success = false, message = "Model ID is required." });
+
+                var genModel = await _imageGenerationModelRepository.GetByIdAsync(request.ModelId);
                 if (genModel == null)
                     return Json(new ApiResponse { success = false, message = "Image model not found in database." });
 
-                if (!await _aiTokenService.HasEnoughTokensAsync(userId, 1))
-                    return Json(new ApiResponse { success = false, message = "Not enough tokens to generate the product image. Please purchase more tokens before continuing." });
-
                 var inputImages = new List<byte[]>();
+                var inputImageRefs = new List<object>();
 
                 if (printifyBlueprintId > 0)
                 {
@@ -1427,6 +1453,7 @@ namespace Artsy.API.Controllers
                             if (imgBytes != null && imgBytes.Length > 0)
                             {
                                 inputImages.Add(imgBytes);
+                                inputImageRefs.Add(new { type = "mockup", id = mockup.Id.ToString() });
                                 printifyImageCount++;
                                 printifyImagePositions.Add(mockup.Position ?? "front");
                             }
@@ -1449,6 +1476,7 @@ namespace Artsy.API.Controllers
                 for (var i = 0; i < placementArtworks.Count; i++)
                 {
                     inputImages.Add(placementArtworks[i].ImageBytes);
+                    inputImageRefs.Add(new { type = "artwork", id = placementArtworks[i].ArtworkId.ToString() });
                     promptBuilder.AppendLine($"Image {artworkStartIndex + i} should be placed on the {placementArtworks[i].PlacementName} of the product.");
                 }
 
@@ -1477,7 +1505,7 @@ namespace Artsy.API.Controllers
                     DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
                 };
 
-                var imageGen = _imageGenerations.FirstOrDefault(g => g.ModelKey.Equals("openai", StringComparison.OrdinalIgnoreCase));
+                var imageGen = _imageGenerations.FirstOrDefault(g => g.ModelKey.Equals(genModel.ModelKey, StringComparison.OrdinalIgnoreCase));
                 if (imageGen == null)
                     return Json(new ApiResponse { success = false, message = "Image generation service not available." });
 
@@ -1501,6 +1529,23 @@ namespace Artsy.API.Controllers
                     PreviousResponseId = previousResponseId,
                     UseResponsesApi = true
                 };
+
+                var productImageInputDimensions = new List<(int width, int height)>();
+                foreach (var img in inputImages)
+                {
+                    var dims = await _imageService.GetImageDimensionsAsync(img);
+                    if (dims.HasValue)
+                        productImageInputDimensions.Add(dims.Value);
+                }
+
+                var productTokenCost = _tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m;
+                var productTokenizer = imageGen.CreateTokenizer(genModel);
+                var productTokenCalc = productTokenizer.CalculateTokens(finalPrompt, 2048, 2048, "medium", productImageInputDimensions, "auto", productTokenCost);
+                var productTokensToUse = productTokenCalc.PlatformTokens;
+
+                if (!await _aiTokenService.UseTokensAsync(userId, productTokensToUse))
+                    return Json(new ApiResponse { success = false, message = "Not enough tokens to generate the product image. Please purchase more tokens before continuing." });
+
                 var genResult = await imageGen.GenerateAsync(genRequest);
 
                 var productImage = new ProjectCollectionProductImage
@@ -1540,14 +1585,15 @@ namespace Artsy.API.Controllers
                     InputTextTokens = genResult.InputTokens,
                     InputImageTokens = 0,
                     OutputTokens = genResult.OutputTokens,
-                    Tokens = Math.Max(1, (int)Math.Round(((genResult.InputTokens + genResult.OutputTokens) / 1_000_000m * (genModel.CPMITTokens + genModel.CPMOTokens)) / _tokenCostOptions.Cost)),
-                    ImageModel = genModel.Model,
+                    Tokens = productTokenCalc.PlatformTokens,
                     Prompt = finalPrompt,
-                    Filename = $"{productImage.Id}.jpg"
+                    Filename = $"{productImage.Id}.jpg",
+                    Resolution = "2048x2048",
+                    InputImages = inputImages.Count,
+                    InputImageJson = System.Text.Json.JsonSerializer.Serialize(inputImageRefs),
+                    Type = 2,
+                    Cost = (int)Math.Round(productTokenCalc.EstimatedCostUSD * 100)
                 });
-
-                var productImageTokens = Math.Max(1, (int)Math.Round(((genResult.InputTokens + genResult.OutputTokens) / 1_000_000m * (genModel.CPMITTokens + genModel.CPMOTokens)) / _tokenCostOptions.Cost));
-                await _aiTokenService.UseTokensAsync(userId, productImageTokens);
 
                 return Json(new ApiResponse
                 {

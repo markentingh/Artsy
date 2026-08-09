@@ -20,7 +20,7 @@ export default function Select({
   return (
     <div className={`mb-4 ${className}`}>
       {(label || labelAction) && (
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center justify-between mb-2">
           {label && (
             <label htmlFor={name} className="block text-sm font-medium">
               {label}{required ? ' *' : ''}

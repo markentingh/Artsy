@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSession } from '@/context/session';
+import { useDashboard } from '@/context/dashboard';
 import ThemeToggle from '@/components/ui/theme-toggle';
-import { AITokens } from '@/api/user/aiTokens';
 
 export default function Sidebar() {
   const { logout, user } = useSession();
+  const { tokens: availableTokens } = useDashboard();
   const location = useLocation();
-  const [availableTokens, setAvailableTokens] = useState(null);
 
   const isAdmin = user?.roles?.includes('admin') ?? false;
 
@@ -22,15 +22,6 @@ export default function Sidebar() {
       { path: '/dashboard/users', label: 'Users' }
     ] : [])
   ];
-
-  useEffect(() => {
-    if (!user) return;
-    const session = { token: localStorage.getItem('token') };
-    const api = AITokens(session);
-    api.getBalance().then(res => {
-      if (res.data.success) setAvailableTokens(res.data.data);
-    }).catch(() => { });
-  }, [user]);
 
   return (
     <aside className="w-64 h-screen fixed left-0 top-0 flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">

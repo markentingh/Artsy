@@ -31,7 +31,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     getItemArtwork: (itemId) => api.get(`${apiPath}/get-item-artwork?itemId=${itemId}`),
     updateItemPrompt: (request) => api.post(`${apiPath}/update-item-prompt`, request),
     updateItemImageModel: (request) => api.post(`${apiPath}/update-item-image-model`, request),
-    estimateItemTokens: (itemId, width, height) => api.get(`${apiPath}/estimate-item-tokens?itemId=${itemId}&width=${width}&height=${height}`),
+    estimateItemTokens: (itemId, width, height, modelId = '') => api.get(`${apiPath}/estimate-item-tokens?itemId=${itemId}&width=${width}&height=${height}&modelId=${modelId || ''}`),
     updateItemArtworkType: (request) => api.post(`${apiPath}/update-item-artwork-type`, request),
     updateItemIgnoredQuestions: (request) => api.post(`${apiPath}/update-item-ignored-questions`, request),
     getItemPreviews: (itemId) => api.get(`${apiPath}/get-item-previews?itemId=${itemId}`),
@@ -117,6 +117,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     getIdeas: (projectId) => api.get(`${apiPath}/${projectId}/ideas`),
     getIdea: (projectId, ideaId) => api.get(`${apiPath}/${projectId}/ideas/${ideaId}`),
     createIdea: (projectId, request) => api.post(`${apiPath}/${projectId}/ideas/create-idea`, request),
+    createIdeaVariation: (projectId, ideaId) => api.post(`${apiPath}/${projectId}/ideas/${ideaId}/variations`),
     deleteIdea: (projectId, ideaId) => api.delete(`${apiPath}/${projectId}/ideas/${ideaId}`),
     makeIdeaCollection: (projectId, ideaId, request) => api.post(`${apiPath}/${projectId}/ideas/${ideaId}/collection`, request),
 

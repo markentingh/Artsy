@@ -111,6 +111,7 @@ export default function SubscriptionsTab({ api, showMessage }) {
               <th className="px-4 py-3">Title</th>
               <th className="px-4 py-3">Monthly Product</th>
               <th className="px-4 py-3">Yearly Product</th>
+              <th className="px-4 py-3 w-24">Status</th>
               <th className="px-4 py-3 w-20">Featured</th>
               <th className="px-4 py-3 w-24"></th>
             </tr>
@@ -134,6 +135,9 @@ export default function SubscriptionsTab({ api, showMessage }) {
                 <td className="px-4 py-3">{productLookup[s.monthlyProductId]?.title || '-'}</td>
                 <td className="px-4 py-3">{productLookup[s.yearlyProductId]?.title || '-'}</td>
                 <td className="px-4 py-3">
+                  {s.status === 1 ? 'Active' : s.status === 2 ? 'Private' : 'Inactive'}
+                </td>
+                <td className="px-4 py-3">
                   <input
                     type="radio"
                     name="featured"
@@ -152,7 +156,7 @@ export default function SubscriptionsTab({ api, showMessage }) {
             ))}
             {subscriptions.length === 0 && (
               <tr>
-                <td colSpan="6" className="text-center py-8 text-gray-600 dark:text-gray-400">
+                <td colSpan="7" className="text-center py-8 text-gray-600 dark:text-gray-400">
                   No subscriptions configured.
                 </td>
               </tr>

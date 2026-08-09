@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Artsy.API.Models;
 using Artsy.API.Models.Projects;
 using Artsy.API.Services;
+using Artsy.Data.Entities;
 using Artsy.Data.Entities.Projects;
 using Artsy.Data.Interfaces;
 using Artsy.Data.Interfaces.Projects;
@@ -47,13 +48,16 @@ namespace Artsy.API.Controllers
                     {
                         thumbnails.Add($"/api/custom-images/custom-image/{art.CustomImageId.Value}?thumb=true");
                     }
-                    else if (previewThumbsByItem.TryGetValue(i.Id, out var previews))
-                        foreach (var p in previews)
-                            thumbnails.Add($"/api/projects/item/{i.Id}/preview/{p.Id}?thumb=true");
+                    else
+                    {
+                        if (previewThumbsByItem.TryGetValue(i.Id, out var previews))
+                            foreach (var p in previews)
+                                thumbnails.Add($"/api/projects/item/{i.Id}/preview/{p.Id}?thumb=true");
 
-                    if (refThumbsByItem.TryGetValue(i.Id, out var refs))
-                        foreach (var r in refs)
-                            thumbnails.Add($"/api/projects/item/{i.Id}/reference/{r.Id}?thumb=true");
+                        if (refThumbsByItem.TryGetValue(i.Id, out var refs))
+                            foreach (var r in refs)
+                                thumbnails.Add($"/api/projects/item/{i.Id}/reference/{r.Id}?thumb=true");
+                    }
 
                     result.Add(new ProjectItemListItem
                     {
@@ -257,7 +261,7 @@ namespace Artsy.API.Controllers
         }
 
         [HttpGet("estimate-item-tokens")]
-        public async Task<IActionResult> EstimateItemTokens([FromQuery] Guid itemId, [FromQuery] int width = 1024, [FromQuery] int height = 1024)
+        public async Task<IActionResult> EstimateItemTokens([FromQuery] Guid itemId, [FromQuery] int width = 1024, [FromQuery] int height = 1024, [FromQuery] int modelId = 0)
         {
             var userId = GetUserId();
             if (userId == Guid.Empty)
@@ -281,46 +285,37 @@ namespace Artsy.API.Controllers
                 if (artwork == null || string.IsNullOrWhiteSpace(artwork.ImageModel))
                     return Json(new ApiResponse { success = false, message = "No image model configured for this item." });
 
-                var model = await _imageGenerationModelRepository.GetByModelKeyAsync(artwork.ImageModel);
+                ImageGenerationModel? model;
+                if (modelId > 0)
+                    model = await _imageGenerationModelRepository.GetByIdAsync(modelId);
+                else
+                    model = await _imageGenerationModelRepository.GetByModelKeyAsync(artwork.ImageModel);
                 if (model == null)
                     return Json(new ApiResponse { success = false, message = "Image model not found." });
-
-                if (artwork.ImageModel != "openai")
-                    return Json(new ApiResponse
-                    {
-                        success = true,
-                        data = new
-                        {
-                            textInputTokens = 0,
-                            imageInputTokens = 0,
-                            imageOutputTokens = 0,
-                            estimatedCostUSD = 0m
-                        }
-                    });
 
                 var references = await _projectItemReferenceRepository.GetByItemIdAsync(itemId);
                 var inputImages = references.Select(r => (1024, 1024)).ToList() as IReadOnlyList<(int width, int height)>;
 
-                var estImageGen = _imageGenerations.FirstOrDefault(g => g.ModelKey.Equals(artwork.ImageModel, StringComparison.OrdinalIgnoreCase));
+                var estImageGen = _imageGenerations.FirstOrDefault(g => g.ModelKey.Equals(model.ModelKey, StringComparison.OrdinalIgnoreCase));
                 if (estImageGen == null)
                     return Json(new ApiResponse { success = false, message = "Image model not supported." });
 
                 var tokenizer = estImageGen.CreateTokenizer(model);
+                var tokenCost = _tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m;
                 var result = tokenizer.CalculateTokens(
                     artwork.Prompt ?? "",
                     width > 0 ? width : 1024,
                     height > 0 ? height : 1024,
                     "medium",
-                    inputImages
+                    inputImages,
+                    "auto",
+                    tokenCost
                 );
-
-                var tokenCost = _tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m;
-                var artsyTokens = Math.Max(1, (int)Math.Round(result.EstimatedCostUSD / tokenCost));
 
                 return Json(new ApiResponse
                 {
                     success = true,
-                    data = artsyTokens
+                    data = result.PlatformTokens
                 });
             }
             catch (Exception ex)
