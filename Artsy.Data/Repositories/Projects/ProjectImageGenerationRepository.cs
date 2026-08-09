@@ -71,18 +71,118 @@ namespace Artsy.Data.Repositories.Projects
             return (items, totalCount);
         }
 
-        public async Task<IEnumerable<DailyCostResult>> GetDailyCostsAsync(int days)
+        public async Task<IEnumerable<DailyCostResult>> GetDailyCostsAsync(string range)
         {
-            var endDate = DateTime.UtcNow.Date.AddDays(1);
-            var startDate = endDate.AddDays(-days);
+            var now = DateTime.UtcNow.Date;
+            DateTime startDate;
+            DateTime endDate;
+            string query;
 
-            const string query = @"
-                SELECT MAKE_DATE(""DateYear"", ""DateMonth"", ""DateDay"") AS ""Date"",
-                       COALESCE(SUM(""Cost""), 0) AS ""TotalCost""
-                FROM public.""ProjectImageGenerations""
-                WHERE ""DateCreated"" >= @startDate AND ""DateCreated"" < @endDate
-                GROUP BY ""DateYear"", ""DateMonth"", ""DateDay""
-                ORDER BY ""Date""";
+            switch (range?.ToLowerInvariant())
+            {
+                case "3months":
+                    startDate = now.AddMonths(-3);
+                    endDate = now.AddDays(1);
+                    query = @"
+                        SELECT MAKE_DATE(""DateYear"", ""DateMonth"", ""DateDay"") AS ""Date"",
+                               COALESCE(SUM(""Cost""), 0) AS ""TotalCost"",
+                               COALESCE(SUM(""Tokens""), 0) AS ""TotalTokens"",
+                               COALESCE(SUM(""InputTextTokens""), 0) AS ""TotalInputTextTokens"",
+                               COALESCE(SUM(""InputImageTokens""), 0) AS ""TotalInputImageTokens"",
+                               COALESCE(SUM(""OutputTokens""), 0) AS ""TotalOutputTokens"",
+                               COUNT(*) AS ""TotalGenerations""
+                        FROM public.""ProjectImageGenerations""
+                        WHERE ""DateCreated"" >= @startDate AND ""DateCreated"" < @endDate
+                        GROUP BY ""DateYear"", ""DateMonth"", ""DateDay""
+                        ORDER BY ""Date""";
+                    break;
+
+                case "12months":
+                    startDate = now.AddYears(-1);
+                    endDate = now.AddDays(1);
+                    query = @"
+                        SELECT MAKE_DATE(""DateYear"", ""DateMonth"", 1) AS ""Date"",
+                               COALESCE(SUM(""Cost""), 0) AS ""TotalCost"",
+                               COALESCE(SUM(""Tokens""), 0) AS ""TotalTokens"",
+                               COALESCE(SUM(""InputTextTokens""), 0) AS ""TotalInputTextTokens"",
+                               COALESCE(SUM(""InputImageTokens""), 0) AS ""TotalInputImageTokens"",
+                               COALESCE(SUM(""OutputTokens""), 0) AS ""TotalOutputTokens"",
+                               COUNT(*) AS ""TotalGenerations""
+                        FROM public.""ProjectImageGenerations""
+                        WHERE ""DateCreated"" >= @startDate AND ""DateCreated"" < @endDate
+                        GROUP BY ""DateYear"", ""DateMonth""
+                        ORDER BY ""Date""";
+                    break;
+
+                case "ytd":
+                    startDate = new DateTime(now.Year, 1, 1);
+                    endDate = now.AddDays(1);
+                    query = @"
+                        SELECT (MAKE_DATE(""DateYear"", 1, 1) + ((EXTRACT(WEEK FROM ""DateCreated"")::int - 1) * INTERVAL '7 days'))::date AS ""Date"",
+                               COALESCE(SUM(""Cost""), 0) AS ""TotalCost"",
+                               COALESCE(SUM(""Tokens""), 0) AS ""TotalTokens"",
+                               COALESCE(SUM(""InputTextTokens""), 0) AS ""TotalInputTextTokens"",
+                               COALESCE(SUM(""InputImageTokens""), 0) AS ""TotalInputImageTokens"",
+                               COALESCE(SUM(""OutputTokens""), 0) AS ""TotalOutputTokens"",
+                               COUNT(*) AS ""TotalGenerations""
+                        FROM public.""ProjectImageGenerations""
+                        WHERE ""DateCreated"" >= @startDate AND ""DateCreated"" < @endDate
+                        GROUP BY ""DateYear"", EXTRACT(WEEK FROM ""DateCreated"")::int
+                        ORDER BY ""Date""";
+                    break;
+
+                case "thismonth":
+                    startDate = new DateTime(now.Year, now.Month, 1);
+                    endDate = now.AddDays(1);
+                    query = @"
+                        SELECT MAKE_DATE(""DateYear"", ""DateMonth"", ""DateDay"") AS ""Date"",
+                               COALESCE(SUM(""Cost""), 0) AS ""TotalCost"",
+                               COALESCE(SUM(""Tokens""), 0) AS ""TotalTokens"",
+                               COALESCE(SUM(""InputTextTokens""), 0) AS ""TotalInputTextTokens"",
+                               COALESCE(SUM(""InputImageTokens""), 0) AS ""TotalInputImageTokens"",
+                               COALESCE(SUM(""OutputTokens""), 0) AS ""TotalOutputTokens"",
+                               COUNT(*) AS ""TotalGenerations""
+                        FROM public.""ProjectImageGenerations""
+                        WHERE ""DateCreated"" >= @startDate AND ""DateCreated"" < @endDate
+                        GROUP BY ""DateYear"", ""DateMonth"", ""DateDay""
+                        ORDER BY ""Date""";
+                    break;
+
+                case "lastmonth":
+                    startDate = new DateTime(now.Year, now.Month, 1).AddMonths(-1);
+                    endDate = new DateTime(now.Year, now.Month, 1);
+                    query = @"
+                        SELECT MAKE_DATE(""DateYear"", ""DateMonth"", ""DateDay"") AS ""Date"",
+                               COALESCE(SUM(""Cost""), 0) AS ""TotalCost"",
+                               COALESCE(SUM(""Tokens""), 0) AS ""TotalTokens"",
+                               COALESCE(SUM(""InputTextTokens""), 0) AS ""TotalInputTextTokens"",
+                               COALESCE(SUM(""InputImageTokens""), 0) AS ""TotalInputImageTokens"",
+                               COALESCE(SUM(""OutputTokens""), 0) AS ""TotalOutputTokens"",
+                               COUNT(*) AS ""TotalGenerations""
+                        FROM public.""ProjectImageGenerations""
+                        WHERE ""DateCreated"" >= @startDate AND ""DateCreated"" < @endDate
+                        GROUP BY ""DateYear"", ""DateMonth"", ""DateDay""
+                        ORDER BY ""Date""";
+                    break;
+
+                default: // 30days
+                    startDate = now.AddDays(-30);
+                    endDate = now.AddDays(1);
+                    query = @"
+                        SELECT MAKE_DATE(""DateYear"", ""DateMonth"", ""DateDay"") AS ""Date"",
+                               COALESCE(SUM(""Cost""), 0) AS ""TotalCost"",
+                               COALESCE(SUM(""Tokens""), 0) AS ""TotalTokens"",
+                               COALESCE(SUM(""InputTextTokens""), 0) AS ""TotalInputTextTokens"",
+                               COALESCE(SUM(""InputImageTokens""), 0) AS ""TotalInputImageTokens"",
+                               COALESCE(SUM(""OutputTokens""), 0) AS ""TotalOutputTokens"",
+                               COUNT(*) AS ""TotalGenerations""
+                        FROM public.""ProjectImageGenerations""
+                        WHERE ""DateCreated"" >= @startDate AND ""DateCreated"" < @endDate
+                        GROUP BY ""DateYear"", ""DateMonth"", ""DateDay""
+                        ORDER BY ""Date""";
+                    break;
+            }
+
             return await _dbConnection.QueryAsync<DailyCostResult>(query, new { startDate, endDate });
         }
     }

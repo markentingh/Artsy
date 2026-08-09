@@ -213,15 +213,20 @@ namespace Artsy.API.Controllers.Admin
         }
 
         [HttpGet("get-daily-costs")]
-        public async Task<IActionResult> GetDailyCosts([FromQuery] int days = 30)
+        public async Task<IActionResult> GetDailyCosts([FromQuery] string range = "30days")
         {
             try
             {
-                var results = await _projectImageGenRepo.GetDailyCostsAsync(days);
+                var results = await _projectImageGenRepo.GetDailyCostsAsync(range);
                 var items = results.Select(r => new
                 {
                     date = r.Date.ToString("yyyy-MM-dd"),
-                    totalCost = r.TotalCost
+                    totalCost = r.TotalCost,
+                    totalTokens = r.TotalTokens,
+                    totalInputTextTokens = r.TotalInputTextTokens,
+                    totalInputImageTokens = r.TotalInputImageTokens,
+                    totalOutputTokens = r.TotalOutputTokens,
+                    totalGenerations = r.TotalGenerations
                 }).ToList();
 
                 return Json(new ApiResponse { success = true, data = items });

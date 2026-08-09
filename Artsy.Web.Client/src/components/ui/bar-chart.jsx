@@ -1,14 +1,14 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-export default function BarChart({ data, formatValue, height = 200, barColor = '#003cbf', barHoverColor = '#0050ff', className = '' }) {
+export default function BarChart({ data, formatValue, height = 200, barColor = '#003cbf', barHoverColor = '#0050ff', className = '', showXAxisLabels = true }) {
   const [hovered, setHovered] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ left: 0, top: 0 });
   const containerRef = useRef(null);
   const tooltipRef = useRef(null);
 
   const max = Math.max(...data.map(d => d.value), 1);
-  const chartHeight = height - 24; // leave room for x-axis labels
+  const chartHeight = showXAxisLabels ? height - 24 : height;
   const labelWidth = 48;
 
   // Y-axis grid lines (5 steps)
@@ -30,7 +30,7 @@ export default function BarChart({ data, formatValue, height = 200, barColor = '
     const margin = 8;
     if (leftPx - halfWidth < margin) leftPx = halfWidth + margin;
     else if (leftPx + halfWidth > window.innerWidth - margin) leftPx = window.innerWidth - halfWidth - margin;
-    const topPx = barRect.top - tooltipRect.height - 8;
+    const topPx = barRect.bottom + 8;
     setTooltipPos({ left: leftPx, top: topPx });
   }, [hovered]);
 
@@ -78,16 +78,18 @@ export default function BarChart({ data, formatValue, height = 200, barColor = '
       </div>
 
       {/* X-axis labels */}
-      <div className="flex">
-        <div style={{ width: `${labelWidth}px` }} />
-        <div className="flex gap-0.5 flex-1">
-          {data.map((d, i) => (
-            <div key={i} className="flex-1 min-w-0 text-center text-xs text-gray-500 dark:text-gray-400 leading-6 overflow-hidden" title={d.title || d.label}>
-              {d.label}
-            </div>
-          ))}
+      {showXAxisLabels && (
+        <div className="flex">
+          <div style={{ width: `${labelWidth}px` }} />
+          <div className="flex gap-0.5 flex-1">
+            {data.map((d, i) => (
+              <div key={i} className="flex-1 min-w-0 text-center text-xs text-gray-500 dark:text-gray-400 leading-6 overflow-hidden" title={d.title || d.label}>
+                {d.label}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {hovered !== null && data[hovered] && createPortal(
         <div
@@ -100,9 +102,18 @@ export default function BarChart({ data, formatValue, height = 200, barColor = '
           }}
         >
           <div className="relative bg-[#003cbf] border border-[#003cbf] rounded-lg shadow-lg px-3 py-2 text-sm text-white whitespace-nowrap">
-            <div className="absolute -bottom-2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-[#003cbf]" style={{ left: '50%', transform: 'translateX(-50%)' }} />
+            <div className="absolute -top-2 w-0 h-0 border-l-8 border-r-8 border-b-8 border-l-transparent border-r-transparent border-b-[#003cbf]" style={{ left: '50%', transform: 'translateX(-50%)' }} />
             <div className="font-medium">{data[hovered].title || data[hovered].label}</div>
             <div>{formatValue ? formatValue(data[hovered].value) : data[hovered].value}</div>
+            {data[hovered].totalTokens !== undefined && (
+              <div className="mt-1 pt-1 border-t border-white/30 space-y-0.5 text-xs">
+                <div>Tokens Used: {data[hovered].totalTokens.toLocaleString()}</div>
+                <div>Text Input: {data[hovered].totalInputTextTokens.toLocaleString()}</div>
+                <div>Image Input: {data[hovered].totalInputImageTokens.toLocaleString()}</div>
+                <div>Output: {data[hovered].totalOutputTokens.toLocaleString()}</div>
+                <div>Generations: {data[hovered].totalGenerations.toLocaleString()}</div>
+              </div>
+            )}
           </div>
         </div>,
         document.body

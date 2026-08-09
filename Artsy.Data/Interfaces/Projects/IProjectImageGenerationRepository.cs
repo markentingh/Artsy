@@ -1,4 +1,4 @@
-﻿using Artsy.Data.Entities.Projects;
+using Artsy.Data.Entities.Projects;
 
 namespace Artsy.Data.Interfaces.Projects
 {
@@ -10,6 +10,6 @@ namespace Artsy.Data.Interfaces.Projects
         Task<IEnumerable<ProjectImageGeneration>> GetByCollectionIdAsync(Guid collectionId);
         Task<IEnumerable<ProjectImageGeneration>> GetByItemIdAsync(Guid itemId);
         Task<(IEnumerable<ProjectImageGeneration> items, int totalCount)> GetPaginatedAsync(int start, int length);
-        Task<IEnumerable<DailyCostResult>> GetDailyCostsAsync(int days);
+        Task<IEnumerable<DailyCostResult>> GetDailyCostsAsync(string range);
     }
 }

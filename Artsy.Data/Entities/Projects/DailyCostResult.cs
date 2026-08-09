@@ -4,5 +4,10 @@ namespace Artsy.Data.Entities.Projects
     {
         public DateTime Date { get; set; }
         public int TotalCost { get; set; }
+        public int TotalTokens { get; set; }
+        public int TotalInputTextTokens { get; set; }
+        public int TotalInputImageTokens { get; set; }
+        public int TotalOutputTokens { get; set; }
+        public int TotalGenerations { get; set; }
     }
 }

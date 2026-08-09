@@ -109,8 +109,10 @@ export default function ImageGenerationsTab() {
   const [showPreview, setShowPreview] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [dailyCosts, setDailyCosts] = useState(null);
+  const [costRange, setCostRange] = useState('30days');
   const scrollRef = useRef(null);
   const mountedRef = useRef(false);
+  const costRangeRef = useRef('30days');
 
   const fetchGenerations = useCallback(async (start, append = false) => {
     if (append) setLoadingMore(true); else setLoading(true);
@@ -138,12 +140,15 @@ export default function ImageGenerationsTab() {
     if (mountedRef.current) return;
     mountedRef.current = true;
     fetchGenerations(0);
-    getDailyCosts(30).then((response) => {
+  }, []);
+
+  useEffect(() => {
+    getDailyCosts(costRange).then((response) => {
       if (response.data.success) {
         setDailyCosts(response.data.data || []);
       }
     }).catch((error) => console.error('Error fetching daily costs:', error));
-  }, []);
+  }, [costRange]);
 
   const handleScroll = useCallback((e) => {
     const el = e.target;
@@ -206,26 +211,117 @@ export default function ImageGenerationsTab() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl">Image Generations</h1>
+        <select
+          value={costRange}
+          onChange={(e) => setCostRange(e.target.value)}
+          className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-[#003cbf]"
+        >
+          <option value="30days">Past 30 Days</option>
+          <option value="thismonth">This Month</option>
+          <option value="lastmonth">Last Month</option>
+          <option value="3months">Past 3 Months</option>
+          <option value="12months">Past 12 Months</option>
+          <option value="ytd">Year to Date</option>
+        </select>
       </div>
 
       {dailyCosts !== null && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
-          <div className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-2">Cost (USD) — Past 30 Days</div>
+          <div className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-2">
+            Cost (USD) — {costRange === '30days' ? 'Past 30 Days' : costRange === 'thismonth' ? 'This Month' : costRange === 'lastmonth' ? 'Last Month' : costRange === '3months' ? 'Past 3 Months' : costRange === '12months' ? 'Past 12 Months' : 'Year to Date'}
+          </div>
           <BarChart
+            showXAxisLabels={costRange !== '3months' && costRange !== 'ytd'}
             data={(() => {
               const costMap = {};
-              dailyCosts.forEach(d => { costMap[d.date] = d.totalCost; });
-              const days = [];
+              dailyCosts.forEach(d => { costMap[d.date] = d; });
               const today = new Date();
-              for (let i = 29; i >= 0; i--) {
-                const date = new Date(today);
-                date.setDate(date.getDate() - i);
-                const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-                const dd = String(date.getDate()).padStart(2, '0');
-                const fullLabel = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-                days.push({ label: dd, title: fullLabel, value: costMap[key] || 0 });
+              const bars = [];
+
+              if (costRange === '12months') {
+                for (let i = 11; i >= 0; i--) {
+                  const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                  const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
+                  const entry = costMap[key];
+                  const monthAbbr = date.toLocaleDateString('en-US', { month: 'short' });
+                  const fullLabel = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                  bars.push({
+                    label: monthAbbr,
+                    title: fullLabel,
+                    value: entry?.totalCost || 0,
+                    totalTokens: entry?.totalTokens || 0,
+                    totalInputTextTokens: entry?.totalInputTextTokens || 0,
+                    totalInputImageTokens: entry?.totalInputImageTokens || 0,
+                    totalOutputTokens: entry?.totalOutputTokens || 0,
+                    totalGenerations: entry?.totalGenerations || 0,
+                  });
+                }
+              } else if (costRange === 'ytd') {
+                const startYear = new Date(today.getFullYear(), 0, 1);
+                for (let w = 0; w < 52; w++) {
+                  const weekStart = new Date(startYear);
+                  weekStart.setDate(weekStart.getDate() + w * 7);
+                  const key = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+                  const entry = costMap[key];
+                  const weekEnd = new Date(weekStart);
+                  weekEnd.setDate(weekEnd.getDate() + 6);
+                  const fullLabel = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                  bars.push({
+                    label: '',
+                    title: fullLabel,
+                    value: entry?.totalCost || 0,
+                    totalTokens: entry?.totalTokens || 0,
+                    totalInputTextTokens: entry?.totalInputTextTokens || 0,
+                    totalInputImageTokens: entry?.totalInputImageTokens || 0,
+                    totalOutputTokens: entry?.totalOutputTokens || 0,
+                    totalGenerations: entry?.totalGenerations || 0,
+                  });
+                }
+              } else if (costRange === 'thismonth' || costRange === 'lastmonth') {
+                const monthStart = costRange === 'thismonth'
+                  ? new Date(today.getFullYear(), today.getMonth(), 1)
+                  : new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                const numDays = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+                for (let i = 0; i < numDays; i++) {
+                  const date = new Date(monthStart);
+                  date.setDate(date.getDate() + i);
+                  const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                  const dd = String(date.getDate()).padStart(2, '0');
+                  const fullLabel = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+                  const entry = costMap[key];
+                  bars.push({
+                    label: dd,
+                    title: fullLabel,
+                    value: entry?.totalCost || 0,
+                    totalTokens: entry?.totalTokens || 0,
+                    totalInputTextTokens: entry?.totalInputTextTokens || 0,
+                    totalInputImageTokens: entry?.totalInputImageTokens || 0,
+                    totalOutputTokens: entry?.totalOutputTokens || 0,
+                    totalGenerations: entry?.totalGenerations || 0,
+                  });
+                }
+              } else {
+                const numDays = costRange === '3months' ? 90 : 30;
+                for (let i = numDays - 1; i >= 0; i--) {
+                  const date = new Date(today);
+                  date.setDate(date.getDate() - i);
+                  const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                  const dd = String(date.getDate()).padStart(2, '0');
+                  const fullLabel = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+                  const entry = costMap[key];
+                  bars.push({
+                    label: dd,
+                    title: fullLabel,
+                    value: entry?.totalCost || 0,
+                    totalTokens: entry?.totalTokens || 0,
+                    totalInputTextTokens: entry?.totalInputTextTokens || 0,
+                    totalInputImageTokens: entry?.totalInputImageTokens || 0,
+                    totalOutputTokens: entry?.totalOutputTokens || 0,
+                    totalGenerations: entry?.totalGenerations || 0,
+                  });
+                }
               }
-              return days;
+              return bars;
             })()}
             formatValue={(v) => `$${(v / 100).toFixed(2)}`}
             height={220}
@@ -242,7 +338,7 @@ export default function ImageGenerationsTab() {
         <table className="w-full text-left border-collapse">
           <thead className="bg-gray-100 dark:bg-gray-700 sticky top-0 z-10">
             <tr>
-              <th className="px-4 py-3 whitespace-nowrap">User</th>
+              <th className="px-4 py-3 whitespace-nowrap">Date</th>
               <th className="px-4 py-3 whitespace-nowrap">Type</th>
               <th className="px-4 py-3 whitespace-nowrap">Model</th>
               <th className="px-4 py-3 whitespace-nowrap">Text Input</th>
@@ -260,7 +356,7 @@ export default function ImageGenerationsTab() {
                 onClick={() => handleRowClick(gen)}
                 className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
               >
-                <td className="px-4 py-3 text-sm">{gen.userEmail || 'N/A'}</td>
+                <td className="px-4 py-3 text-sm whitespace-nowrap">{gen.dateCreated ? new Date(gen.dateCreated).toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }) : 'N/A'}</td>
                 <td className="px-4 py-3 text-sm">{TYPE_LABELS[gen.type] || 'Unknown'}</td>
                 <td className="px-4 py-3 text-sm">{gen.modelName || 'N/A'}</td>
                 <td className="px-4 py-3 text-sm">{gen.inputTextTokens}</td>
