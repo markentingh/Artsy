@@ -10,3 +10,5 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionInstagramPosts"
     "Status" INT NOT NULL DEFAULT 1,
     "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectCollectionInstagramPosts_CollectionId_Status" ON public."ProjectCollectionInstagramPosts" ("CollectionId", "Status");

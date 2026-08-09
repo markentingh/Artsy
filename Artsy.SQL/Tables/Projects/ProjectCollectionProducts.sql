@@ -13,3 +13,5 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionProducts"
 );
 
 ALTER TABLE public."ProjectCollectionProducts" ADD COLUMN IF NOT EXISTS "Active" BOOLEAN NOT NULL DEFAULT TRUE;
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectCollectionProducts_CollectionId_ProjectBlueprintId" ON public."ProjectCollectionProducts" ("CollectionId", "ProjectBlueprintId");

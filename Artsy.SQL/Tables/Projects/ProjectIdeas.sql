@@ -9,3 +9,4 @@ CREATE TABLE IF NOT EXISTS public."ProjectIdeas"
 );
 
 ALTER TABLE public."ProjectIdeas" ADD COLUMN IF NOT EXISTS "MetadataJson" TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS "IX_ProjectIdeas_ProjectId_Created" ON public."ProjectIdeas" ("ProjectId", "Created" DESC);

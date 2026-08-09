@@ -12,3 +12,6 @@ ALTER TABLE public."ProjectItemReferences" ADD COLUMN IF NOT EXISTS "ArtworkId" 
 ALTER TABLE public."ProjectItemReferences" ADD COLUMN IF NOT EXISTS "CustomImageId" UUID NULL REFERENCES public."CustomImages"("Id");
 ALTER TABLE public."ProjectItemReferences" DROP COLUMN IF EXISTS "FileName";
 ALTER TABLE public."ProjectItemReferences" DROP COLUMN IF EXISTS "Extension";
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectItemReferences_ProjectId_Created" ON public."ProjectItemReferences" ("ProjectId", "Created");
+CREATE INDEX IF NOT EXISTS "IX_ProjectItemReferences_ItemId" ON public."ProjectItemReferences" ("ItemId");

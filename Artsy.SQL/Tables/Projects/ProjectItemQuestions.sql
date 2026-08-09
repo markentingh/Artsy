@@ -9,3 +9,6 @@ CREATE TABLE IF NOT EXISTS public."ProjectItemQuestions"
 );
 
 ALTER TABLE public."ProjectItemQuestions" ADD COLUMN IF NOT EXISTS "Status" INT NOT NULL DEFAULT 1;
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectItemQuestions_ItemId_Status" ON public."ProjectItemQuestions" ("ItemId", "Status");
+CREATE INDEX IF NOT EXISTS "IX_ProjectItemQuestions_ProjectId_Status" ON public."ProjectItemQuestions" ("ProjectId", "Status");

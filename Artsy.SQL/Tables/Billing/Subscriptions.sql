@@ -18,3 +18,5 @@ ALTER TABLE public."Subscriptions" ADD COLUMN IF NOT EXISTS "YearlyProductId" IN
 ALTER TABLE public."Subscriptions" ADD COLUMN IF NOT EXISTS "SortIndex" INT NOT NULL DEFAULT 0;
 ALTER TABLE public."Subscriptions" ADD COLUMN IF NOT EXISTS "Featured" BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE public."Subscriptions" ADD COLUMN IF NOT EXISTS "Status" INT NOT NULL DEFAULT 1;
+
+CREATE INDEX IF NOT EXISTS "IX_Subscriptions_Archived_Status" ON public."Subscriptions" ("Archived", "Status");

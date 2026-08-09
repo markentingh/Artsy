@@ -10,3 +10,6 @@ CREATE TABLE IF NOT EXISTS public."AppUserSubscriptions"
 );
 
 ALTER TABLE public."AppUserSubscriptions" ADD COLUMN IF NOT EXISTS "Cancelled" BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE INDEX IF NOT EXISTS "IX_AppUserSubscriptions_AppUserId" ON public."AppUserSubscriptions" ("AppUserId");
+CREATE INDEX IF NOT EXISTS "IX_AppUserSubscriptions_AppUserId_Cancelled" ON public."AppUserSubscriptions" ("AppUserId", "Cancelled");

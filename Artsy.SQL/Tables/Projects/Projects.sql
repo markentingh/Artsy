@@ -18,3 +18,5 @@ ALTER TABLE public."Projects" ADD COLUMN IF NOT EXISTS "InstagramId" UUID NULL;
 ALTER TABLE public."Projects" ADD COLUMN IF NOT EXISTS "PostToInstagram" BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE public."Projects" ADD COLUMN IF NOT EXISTS "SocialMediaPrompt" TEXT NULL;
 ALTER TABLE public."Projects" ADD COLUMN IF NOT EXISTS "SocialMediaDescription" TEXT NULL;
+
+CREATE INDEX IF NOT EXISTS "IX_Projects_AppUserId_Status" ON public."Projects" ("AppUserId", "Status");

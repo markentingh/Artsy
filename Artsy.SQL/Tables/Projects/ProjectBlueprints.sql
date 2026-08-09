@@ -18,3 +18,5 @@ ALTER TABLE public."ProjectBlueprints" ADD COLUMN IF NOT EXISTS "Description" TE
 ALTER TABLE public."ProjectBlueprints" ADD COLUMN IF NOT EXISTS "SafetyInfo" TEXT NOT NULL DEFAULT '';
 ALTER TABLE public."ProjectBlueprints" ADD COLUMN IF NOT EXISTS "PricingJson" TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE public."ProjectBlueprints" ADD COLUMN IF NOT EXISTS "PrintProviderId" INT NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectBlueprints_ProjectId_Status" ON public."ProjectBlueprints" ("ProjectId", "Status");

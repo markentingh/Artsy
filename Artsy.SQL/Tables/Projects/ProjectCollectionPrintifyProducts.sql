@@ -14,3 +14,5 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionPrintifyProducts"
     "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ALTER TABLE public."ProjectCollectionPrintifyProducts" ADD COLUMN IF NOT EXISTS "RequestJson" TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS "IX_ProjectCollectionPrintifyProducts_CollectionId_Status" ON public."ProjectCollectionPrintifyProducts" ("CollectionId", "Status");
+CREATE INDEX IF NOT EXISTS "IX_ProjectCollectionPrintifyProducts_ProductId_Status" ON public."ProjectCollectionPrintifyProducts" ("ProductId", "Status");

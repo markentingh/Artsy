@@ -11,3 +11,5 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollections"
 ALTER TABLE public."ProjectCollections" ADD COLUMN IF NOT EXISTS "ProjectId" UUID NOT NULL REFERENCES public."Projects"("Id");
 ALTER TABLE public."ProjectCollections" ADD COLUMN IF NOT EXISTS "Status" INT NOT NULL DEFAULT 1;
 ALTER TABLE public."ProjectCollections" ADD COLUMN IF NOT EXISTS "Description" TEXT;
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectCollections_ProjectId_Status" ON public."ProjectCollections" ("ProjectId", "Status");

@@ -14,3 +14,5 @@ CREATE INDEX IF NOT EXISTS "IX_AppUserAITokens_AppUserId"
 
 CREATE INDEX IF NOT EXISTS "IX_AppUserAITokens_BillingMonth"
     ON public."AppUserAITokens" ("BillingMonth");
+
+CREATE INDEX IF NOT EXISTS "IX_AppUserAITokens_AppUserId_BillingMonth" ON public."AppUserAITokens" ("AppUserId", "BillingMonth");

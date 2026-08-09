@@ -12,6 +12,11 @@ SELECT 'CREATE DATABASE artsy' WHERE NOT EXISTS (SELECT FROM pg_database WHERE d
 \i Tables/AppUserInstagramAccounts.sql
 \i Tables/Auth/AppUserRoles.sql
 \i Tables/Auth/AppUserTokens.sql
+\i Tables/Billing/Products.sql
+\i Tables/Billing/Subscriptions.sql
+\i Tables/Billing/AppUserSubscriptions.sql
+\i Tables/Billing/Invoices.sql
+\i Tables/Billing/AppUserAITokens.sql
 \i Tables/CustomImages.sql
 \i Tables/ImageGeneration.sql
 \i Tables/LLM_Models.sql
@@ -22,7 +27,6 @@ SELECT 'CREATE DATABASE artsy' WHERE NOT EXISTS (SELECT FROM pg_database WHERE d
 \i Tables/Printify/PrintifyBlueprints.sql
 \i Tables/Printify/PrintifyBlueprintImages.sql
 \i Tables/Printify/PrintifyBlueprintImageVariants.sql
-\i Tables/Billing/Products.sql
 \i Tables/Projects/Projects.sql
 \i Tables/Projects/ProjectBlueprints.sql
 \i Tables/Projects/ProjectBlueprintProductImages.sql
@@ -48,10 +52,6 @@ SELECT 'CREATE DATABASE artsy' WHERE NOT EXISTS (SELECT FROM pg_database WHERE d
 \i Tables/Projects/ProjectItemQuestions.sql
 \i Tables/Projects/ProjectItemReferences.sql
 \i Tables/Projects/ProjectQuestions.sql
-\i Tables/Billing/Subscriptions.sql
-\i Tables/Billing/AppUserSubscriptions.sql
-\i Tables/Billing/Invoices.sql
-\i Tables/Billing/AppUserAITokens.sql
 \i Tables/Trends.sql
 
 -- Sequences

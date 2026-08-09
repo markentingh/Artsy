@@ -21,3 +21,5 @@ ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "Pr
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_ProjectCollectionProductImages_CollectionId_BlueprintId_ProductImageId"
     ON public."ProjectCollectionProductImages" ("CollectionId", "ProjectBlueprintId", "ProductImageId");
 
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectCollectionProductImages_ProjectId" ON public."ProjectCollectionProductImages" ("ProjectId");

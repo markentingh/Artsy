@@ -7,3 +7,5 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionInstagramPostImages"
     "SortOrder" INT NOT NULL DEFAULT 0,
     "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectCollectionInstagramPostImages_InstagramPostId" ON public."ProjectCollectionInstagramPostImages" ("InstagramPostId");

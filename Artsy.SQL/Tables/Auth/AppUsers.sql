@@ -40,3 +40,7 @@ ALTER TABLE public."AppUsers" ADD COLUMN IF NOT EXISTS "TelegramUserId" VARCHAR(
 ALTER TABLE public."AppUsers" ADD COLUMN IF NOT EXISTS "TelegramChatId" VARCHAR(255) NULL;
 ALTER TABLE public."AppUsers" ADD COLUMN IF NOT EXISTS "TelegramConnectionToken" VARCHAR(255) NULL;
 ALTER TABLE public."AppUsers" ADD COLUMN IF NOT EXISTS "OAuthState" VARCHAR(255) NULL;
+
+CREATE INDEX IF NOT EXISTS "IX_AppUsers_OAuthState" ON public."AppUsers" ("OAuthState");
+CREATE INDEX IF NOT EXISTS "IX_AppUsers_TelegramConnectionToken" ON public."AppUsers" ("TelegramConnectionToken");
+CREATE INDEX IF NOT EXISTS "IX_AppUsers_TelegramUserId" ON public."AppUsers" ("TelegramUserId");

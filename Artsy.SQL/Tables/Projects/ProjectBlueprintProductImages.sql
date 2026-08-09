@@ -13,3 +13,5 @@ CREATE TABLE IF NOT EXISTS public."ProjectBlueprintProductImages"
 
 CREATE INDEX IF NOT EXISTS "IX_ProjectBlueprintProductImages_ProjectBlueprintId"
     ON public."ProjectBlueprintProductImages" ("ProjectBlueprintId");
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectBlueprintProductImages_ProjectId_Status" ON public."ProjectBlueprintProductImages" ("ProjectId", "Status");

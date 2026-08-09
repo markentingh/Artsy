@@ -10,3 +10,5 @@ CREATE TABLE IF NOT EXISTS public."ProjectItems"
 
 ALTER TABLE public."ProjectItems" ADD COLUMN IF NOT EXISTS "SocialMedia" BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE public."ProjectItems" ADD COLUMN IF NOT EXISTS "Status" INT NOT NULL DEFAULT 1;
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectItems_ProjectId_Status" ON public."ProjectItems" ("ProjectId", "Status");

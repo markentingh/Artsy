@@ -7,3 +7,5 @@ CREATE TABLE IF NOT EXISTS public."AppUserTokens" (
     "IPAddress" VARCHAR(50) NOT NULL,
     CONSTRAINT "FK_AppUserTokens_AppUsers" FOREIGN KEY ("AppUserId") REFERENCES public."AppUsers"("Id") ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS "IX_AppUserTokens_AppUserId" ON public."AppUserTokens" ("AppUserId");

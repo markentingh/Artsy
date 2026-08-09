@@ -60,3 +60,5 @@ CREATE INDEX IF NOT EXISTS "IX_ProjectImageGenerations_ItemId"
 
 CREATE INDEX IF NOT EXISTS "IX_ProjectImageGenerations_DateYear_DateMonth_DateDay"
     ON public."ProjectImageGenerations" ("DateYear", "DateMonth", "DateDay");
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectImageGenerations_DateCreated" ON public."ProjectImageGenerations" ("DateCreated");

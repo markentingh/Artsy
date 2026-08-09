@@ -7,3 +7,6 @@ CREATE TABLE IF NOT EXISTS public."ProjectItemPreviews"
     "ImageModel" VARCHAR(16) NOT NULL DEFAULT '',
     "ImageModelJson" TEXT NOT NULL DEFAULT ''
 );
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectItemPreviews_ProjectId_Created" ON public."ProjectItemPreviews" ("ProjectId", "Created" DESC);
+CREATE INDEX IF NOT EXISTS "IX_ProjectItemPreviews_ItemId" ON public."ProjectItemPreviews" ("ItemId");

@@ -13,3 +13,6 @@ CREATE TABLE IF NOT EXISTS public."ProjectItemArtwork"
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "ArtworkType" VARCHAR(16) NOT NULL DEFAULT 'ai';
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "CustomImageId" UUID NULL;
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "IgnoredQuestions" TEXT NULL;
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectItemArtwork_ProjectId" ON public."ProjectItemArtwork" ("ProjectId");
+CREATE INDEX IF NOT EXISTS "IX_ProjectItemArtwork_ItemId" ON public."ProjectItemArtwork" ("ItemId");

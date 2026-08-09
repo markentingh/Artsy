@@ -6,3 +6,4 @@ CREATE TABLE IF NOT EXISTS public."ProjectIdeaVariations"
     "Description" TEXT NOT NULL DEFAULT '',
     "IdeaJson" TEXT NOT NULL DEFAULT ''
 );
+CREATE INDEX IF NOT EXISTS "IX_ProjectIdeaVariations_ProjectIdeaId" ON public."ProjectIdeaVariations" ("ProjectIdeaId");

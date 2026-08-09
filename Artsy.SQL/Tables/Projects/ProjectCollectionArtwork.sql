@@ -24,3 +24,5 @@ ALTER TABLE public."ProjectCollectionArtwork" ADD COLUMN IF NOT EXISTS "Printify
 
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_ProjectCollectionArtwork_CollectionId_ItemId"
     ON public."ProjectCollectionArtwork" ("CollectionId", "ItemId");
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectCollectionArtwork_ProjectId" ON public."ProjectCollectionArtwork" ("ProjectId");

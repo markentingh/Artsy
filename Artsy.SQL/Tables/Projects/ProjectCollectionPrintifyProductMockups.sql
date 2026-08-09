@@ -11,3 +11,6 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionPrintifyProductMockups"
     "Status" INT NOT NULL DEFAULT 1,
     "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectCollectionPrintifyProductMockups_PrintifyProductId_Status" ON public."ProjectCollectionPrintifyProductMockups" ("PrintifyProductId", "Status");
+CREATE INDEX IF NOT EXISTS "IX_ProjectCollectionPrintifyProductMockups_CollectionId_Status" ON public."ProjectCollectionPrintifyProductMockups" ("CollectionId", "Status");

@@ -10,3 +10,6 @@ CREATE TABLE IF NOT EXISTS public."ProjectImageUpscales"
     "Scale" INT NOT NULL DEFAULT 2,
     "Created" TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectImageUpscales_ArtworkId" ON public."ProjectImageUpscales" ("ArtworkId");
+CREATE INDEX IF NOT EXISTS "IX_ProjectImageUpscales_CollectionId" ON public."ProjectImageUpscales" ("CollectionId");

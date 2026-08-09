@@ -7,3 +7,5 @@ CREATE TABLE IF NOT EXISTS public."Trends"
     "Data" TEXT NULL,
     "DateCreated" TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS "IX_Trends_DateCreated" ON public."Trends" ("DateCreated" DESC);
