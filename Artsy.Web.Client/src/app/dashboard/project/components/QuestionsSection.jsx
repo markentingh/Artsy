@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
 import ButtonIcon from '@/components/ui/button-icon';
 import Tooltip from '@/components/ui/tooltip';
-import EditQuestionModal from './EditQuestionModal';
 import Message from '@/components/ui/message';
-import ConfirmModal from '@/components/ui/confirm-modal';
+import Spinner from '@/components/ui/spinner';
 import { List, Item } from '@/components/ui/list';
+const EditQuestionModal = lazy(() => import('./EditQuestionModal'));
+const ConfirmModal = lazy(() => import('@/components/ui/confirm-modal'));
 
 export default function QuestionsSection({ projectId, onChecklistChanged }) {
   const session = useSession();
@@ -149,22 +150,30 @@ export default function QuestionsSection({ projectId, onChecklistChanged }) {
         </List>
       )}
 
-      <EditQuestionModal
-        show={showModal}
-        editingQuestionId={editingQuestionId}
-        value={questionFormValue}
-        onClose={handleCloseQuestionModal}
-        onChange={setQuestionFormValue}
-        onSave={handleSaveQuestion}
-      />
+      {showModal && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <EditQuestionModal
+            show={showModal}
+            editingQuestionId={editingQuestionId}
+            value={questionFormValue}
+            onClose={handleCloseQuestionModal}
+            onChange={setQuestionFormValue}
+            onSave={handleSaveQuestion}
+          />
+        </Suspense>
+      )}
 
-      <ConfirmModal
-        show={!!deleteTargetId}
-        title="Delete Question"
-        message="Do you really want to delete this question? This cannot be undone."
-        onConfirm={handleConfirmDelete}
-        onClose={() => setDeleteTargetId(null)}
-      />
+      {deleteTargetId && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ConfirmModal
+            show={!!deleteTargetId}
+            title="Delete Question"
+            message="Do you really want to delete this question? This cannot be undone."
+            onConfirm={handleConfirmDelete}
+            onClose={() => setDeleteTargetId(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

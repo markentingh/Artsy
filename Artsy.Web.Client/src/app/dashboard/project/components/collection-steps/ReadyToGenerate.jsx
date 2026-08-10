@@ -13,7 +13,7 @@ export default function ReadyToGenerate() {
     generationError, setGenerationError,
     generatedArtworks, currentGeneratingIndex, currentGeneratingItemId,
     doGenerateAll,
-    setArtworkPreview, onClose, api,
+    setArtworkPreview, onClose, onSaved, api,
     projectId, cancelRef, STEPS,
     upscaleComplete, setUpscaleComplete,
     setStep, loadImageModels,

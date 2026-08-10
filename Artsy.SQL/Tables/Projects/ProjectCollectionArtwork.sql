@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionArtwork"
     "Accepted" BOOLEAN NOT NULL DEFAULT FALSE,
     "ResponseId" VARCHAR(64) NOT NULL DEFAULT '',
     "FullSize" BOOLEAN NOT NULL DEFAULT FALSE,
-    "Index" INT NOT NULL DEFAULT 0
+    "Index" INT NOT NULL DEFAULT 0,
+    "Opacity" BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 ALTER TABLE public."ProjectCollectionArtwork" ADD COLUMN IF NOT EXISTS "Accepted" BOOLEAN NOT NULL DEFAULT FALSE;
@@ -21,6 +22,7 @@ ALTER TABLE public."ProjectCollectionArtwork" ADD COLUMN IF NOT EXISTS "FullSize
 ALTER TABLE public."ProjectCollectionArtwork" ADD COLUMN IF NOT EXISTS "Index" INT NOT NULL DEFAULT 0;
 ALTER TABLE public."ProjectCollectionArtwork" ALTER COLUMN "ResponseId" TYPE VARCHAR(64);
 ALTER TABLE public."ProjectCollectionArtwork" ADD COLUMN IF NOT EXISTS "PrintifyImageId" VARCHAR(32) NOT NULL DEFAULT '';
+ALTER TABLE public."ProjectCollectionArtwork" ADD COLUMN IF NOT EXISTS "Opacity" BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_ProjectCollectionArtwork_CollectionId_ItemId"
     ON public."ProjectCollectionArtwork" ("CollectionId", "ItemId");

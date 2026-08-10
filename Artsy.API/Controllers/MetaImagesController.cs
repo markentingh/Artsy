@@ -53,8 +53,24 @@ namespace Artsy.API.Controllers
                 if (artwork == null)
                     return NotFound();
 
-                var imgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(
-                    artwork.ProjectId, artwork.CollectionId, artwork.ItemId, artwork.Id);
+                byte[]? imgBytes;
+                if (artwork.Opacity)
+                {
+                    // For opacity artworks, serve the JPG with background for social media
+                    imgBytes = await _imageService.GetProjectCollectionArtworkJpgWithBgAsync(
+                        artwork.ProjectId, artwork.CollectionId, artwork.ItemId, artwork.Id);
+                    if (imgBytes == null || imgBytes.Length == 0)
+                    {
+                        // Fallback to the original JPG if the bg version doesn't exist
+                        imgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(
+                            artwork.ProjectId, artwork.CollectionId, artwork.ItemId, artwork.Id);
+                    }
+                }
+                else
+                {
+                    imgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(
+                        artwork.ProjectId, artwork.CollectionId, artwork.ItemId, artwork.Id);
+                }
                 if (imgBytes == null || imgBytes.Length == 0)
                     return NotFound();
 

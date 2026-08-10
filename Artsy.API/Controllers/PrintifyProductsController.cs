@@ -125,22 +125,37 @@ namespace Artsy.API.Controllers
                 if (!string.IsNullOrWhiteSpace(artwork.PrintifyImageId))
                     return Json(new ApiResponse { success = true, data = new { printifyImageId = artwork.PrintifyImageId } });
 
-                var imgBytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(
-                    artwork.ProjectId, request.CollectionId, artwork.ItemId, artwork.Id);
-                if (imgBytes == null || imgBytes.Length == 0)
+                byte[] imgBytes;
+                if (artwork.Opacity)
                 {
-                    imgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(
+                    // For opacity artworks, upload the transparent PNG to Printify
+                    imgBytes = await _imageService.GetProjectCollectionArtworkFullSizePngAsync(
                         artwork.ProjectId, request.CollectionId, artwork.ItemId, artwork.Id);
+                    if (imgBytes == null || imgBytes.Length == 0)
+                    {
+                        imgBytes = await _imageService.GetProjectCollectionArtworkPngAsync(
+                            artwork.ProjectId, request.CollectionId, artwork.ItemId, artwork.Id);
+                    }
+                }
+                else
+                {
+                    imgBytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(
+                        artwork.ProjectId, request.CollectionId, artwork.ItemId, artwork.Id);
+                    if (imgBytes == null || imgBytes.Length == 0)
+                    {
+                        imgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(
+                            artwork.ProjectId, request.CollectionId, artwork.ItemId, artwork.Id);
+                    }
                 }
                 if (imgBytes == null || imgBytes.Length == 0)
                     return Json(new ApiResponse { success = false, message = "Artwork file not found." });
 
                 var cropSettings = await GetCropSettingsForArtworkAsync(collection.ProjectId, artwork.ItemId);
                 if (cropSettings != null)
-                    imgBytes = CropImage(imgBytes, cropSettings.Value.Width, cropSettings.Value.Height, cropSettings.Value.CropX, cropSettings.Value.CropY);
+                    imgBytes = CropImage(imgBytes, cropSettings.Value.Width, cropSettings.Value.Height, cropSettings.Value.CropX, cropSettings.Value.CropY, artwork.Opacity);
 
                 var base64 = Convert.ToBase64String(imgBytes);
-                var fileName = $"{artwork.Id}.jpg";
+                var fileName = artwork.Opacity ? $"{artwork.Id}.png" : $"{artwork.Id}.jpg";
                 var uploadResp = await _printifyService.UploadImageAsync(userId, fileName, base64);
                 if (uploadResp == null)
                     return Json(new ApiResponse { success = false, message = "Failed to upload artwork to Printify." });
@@ -180,7 +195,7 @@ namespace Artsy.API.Controllers
             return null;
         }
 
-        private static byte[] CropImage(byte[] imgBytes, int targetWidth, int targetHeight, string cropX, string cropY)
+        private static byte[] CropImage(byte[] imgBytes, int targetWidth, int targetHeight, string cropX, string cropY, bool preservePng = false)
         {
             using var image = Image.Load(imgBytes);
             var srcW = image.Width;
@@ -221,7 +236,10 @@ namespace Artsy.API.Controllers
 
             image.Mutate(ctx => ctx.Crop(new Rectangle(cropXPos, cropYPos, cropW, cropH)));
             using var ms = new MemoryStream();
-            image.Save(ms, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder());
+            if (preservePng)
+                image.Save(ms, new SixLabors.ImageSharp.Formats.Png.PngEncoder());
+            else
+                image.Save(ms, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder());
             return ms.ToArray();
         }
 

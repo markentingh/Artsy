@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import Input from '@/components/forms/input';
 import Button from '@/components/ui/button';
 
-function ColorPicker({ color, h, s, l, onChange, onClose }) {
+function ColorPicker({ color, h, s, l, onChange, onOk, onClose }) {
   const [hue, setHue] = useState(h !== undefined ? h : 0);
   const [saturation, setSaturation] = useState(s !== undefined ? s : 100);
   const [lightness, setLightness] = useState(l !== undefined ? l : 50);
@@ -176,7 +176,9 @@ function ColorPicker({ color, h, s, l, onChange, onClose }) {
   };
 
   const handleOk = () => {
-    onChange({ hex, r: rgb.r, g: rgb.g, b: rgb.b, a: alpha, h: hue, s: saturation, l: lightness });
+    const result = { hex, r: rgb.r, g: rgb.g, b: rgb.b, a: alpha, h: hue, s: saturation, l: lightness };
+    onChange(result);
+    if (onOk) onOk(result);
     onClose();
   };
 

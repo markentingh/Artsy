@@ -9,7 +9,7 @@ export default function ProductImagePreview() {
   const {
     selectedProductCombos, currentProductComboIndex,
     collectionId, projectId, api, productImagePrompt,
-    setStep, setMessage, STEPS, onClose,
+    setStep, setMessage, STEPS, onClose, onSaved,
     allProductImages, setAllProductImages,
     setCurrentProductComboIndex,
     selectedProductImageModel,
@@ -42,6 +42,7 @@ export default function ProductImagePreview() {
         setShowProductImageChanges(false);
         setProductImageChanges('');
         refreshTokens();
+        if (onSaved) onSaved();
       } else {
         setMessage({ type: 'error', text: res.data.message || 'Failed to generate product image' });
       }
@@ -50,7 +51,7 @@ export default function ProductImagePreview() {
     } finally {
       setIsGeneratingProductImage(false);
     }
-  }, [projectId, collectionId, api, productImagePrompt, setIsGeneratingProductImage, setCurrentProductImage, setShowProductImageChanges, setProductImageChanges, setMessage, refreshTokens, selectedProductImageModel]);
+  }, [projectId, collectionId, api, productImagePrompt, setIsGeneratingProductImage, setCurrentProductImage, setShowProductImageChanges, setProductImageChanges, setMessage, refreshTokens, selectedProductImageModel, onSaved]);
 
   useEffect(() => {
     if (!currentProductImage && combo && !isGeneratingProductImage) {
@@ -75,6 +76,7 @@ export default function ProductImagePreview() {
         }
         return [...prev, { ...currentProductImage, accepted: true }];
       });
+      if (onSaved) onSaved();
     } catch (error) {
       console.error('acceptProductImage error:', error?.response?.data || error);
     }
@@ -89,7 +91,7 @@ export default function ProductImagePreview() {
       setProductImageChanges('');
       setStep(STEPS.PRODUCT_IMAGE_PROMPT);
     }
-  }, [currentProductImage, collectionId, api, currentProductComboIndex, selectedProductCombos, setStep, STEPS, setCurrentProductComboIndex, setCurrentProductImage, setShowProductImageChanges, setProductImageChanges, doGenerateProductImage, setAllProductImages]);
+  }, [currentProductImage, collectionId, api, currentProductComboIndex, selectedProductCombos, setStep, STEPS, setCurrentProductComboIndex, setCurrentProductImage, setShowProductImageChanges, setProductImageChanges, doGenerateProductImage, setAllProductImages, onSaved]);
 
   const handleMakeChanges = useCallback(() => {
     setShowProductImageChanges(true);

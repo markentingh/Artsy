@@ -249,6 +249,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         setShowChanges(false);
         setRequestedChanges('');
         refreshTokens();
+        if (onSaved) onSaved();
       } else {
         setMessage({ type: 'error', text: res.data.message || 'Failed to generate preview' });
       }
@@ -257,7 +258,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     } finally {
       setIsGenerating(false);
     }
-  }, [aiItems, currentItemIndex, itemAnswers, showChanges, requestedChanges, projectId, api, buildProjectAnswers, selectedImageModel, refreshTokens]);
+  }, [aiItems, currentItemIndex, itemAnswers, showChanges, requestedChanges, projectId, api, buildProjectAnswers, selectedImageModel, refreshTokens, onSaved]);
 
   const loadItemData = useCallback(async (index) => {
     setCurrentItemIndex(index);
@@ -550,9 +551,10 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     setCurrentGeneratingItemId(null);
     if (!cancelRef.current) {
       setUpscaleComplete(true);
+      if (onSaved) onSaved();
     }
     refreshTokens();
-  }, [estimate, aiItems, projectId, api, buildProjectAnswers, collectionArtwork, refreshTokens]);
+  }, [estimate, aiItems, projectId, api, buildProjectAnswers, collectionArtwork, refreshTokens, onSaved]);
 
   const reset = useCallback(() => {
     setStep(STEPS.PROJECT_QUESTIONS);

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { useSession } from '@/context/session';
 import { CustomImages } from '@/api/user/customImages';
 import Modal from '@/components/ui/modal';
@@ -6,7 +6,7 @@ import ButtonOutline from '@/components/ui/button-outline';
 import Icon from '@/components/ui/icon';
 import Spinner from '@/components/ui/spinner';
 import Message from '@/components/ui/message';
-import ConfirmModal from '@/components/ui/confirm-modal';
+const ConfirmModal = lazy(() => import('@/components/ui/confirm-modal'));
 
 const PAGE_SIZE = 10;
 
@@ -192,13 +192,17 @@ export default function CustomImageSelector({ show, selectedImageId, onSelect, o
         </ButtonOutline>
       </div>
 
-      <ConfirmModal
-        show={!!deleteTarget}
-        title="Delete Image"
-        message="Do you really want to delete this image? This cannot be undone."
-        onConfirm={handleConfirmDelete}
-        onClose={() => setDeleteTarget(null)}
-      />
+      {deleteTarget && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ConfirmModal
+            show={!!deleteTarget}
+            title="Delete Image"
+            message="Do you really want to delete this image? This cannot be undone."
+            onConfirm={handleConfirmDelete}
+            onClose={() => setDeleteTarget(null)}
+          />
+        </Suspense>
+      )}
     </Modal>
   );
 }

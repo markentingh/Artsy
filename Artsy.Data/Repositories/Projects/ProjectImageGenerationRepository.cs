@@ -86,6 +86,7 @@ namespace Artsy.Data.Repositories.Projects
                     query = @"
                         SELECT MAKE_DATE(""DateYear"", ""DateMonth"", ""DateDay"") AS ""Date"",
                                COALESCE(SUM(""Cost""), 0) AS ""TotalCost"",
+                               COALESCE(SUM(CASE WHEN ""Type"" = 3 THEN ""Cost"" ELSE 0 END), 0) AS ""UpscaleCost"",
                                COALESCE(SUM(""Tokens""), 0) AS ""TotalTokens"",
                                COALESCE(SUM(""InputTextTokens""), 0) AS ""TotalInputTextTokens"",
                                COALESCE(SUM(""InputImageTokens""), 0) AS ""TotalInputImageTokens"",
@@ -103,6 +104,7 @@ namespace Artsy.Data.Repositories.Projects
                     query = @"
                         SELECT MAKE_DATE(""DateYear"", ""DateMonth"", 1) AS ""Date"",
                                COALESCE(SUM(""Cost""), 0) AS ""TotalCost"",
+                               COALESCE(SUM(CASE WHEN ""Type"" = 3 THEN ""Cost"" ELSE 0 END), 0) AS ""UpscaleCost"",
                                COALESCE(SUM(""Tokens""), 0) AS ""TotalTokens"",
                                COALESCE(SUM(""InputTextTokens""), 0) AS ""TotalInputTextTokens"",
                                COALESCE(SUM(""InputImageTokens""), 0) AS ""TotalInputImageTokens"",
@@ -120,6 +122,7 @@ namespace Artsy.Data.Repositories.Projects
                     query = @"
                         SELECT (MAKE_DATE(""DateYear"", 1, 1) + ((EXTRACT(WEEK FROM ""DateCreated"")::int - 1) * INTERVAL '7 days'))::date AS ""Date"",
                                COALESCE(SUM(""Cost""), 0) AS ""TotalCost"",
+                               COALESCE(SUM(CASE WHEN ""Type"" = 3 THEN ""Cost"" ELSE 0 END), 0) AS ""UpscaleCost"",
                                COALESCE(SUM(""Tokens""), 0) AS ""TotalTokens"",
                                COALESCE(SUM(""InputTextTokens""), 0) AS ""TotalInputTextTokens"",
                                COALESCE(SUM(""InputImageTokens""), 0) AS ""TotalInputImageTokens"",
@@ -137,6 +140,7 @@ namespace Artsy.Data.Repositories.Projects
                     query = @"
                         SELECT MAKE_DATE(""DateYear"", ""DateMonth"", ""DateDay"") AS ""Date"",
                                COALESCE(SUM(""Cost""), 0) AS ""TotalCost"",
+                               COALESCE(SUM(CASE WHEN ""Type"" = 3 THEN ""Cost"" ELSE 0 END), 0) AS ""UpscaleCost"",
                                COALESCE(SUM(""Tokens""), 0) AS ""TotalTokens"",
                                COALESCE(SUM(""InputTextTokens""), 0) AS ""TotalInputTextTokens"",
                                COALESCE(SUM(""InputImageTokens""), 0) AS ""TotalInputImageTokens"",
@@ -154,6 +158,7 @@ namespace Artsy.Data.Repositories.Projects
                     query = @"
                         SELECT MAKE_DATE(""DateYear"", ""DateMonth"", ""DateDay"") AS ""Date"",
                                COALESCE(SUM(""Cost""), 0) AS ""TotalCost"",
+                               COALESCE(SUM(CASE WHEN ""Type"" = 3 THEN ""Cost"" ELSE 0 END), 0) AS ""UpscaleCost"",
                                COALESCE(SUM(""Tokens""), 0) AS ""TotalTokens"",
                                COALESCE(SUM(""InputTextTokens""), 0) AS ""TotalInputTextTokens"",
                                COALESCE(SUM(""InputImageTokens""), 0) AS ""TotalInputImageTokens"",
@@ -171,6 +176,7 @@ namespace Artsy.Data.Repositories.Projects
                     query = @"
                         SELECT MAKE_DATE(""DateYear"", ""DateMonth"", ""DateDay"") AS ""Date"",
                                COALESCE(SUM(""Cost""), 0) AS ""TotalCost"",
+                               COALESCE(SUM(CASE WHEN ""Type"" = 3 THEN ""Cost"" ELSE 0 END), 0) AS ""UpscaleCost"",
                                COALESCE(SUM(""Tokens""), 0) AS ""TotalTokens"",
                                COALESCE(SUM(""InputTextTokens""), 0) AS ""TotalInputTextTokens"",
                                COALESCE(SUM(""InputImageTokens""), 0) AS ""TotalInputImageTokens"",

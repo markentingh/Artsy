@@ -105,7 +105,8 @@ namespace Artsy.API.Controllers
                         width = a.Width,
                         height = a.Height,
                         index = a.Index,
-                        printifyImageId = a.PrintifyImageId
+                        printifyImageId = a.PrintifyImageId,
+                        opacity = a.Opacity
                     })
                 });
             }
@@ -265,6 +266,15 @@ namespace Artsy.API.Controllers
                 if (string.IsNullOrWhiteSpace(finalPrompt))
                     return Json(new ApiResponse { success = false, message = "Prompt is required to generate artwork." });
 
+                // Append chroma key background instruction if OpacityJson has chroma keys
+                var opacitySettings = _opacityService.ParseOpacityJson(artwork.OpacityJson);
+                if (opacitySettings != null && opacitySettings.ChromaKeys.Count > 0)
+                {
+                    var firstColor = opacitySettings.ChromaKeys[0];
+                    var hexColor = $"#{firstColor.R:X2}{firstColor.G:X2}{firstColor.B:X2}";
+                    finalPrompt += $" the background for this image must be a solid color using {hexColor} hex color so that we can apply a chroma key to the image later";
+                }
+
                 modelRequest.Prompt = finalPrompt;
 
                 var blueprints = await _projectBlueprintRepository.GetByProjectIdAsync(request.ProjectId);
@@ -409,6 +419,54 @@ namespace Artsy.API.Controllers
                     else
                         await _imageService.SaveProjectCollectionArtworkAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, genResult.ImageBytes);
 
+                    // Apply opacity mask (chroma key) processing if configured
+                    if (opacitySettings != null && opacitySettings.ChromaKeys.Count > 0)
+                    {
+                        // Save the original AI-generated image as _orig.jpg (no thumb for orig)
+                        await _imageService.SaveProjectCollectionArtworkOrigAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, genResult.ImageBytes);
+
+                        // Apply chroma keys to create transparent PNG
+                        var pngBytes = await _opacityService.ApplyChromaKeysAsync(genResult.ImageBytes, opacitySettings);
+
+                        if (request.IsFullSize)
+                            await _imageService.SaveProjectCollectionArtworkFullSizePngAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, pngBytes);
+                        else
+                            await _imageService.SaveProjectCollectionArtworkPngAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, pngBytes);
+
+                        // Resolve background image bytes
+                        byte[]? bgBytes = null;
+                        if (opacitySettings.Background != null && !string.IsNullOrWhiteSpace(opacitySettings.Background.Id))
+                        {
+                            try
+                            {
+                                var bgId = Guid.Parse(opacitySettings.Background.Id);
+                                if (opacitySettings.Background.Type == "custom")
+                                {
+                                    var customImg = await _customImageRepository.GetByIdAsync(bgId);
+                                    if (customImg != null)
+                                        bgBytes = await _imageService.GetCustomImageAsync(customImg.AppUserId, customImg.Id, customImg.Extension);
+                                }
+                                else if (opacitySettings.Background.Type == "artwork")
+                                {
+                                    var bgCollectionArtwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(request.CollectionId, bgId);
+                                    if (bgCollectionArtwork != null)
+                                    {
+                                        bgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, bgId, bgCollectionArtwork.Id);
+                                        if (bgBytes == null || bgBytes.Length == 0)
+                                            bgBytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(request.ProjectId, request.CollectionId, bgId, bgCollectionArtwork.Id);
+                                    }
+                                }
+                            }
+                            catch { /* ignore background resolution errors, fall back to black */ }
+                        }
+
+                        // Composite PNG over background to create JPG with background
+                        var jpgWithBgBytes = await _opacityService.CompositeOverBackgroundAsync(pngBytes, bgBytes);
+                        await _imageService.SaveProjectCollectionArtworkJpgWithBgAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, jpgWithBgBytes);
+
+                        created.Opacity = true;
+                    }
+
                     created.Active = true;
                     created.ResponseId = genResult.ResponseId ?? "";
                     if (request.IsFullSize)
@@ -480,12 +538,30 @@ namespace Artsy.API.Controllers
                 if (!await _aiTokenService.UseTokensAsync(userId, 2))
                     return Json(new ApiResponse { success = false, message = "Not enough tokens to generate the artwork. Please purchase more tokens before continuing." });
 
-                var previewBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id);
+                byte[] previewBytes;
+                if (artwork.Opacity)
+                {
+                    // For opacity artworks, upscale the transparent PNG, not the JPG
+                    previewBytes = await _imageService.GetProjectCollectionArtworkPngAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id);
+                }
+                else
+                {
+                    previewBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id);
+                }
                 if (previewBytes == null || previewBytes.Length == 0)
                     return Json(new ApiResponse { success = false, message = "Preview image data not found." });
 
                 var upscaledBytes = await _imageUpscaler.UpscaleAsync(previewBytes);
-                await _imageService.SaveProjectCollectionArtworkFullSizeAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id, upscaledBytes);
+
+                if (artwork.Opacity)
+                {
+                    // For opacity artworks, save upscaled result as PNG (preserves transparency)
+                    await _imageService.SaveProjectCollectionArtworkFullSizePngAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id, upscaledBytes);
+                }
+                else
+                {
+                    await _imageService.SaveProjectCollectionArtworkFullSizeAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id, upscaledBytes);
+                }
 
                 artwork.FullSize = true;
                 await _projectCollectionArtworkRepository.UpdateAsync(artwork);
@@ -516,7 +592,7 @@ namespace Artsy.API.Controllers
                     OutputTokens = 0,
                     Tokens = 2,
                     Prompt = "",
-                    Filename = $"{artwork.Id}_fullsize.jpg",
+                    Filename = artwork.Opacity ? $"{artwork.Id}_fullsize.png" : $"{artwork.Id}_fullsize.jpg",
                     Resolution = $"{artwork.Width * 2}x{artwork.Height * 2}",
                     InputImages = 0,
                     InputImageJson = "[]",
@@ -799,7 +875,7 @@ namespace Artsy.API.Controllers
         }
 
         [HttpGet("collection/{collectionId}/item/{itemId}/artwork/{artworkId}")]
-        public async Task<IActionResult> GetCollectionArtworkImage(Guid collectionId, Guid itemId, Guid artworkId, [FromQuery] bool fullSize = false, [FromQuery] bool thumb = false)
+        public async Task<IActionResult> GetCollectionArtworkImage(Guid collectionId, Guid itemId, Guid artworkId, [FromQuery] bool fullSize = false, [FromQuery] bool thumb = false, [FromQuery] bool jpgWithBg = false)
         {
             var userId = GetUserId();
             if (userId == Guid.Empty)
@@ -817,6 +893,35 @@ namespace Artsy.API.Controllers
                 var project = await _projectRepository.GetByIdAsync(artwork.ProjectId, userId);
                 if (project == null)
                     return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                // When opacity is enabled, serve PNG (transparent) by default, or JPG with background if requested
+                if (artwork.Opacity)
+                {
+                    if (jpgWithBg)
+                    {
+                        byte[]? bgBytes;
+                        if (thumb)
+                            bgBytes = await _imageService.GetProjectCollectionArtworkJpgWithBgThumbAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                        else
+                            bgBytes = await _imageService.GetProjectCollectionArtworkJpgWithBgAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                        if (bgBytes == null || bgBytes.Length == 0)
+                            return NotFound();
+                        return File(bgBytes, "image/jpeg");
+                    }
+                    else
+                    {
+                        byte[]? pngBytes;
+                        if (thumb)
+                            pngBytes = await _imageService.GetProjectCollectionArtworkPngThumbAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                        else if (fullSize)
+                            pngBytes = await _imageService.GetProjectCollectionArtworkFullSizePngAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                        else
+                            pngBytes = await _imageService.GetProjectCollectionArtworkPngAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                        if (pngBytes == null || pngBytes.Length == 0)
+                            return NotFound();
+                        return File(pngBytes, "image/png");
+                    }
+                }
 
                 byte[]? bytes;
                 if (thumb)
@@ -856,7 +961,9 @@ namespace Artsy.API.Controllers
                 if (project == null)
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
-                var generated = await _imageService.GenerateProjectCollectionArtworkThumbAsync(artwork.ProjectId, request.CollectionId, request.ItemId, artwork.Id);
+                var generated = artwork.Opacity
+                    ? await _imageService.GenerateProjectCollectionArtworkPngThumbAsync(artwork.ProjectId, request.CollectionId, request.ItemId, artwork.Id)
+                    : await _imageService.GenerateProjectCollectionArtworkThumbAsync(artwork.ProjectId, request.CollectionId, request.ItemId, artwork.Id);
                 return Json(new ApiResponse { success = generated });
             }
             catch (Exception ex)

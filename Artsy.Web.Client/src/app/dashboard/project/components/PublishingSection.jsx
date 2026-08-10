@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import { Instagram } from '@/api/user/instagram';
@@ -10,8 +10,9 @@ import Message from '@/components/ui/message';
 import Button from '@/components/ui/button';
 import ButtonOutline from '@/components/ui/button-outline';
 import Select from '@/components/forms/select';
-import ReconnectInstagramModal from '@/components/modals/ReconnectInstagramModal';
-import ConfigureSocialMediaPosts from './ConfigureSocialMediaPosts';
+import Spinner from '@/components/ui/spinner';
+const ReconnectInstagramModal = lazy(() => import('@/components/modals/ReconnectInstagramModal'));
+const ConfigureSocialMediaPosts = lazy(() => import('./ConfigureSocialMediaPosts'));
 
 const platforms = [
   { key: 'printify', name: 'Printify', color: 'bg-green-500' },
@@ -371,20 +372,28 @@ export default function PublishingSection({ projectId, project, onProjectUpdated
       >
         {platforms.map((platform) => renderPlatformCard(platform))}
       </div>
-      <ConfigureSocialMediaPosts
-        show={showConfigureModal}
-        projectId={projectId}
-        project={project}
-        onClose={() => setShowConfigureModal(false)}
-        onSaved={(updated) => {
-          if (onProjectUpdated) onProjectUpdated(updated);
-        }}
-      />
-      <ReconnectInstagramModal
-        show={showReconnectModal}
-        onClose={() => setShowReconnectModal(false)}
-        onReconnected={() => setShowReconnectModal(false)}
-      />
+      {showConfigureModal && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ConfigureSocialMediaPosts
+            show={showConfigureModal}
+            projectId={projectId}
+            project={project}
+            onClose={() => setShowConfigureModal(false)}
+            onSaved={(updated) => {
+              if (onProjectUpdated) onProjectUpdated(updated);
+            }}
+          />
+        </Suspense>
+      )}
+      {showReconnectModal && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ReconnectInstagramModal
+            show={showReconnectModal}
+            onClose={() => setShowReconnectModal(false)}
+            onReconnected={() => setShowReconnectModal(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

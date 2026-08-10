@@ -5,7 +5,7 @@ import { List, Item } from '@/components/ui/list';
 export default function ProjectChecklist({ checklist }) {
   const items = [
     {
-      label: 'Set up Artwork for Image Generation',
+      label: 'Set up Artwork Blueprints to be Generated',
       key: 'imageGenerationSetup',
       completed: checklist?.imageGenerationSetupCompleted ?? 0,
       total: checklist?.imageGenerationSetupTotal ?? 0,

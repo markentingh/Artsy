@@ -222,6 +222,7 @@ namespace Artsy.API.Controllers.Admin
                 {
                     date = r.Date.ToString("yyyy-MM-dd"),
                     totalCost = r.TotalCost,
+                    upscaleCost = r.UpscaleCost,
                     totalTokens = r.TotalTokens,
                     totalInputTextTokens = r.TotalInputTextTokens,
                     totalInputImageTokens = r.TotalInputImageTokens,

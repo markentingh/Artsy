@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { useCollection } from '@/context/collection';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
@@ -6,7 +6,8 @@ import ButtonOutline from '@/components/ui/button-outline';
 import Button from '@/components/ui/button';
 import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';
-import ReconnectInstagramModal from '@/components/modals/ReconnectInstagramModal';
+import Spinner from '@/components/ui/spinner';
+const ReconnectInstagramModal = lazy(() => import('@/components/modals/ReconnectInstagramModal'));
 
 export default function PostSocialMedia() {
   const session = useSession();
@@ -45,7 +46,9 @@ export default function PostSocialMedia() {
         type: 'artwork',
         artworkId: a.id,
         itemId: a.itemId,
-        url: api.getCollectionArtworkThumbUrl(collectionId, a.itemId, a.id),
+        url: a.opacity
+          ? api.getCollectionArtworkJpgWithBgThumbUrl(collectionId, a.itemId, a.id)
+          : api.getCollectionArtworkThumbUrl(collectionId, a.itemId, a.id),
         label: 'Artwork',
       }));
 
@@ -463,14 +466,18 @@ export default function PostSocialMedia() {
         )}
       </div>
 
-      <ReconnectInstagramModal
-        show={showReconnectModal}
-        onClose={() => setShowReconnectModal(false)}
-        onReconnected={() => {
-          setShowReconnectModal(false);
-          handlePost();
-        }}
-      />
+      {showReconnectModal && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ReconnectInstagramModal
+            show={showReconnectModal}
+            onClose={() => setShowReconnectModal(false)}
+            onReconnected={() => {
+              setShowReconnectModal(false);
+              handlePost();
+            }}
+          />
+        </Suspense>
+      )}
 
     </div>
   );

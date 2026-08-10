@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, lazy, Suspense, useCallback } from 'react';
 import { useSession } from '@/context/session';
 import { useDashboard } from '@/context/dashboard';
 import { Projects } from '@/api/user/projects';
@@ -15,11 +15,13 @@ import ButtonIcon from '@/components/ui/button-icon';
 import Icon from '@/components/ui/icon';
 import Spinner from '@/components/ui/spinner';
 import Message from '@/components/ui/message';
-import EditQuestionModal from './EditQuestionModal';
+import Slider from '@/components/ui/slider';
+import ColorPicker from '@/components/ui/ColorPicker';
 import QuestionsAnswersModal from './QuestionsAnswersModal';
 import CustomImageSelector from './CustomImageSelector';
 import ArtworkSelector from './ArtworkSelector';
-import ConfirmModal from '@/components/ui/confirm-modal';
+const ConfirmModal = lazy(() => import('@/components/ui/confirm-modal'));
+const EditQuestionModal = lazy(() => import('./EditQuestionModal'));
 
 export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const session = useSession();
@@ -30,7 +32,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     getQuestions, getItemQuestions, createItemQuestion, updateItemQuestion, deleteItemQuestion,
     getItemPreviews, generateItemPreview, deleteItemPreview, getItemPreviewUrl,
     getItemReferences, uploadItemReference, deleteItemReference, addArtworkReference, addCustomImageReference, getItemReferenceUrl,
-    estimateItemTokens, updateItemIgnoredQuestions
+    estimateItemTokens, updateItemIgnoredQuestions, updateItemOpacity
   } = Projects(session);
   const { getCustomImageUrl } = CustomImages(session);
 
@@ -61,7 +63,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const [message, setMessage] = useState(null);
 
   const [imageModels, setImageModels] = useState([]);
-  const selectedImageModelId = useMemo(() => imageModels.find(m => m.model === imageModel)?.id, [imageModels, imageModel]);
+  const selectedImageModelId = useMemo(() => imageModels.find(m => m.modelKey === imageModel)?.id, [imageModels, imageModel]);
   const [estimatedCost, setEstimatedCost] = useState(null);
   const [estimating, setEstimating] = useState(false);
   const estimateTimerRef = useRef(null);
@@ -77,6 +79,29 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const [showArtworkSelector, setShowArtworkSelector] = useState(false);
   const [activeTab, setActiveTab] = useState('info');
   const fileInputRef = useRef(null);
+
+  // Opacity Mask state
+  const [chromaKeys, setChromaKeys] = useState([]);
+  const [fuzziness, setFuzziness] = useState(1);
+  const [opacityBackground, setOpacityBackground] = useState(null); // {type:"artwork"|"custom", id:""}
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [pendingColor, setPendingColor] = useState('#00ff00');
+  const pendingColorRef = useRef('#00ff00');
+  const [showOpacityArtworkSelector, setShowOpacityArtworkSelector] = useState(false);
+  const [showOpacityCustomImageSelector, setShowOpacityCustomImageSelector] = useState(false);
+  const [opacityBgPreview, setOpacityBgPreview] = useState(null);
+  const [processedPreviewUrl, setProcessedPreviewUrl] = useState(null);
+  const [eyeDropperMode, setEyeDropperMode] = useState(false);
+  const [eyeDropperColor, setEyeDropperColor] = useState(null);
+  const [eyeDropperPos, setEyeDropperPos] = useState(null);
+  const eyeDropperCanvasRef = useRef(null);
+  const eyeDropperImageRef = useRef(null);
+  const previewContainerRef = useRef(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  const [savedOpacity, setSavedOpacity] = useState({ chromaKeys: [], fuzziness: 1, background: null });
 
   const reset = () => {
     const itemTitle = item?.title || '';
@@ -109,6 +134,20 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setDeleteReferenceTarget(null);
     setShowArtworkSelector(false);
     setActiveTab('info');
+    setChromaKeys([]);
+    setFuzziness(1);
+    setOpacityBackground(null);
+    setShowColorPicker(false);
+    setPendingColor('#00ff00');
+    setShowOpacityArtworkSelector(false);
+    setShowOpacityCustomImageSelector(false);
+    setOpacityBgPreview(null);
+    setProcessedPreviewUrl(null);
+    setEyeDropperMode(false);
+    setEyeDropperColor(null);
+    setEyeDropperPos(null);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
   };
 
   useEffect(() => {
@@ -131,6 +170,41 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
             setIgnoredQuestions(ignored ? JSON.parse(ignored) : []);
           } catch {
             setIgnoredQuestions([]);
+          }
+          try {
+            const opacityJson = response.data.data?.opacityJson;
+            if (opacityJson) {
+              const parsed = JSON.parse(opacityJson);
+              const loadedKeys = parsed.chromakeys || [];
+              const loadedFuzz = parsed.fuziness ?? 1;
+              const loadedBg = parsed.background || null;
+              setChromaKeys(loadedKeys);
+              setFuzziness(loadedFuzz);
+              setOpacityBackground(loadedBg);
+              setSavedOpacity({ chromaKeys: [...loadedKeys], fuzziness: loadedFuzz, background: loadedBg });
+              if (parsed.background && parsed.background.id) {
+                if (parsed.background.type === 'custom') {
+                  setOpacityBgPreview(getCustomImageUrl(parsed.background.id, true));
+                } else if (parsed.background.type === 'artwork') {
+                  // Load artwork preview for background
+                  try {
+                    const previewResp = await getItemPreviews(parsed.background.id);
+                    if (previewResp.data.success) {
+                      const bgPreviews = previewResp.data.data || [];
+                      if (bgPreviews.length > 0) {
+                        setOpacityBgPreview(getItemPreviewUrl(parsed.background.id, bgPreviews[0].id, true));
+                      }
+                    }
+                  } catch { /* ignore */ }
+                }
+              }
+            }
+          } catch {
+            setChromaKeys([]);
+            setFuzziness(1);
+            setOpacityBackground(null);
+            setOpacityBgPreview(null);
+            setSavedOpacity({ chromaKeys: [], fuzziness: 1, background: null });
           }
         }
       } catch (error) {
@@ -683,14 +757,18 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
           ))}
         </div>
       )}
-      <EditQuestionModal
-        show={showQuestionModal}
-        editingQuestionId={editingQuestionId}
-        value={questionFormValue}
-        onClose={handleCloseQuestionModal}
-        onChange={setQuestionFormValue}
-        onSave={handleSaveQuestion}
-      />
+      {showQuestionModal && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <EditQuestionModal
+            show={showQuestionModal}
+            editingQuestionId={editingQuestionId}
+            value={questionFormValue}
+            onClose={handleCloseQuestionModal}
+            onChange={setQuestionFormValue}
+            onSave={handleSaveQuestion}
+          />
+        </Suspense>
+      )}
       {projectQuestions.length > 0 && (
         <div className="mt-6">
           <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">Ignored Project Questions</h3>
@@ -742,6 +820,278 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save ignored questions' });
     }
   };
+
+  // Opacity Mask handlers
+  const buildOpacityJson = useCallback((keys, fuzz, bg) => {
+    if (!keys || keys.length === 0) return null;
+    const obj = { chromakeys: keys, fuziness: fuzz };
+    if (bg) obj.background = bg;
+    return JSON.stringify(obj);
+  }, []);
+
+  const saveOpacity = useCallback(async (keys, fuzz, bg) => {
+    if (!item) return;
+    const opacityJson = buildOpacityJson(keys, fuzz, bg);
+    try {
+      const response = await updateItemOpacity({ itemId: item.id, opacityJson });
+      if (response.data.success) {
+        setSavedOpacity({ chromaKeys: [...keys], fuzziness: fuzz, background: bg });
+      } else {
+        setMessage({ type: 'error', text: response.data.message || 'Failed to save opacity settings' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save opacity settings' });
+    }
+  }, [item, updateItemOpacity, buildOpacityJson, setMessage]);
+
+  const handleColorPickerChange = (colorObj) => {
+    const hex = typeof colorObj === 'string' ? colorObj : colorObj?.hex;
+    if (hex) {
+      pendingColorRef.current = hex;
+    }
+  };
+
+  const handleColorPickerOk = (colorObj) => {
+    const hex = typeof colorObj === 'string' ? colorObj : colorObj?.hex;
+    if (!hex) return;
+    pendingColorRef.current = hex;
+    if (chromaKeys.length >= 32 * 32 - 1) return;
+    const newKeys = [...chromaKeys, hex];
+    setChromaKeys(newKeys);
+    setShowColorPicker(false);
+  };
+
+  const handleColorPickerClose = () => {
+    setShowColorPicker(false);
+  };
+
+  const handleAddChromaKey = (colorObj) => {
+    handleColorPickerOk(colorObj);
+  };
+
+  const handleDeleteChromaKey = (index) => {
+    const newKeys = chromaKeys.filter((_, i) => i !== index);
+    setChromaKeys(newKeys);
+  };
+
+  const handleFuzzinessChange = (value) => {
+    setFuzziness(value);
+  };
+
+  const handleApplyChanges = () => {
+    saveOpacity(chromaKeys, fuzziness, opacityBackground);
+  };
+
+  const opacityDirty = useMemo(() => {
+    const keysChanged = chromaKeys.length !== savedOpacity.chromaKeys.length ||
+      chromaKeys.some((k, i) => k !== savedOpacity.chromaKeys[i]);
+    const fuzzChanged = fuzziness !== savedOpacity.fuzziness;
+    const bgChanged = (opacityBackground?.type !== savedOpacity.background?.type) ||
+      (opacityBackground?.id !== savedOpacity.background?.id);
+    return keysChanged || fuzzChanged || bgChanged;
+  }, [chromaKeys, fuzziness, opacityBackground, savedOpacity]);
+
+  const handleSelectOpacityArtworkBackground = async (artworkItem) => {
+    setShowOpacityArtworkSelector(false);
+    const bg = { type: 'artwork', id: artworkItem.id };
+    setOpacityBackground(bg);
+    try {
+      const previewResp = await getItemPreviews(artworkItem.id);
+      if (previewResp.data.success) {
+        const bgPreviews = previewResp.data.data || [];
+        if (bgPreviews.length > 0) {
+          setOpacityBgPreview(getItemPreviewUrl(artworkItem.id, bgPreviews[0].id, true));
+        }
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleSelectOpacityCustomBackground = (img) => {
+    setShowOpacityCustomImageSelector(false);
+    const bg = { type: 'custom', id: img.id };
+    setOpacityBackground(bg);
+    setOpacityBgPreview(getCustomImageUrl(img.id, true));
+  };
+
+  const handleRemoveOpacityBackground = () => {
+    setOpacityBackground(null);
+    setOpacityBgPreview(null);
+  };
+
+  const latestPreviewThumbUrl = useMemo(() => {
+    if (!item || previews.length === 0) return null;
+    return getItemPreviewUrl(item.id, previews[0].id, true);
+  }, [item, previews]);
+
+  // Eye dropper: load image into a canvas for sampling
+  const handleToggleEyeDropper = useCallback(() => {
+    if (eyeDropperMode) {
+      setEyeDropperMode(false);
+      setEyeDropperColor(null);
+      setEyeDropperPos(null);
+      return;
+    }
+    if (!latestPreviewThumbUrl) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      eyeDropperCanvasRef.current = canvas;
+      eyeDropperImageRef.current = img;
+      setEyeDropperMode(true);
+    };
+    img.src = latestPreviewThumbUrl;
+  }, [eyeDropperMode, latestPreviewThumbUrl]);
+
+  const handlePreviewMouseMove = useCallback((e) => {
+    if (!eyeDropperMode || !eyeDropperCanvasRef.current || !eyeDropperImageRef.current || !previewContainerRef.current) return;
+    const containerRect = previewContainerRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - containerRect.left;
+    const mouseY = e.clientY - containerRect.top;
+    const img = eyeDropperImageRef.current;
+    const containerW = containerRect.width;
+    const containerH = containerRect.height;
+    const baseScale = Math.min(containerW / img.naturalWidth, containerH / img.naturalHeight);
+    const displayedW = img.naturalWidth * baseScale;
+    const displayedH = img.naturalHeight * baseScale;
+    const offsetX = (containerW - displayedW) / 2;
+    const offsetY = (containerH - displayedH) / 2;
+    // Inverse of: transformOrigin=center, scale(zoom), translate(pan.x/zoom, pan.y/zoom)
+    // screen → element-relative: (mouse - center - pan) / zoom + center
+    // element-relative → image pixel: (element - offset) / baseScale
+    const elX = (mouseX - containerW / 2 - pan.x) / zoom + containerW / 2;
+    const elY = (mouseY - containerH / 2 - pan.y) / zoom + containerH / 2;
+    const imgX = Math.floor((elX - offsetX) / baseScale);
+    const imgY = Math.floor((elY - offsetY) / baseScale);
+    if (imgX < 0 || imgY < 0 || imgX >= img.naturalWidth || imgY >= img.naturalHeight) {
+      setEyeDropperColor(null);
+      setEyeDropperPos(null);
+      return;
+    }
+    const ctx = eyeDropperCanvasRef.current.getContext('2d');
+    try {
+      const pixel = ctx.getImageData(imgX, imgY, 1, 1).data;
+      const hex = '#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+      setEyeDropperColor(hex);
+      setEyeDropperPos({ x: mouseX, y: mouseY });
+    } catch { /* CORS */ }
+  }, [eyeDropperMode, zoom, pan]);
+
+  const handlePreviewMouseLeave = useCallback(() => {
+    setEyeDropperColor(null);
+    setEyeDropperPos(null);
+  }, []);
+
+  const handlePreviewClick = useCallback(() => {
+    if (!eyeDropperMode || !eyeDropperColor) return;
+    if (chromaKeys.length >= 32 * 32 - 1) return;
+    const newKeys = [...chromaKeys, eyeDropperColor];
+    setChromaKeys(newKeys);
+    setEyeDropperMode(false);
+    setEyeDropperColor(null);
+    setEyeDropperPos(null);
+  }, [eyeDropperMode, eyeDropperColor, chromaKeys]);
+
+  // Zoom & pan handlers
+  const handlePreviewWheel = useCallback((e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    setZoom(prev => Math.max(1, Math.min(10, Math.round((prev + delta) * 100) / 100)));
+  }, []);
+
+  // Attach wheel listener non-passively (React onWheel is passive by default)
+  useEffect(() => {
+    const el = previewContainerRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handlePreviewWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handlePreviewWheel);
+  }, [handlePreviewWheel]);
+
+  const handleZoomSliderChange = useCallback((value) => {
+    setZoom(value);
+    if (value === 1) setPan({ x: 0, y: 0 });
+  }, []);
+
+  const handlePreviewMouseDown = useCallback((e) => {
+    if (eyeDropperMode || zoom === 1) return;
+    setIsPanning(true);
+    panStartRef.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+  }, [eyeDropperMode, zoom, pan]);
+
+  const handlePreviewPanMove = useCallback((e) => {
+    if (!isPanning) return;
+    const dx = e.clientX - panStartRef.current.x;
+    const dy = e.clientY - panStartRef.current.y;
+    setPan({ x: panStartRef.current.panX + dx, y: panStartRef.current.panY + dy });
+  }, [isPanning]);
+
+  const handlePreviewPanEnd = useCallback(() => {
+    setIsPanning(false);
+  }, []);
+
+  // Client-side chroma key processing: apply chroma keys + fuzziness to the preview image
+  useEffect(() => {
+    if (!latestPreviewThumbUrl || chromaKeys.length === 0) {
+      setProcessedPreviewUrl(latestPreviewThumbUrl);
+      return;
+    }
+
+    let cancelled = false;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      if (cancelled) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      try {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        const maxDistance = fuzziness;
+        const sourceColors = chromaKeys.map(hex => {
+          const cleaned = hex.replace('#', '');
+          return {
+            r: parseInt(cleaned.substring(0, 2), 16),
+            g: parseInt(cleaned.substring(2, 4), 16),
+            b: parseInt(cleaned.substring(4, 6), 16),
+          };
+        });
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+          let bestMatch = 0;
+          for (const sc of sourceColors) {
+            const dr = r - sc.r, dg = g - sc.g, db = b - sc.b;
+            const distance = Math.sqrt(dr * dr + dg * dg + db * db);
+            if (distance <= maxDistance) {
+              const match = 1 - (distance / maxDistance);
+              if (match > bestMatch) bestMatch = match;
+            }
+          }
+          if (bestMatch > 0) {
+            // Opacity strength is 2x the color match — pixels in the inner half of the range go fully transparent
+            const opacityStrength = Math.min(1, bestMatch * 2);
+            data[i + 3] = Math.round(a * (1 - opacityStrength));
+          }
+        }
+        ctx.putImageData(imageData, 0, 0);
+        if (!cancelled) setProcessedPreviewUrl(canvas.toDataURL('image/png'));
+      } catch {
+        // CORS or other error — fall back to raw image
+        if (!cancelled) setProcessedPreviewUrl(latestPreviewThumbUrl);
+      }
+    };
+    img.onerror = () => {
+      if (!cancelled) setProcessedPreviewUrl(latestPreviewThumbUrl);
+    };
+    img.src = latestPreviewThumbUrl;
+    return () => { cancelled = true; };
+  }, [latestPreviewThumbUrl, chromaKeys, fuzziness]);
 
   const previewTabContent = (
     <div>
@@ -903,6 +1253,188 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         </div>
       ),
     }] : []),
+    ...(isAI ? [{
+      id: 'opacity',
+      label: 'Opacity Mask',
+      content: (
+        <div>
+          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-4">Chroma Key Colors</h3>
+          <div className="grid gap-1 mb-4" style={{ gridTemplateColumns: 'repeat(auto-fill, 64px)' }}>
+            {chromaKeys.map((color, index) => (
+              <div
+                key={index}
+                className="relative group rounded border border-gray-300 dark:border-gray-600 cursor-pointer"
+                style={{ backgroundColor: color, width: '64px', height: '64px' }}
+                onClick={() => handleDeleteChromaKey(index)}
+                title={`Remove ${color}`}
+              >
+                <div className="absolute top-0 right-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-red-600 rounded-bl rounded-tr w-4 h-4">
+                  <Icon name="close" className="text-white" style={{ fontSize: '12px', lineHeight: 1 }} />
+                </div>
+              </div>
+            ))}
+            {chromaKeys.length < 32 * 32 - 1 && (
+              <>
+                <div
+                  className="rounded border-2 border-dashed border-gray-400 dark:border-gray-500 flex items-center justify-center cursor-pointer hover:border-primary-500 hover:bg-primary-500/5 transition"
+                  style={{ width: '64px', height: '64px' }}
+                  title="Add Chroma Key"
+                  onClick={() => setShowColorPicker(true)}
+                >
+                  <Icon name="add" className="text-gray-400 text-sm" />
+                </div>
+                {previews.length > 0 && (
+                  <div
+                    className={`rounded border-2 flex items-center justify-center cursor-pointer transition ${eyeDropperMode ? 'border-primary-500 bg-primary-500/10 text-primary-500' : 'border-gray-400 dark:border-gray-500 text-gray-400 hover:border-primary-500 hover:bg-primary-500/5'}`}
+                    style={{ width: '64px', height: '64px' }}
+                    title="Pick color from preview"
+                    onClick={handleToggleEyeDropper}
+                  >
+                    <Icon name="colorize" className="text-sm" />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {showColorPicker && (
+            <ColorPicker
+              color={pendingColor}
+              onChange={handleColorPickerChange}
+              onOk={handleAddChromaKey}
+              onClose={handleColorPickerClose}
+            />
+          )}
+
+          {previews.length === 0 ? (
+            <div className="w-[500px] py-8 flex items-center justify-center text-center mx-auto">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Choose at least one chroma key color, then generate a preview artwork before continuing to set up your Opacity Mask.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="mb-4">
+                <Slider
+                  label="Fuzziness"
+                  value={fuzziness}
+                  onChange={handleFuzzinessChange}
+                  min={1}
+                  max={200}
+                  step={1}
+                />
+              </div>
+
+              {processedPreviewUrl && (
+                <div className="mb-4 flex flex-col items-center">
+                  <label className="text-sm font-medium text-gray-600 dark:text-gray-300 block mb-2">Preview</label>
+                  <div className="relative">
+                    <div
+                      ref={previewContainerRef}
+                      className={`w-[350px] h-[350px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 relative ${eyeDropperMode ? 'cursor-crosshair' : (zoom > 1 ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : '')}`}
+                      style={{
+                        backgroundImage: opacityBgPreview
+                          ? 'none'
+                          : 'url(/checkerboard.png)',
+                        backgroundSize: opacityBgPreview ? 'auto' : '20px 20px',
+                        backgroundRepeat: opacityBgPreview ? 'no-repeat' : 'repeat',
+                        backgroundPosition: 'center',
+                      }}
+                      onMouseMove={(e) => { handlePreviewMouseMove(e); handlePreviewPanMove(e); }}
+                      onMouseLeave={() => { handlePreviewMouseLeave(); handlePreviewPanEnd(); }}
+                      onMouseDown={handlePreviewMouseDown}
+                      onMouseUp={handlePreviewPanEnd}
+                      onClick={handlePreviewClick}
+                    >
+                      {opacityBgPreview && (
+                        <img
+                          src={opacityBgPreview}
+                          alt="Background"
+                          className="absolute inset-0 w-full h-full object-cover select-none"
+                          style={{
+                            transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+                            transformOrigin: 'center',
+                            transition: isPanning ? 'none' : 'transform 0.1s ease-out',
+                          }}
+                          draggable={false}
+                        />
+                      )}
+                      <img
+                        src={processedPreviewUrl}
+                        alt="Opacity preview"
+                        className="w-full h-full object-contain relative z-10 select-none"
+                        style={{
+                          transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+                          transformOrigin: 'center',
+                          transition: isPanning ? 'none' : 'transform 0.1s ease-out',
+                        }}
+                        draggable={false}
+                      />
+                      {eyeDropperMode && (
+                        <div className="absolute top-2 left-2 z-20 pointer-events-none bg-black/60 text-white text-xs px-2 py-1 rounded">
+                          Click to pick a color
+                        </div>
+                      )}
+                    </div>
+                    {eyeDropperMode && eyeDropperColor && eyeDropperPos && (
+                      <div
+                        className="absolute z-30 pointer-events-none rounded-full border-2 border-white shadow-lg"
+                        style={{
+                          left: `${eyeDropperPos.x + 10}px`,
+                          top: `${eyeDropperPos.y + 10}px`,
+                          width: '24px',
+                          height: '24px',
+                          backgroundColor: eyeDropperColor,
+                          boxShadow: '0 0 0 1px rgba(0,0,0,0.5)',
+                        }}
+                      >
+                        <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs text-white bg-black/70 px-1 rounded whitespace-nowrap">
+                          {eyeDropperColor}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="w-[350px] mt-2">
+                    <Slider
+                      label="Zoom"
+                      value={zoom}
+                      onChange={handleZoomSliderChange}
+                      min={1}
+                      max={10}
+                      step={0.1}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300">Background</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">for Social Media Posts</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <ButtonOutline onClick={() => setShowOpacityArtworkSelector(true)}>
+                      <Icon name="add" className="mr-2" />
+                      <span>Use Artwork</span>
+                    </ButtonOutline>
+                    <ButtonOutline onClick={() => setShowOpacityCustomImageSelector(true)}>
+                      <Icon name="add" className="mr-2" />
+                      <span>Custom Image</span>
+                    </ButtonOutline>
+                    {opacityBackground && (
+                      <ButtonOutline color="red" onClick={handleRemoveOpacityBackground}>
+                        Remove
+                      </ButtonOutline>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      ),
+    }] : []),
     ...(isAI ? [
       { id: 'questions', label: 'Questions', content: questionTabContent },
       { id: 'preview', label: 'Preview', content: previewTabContent },
@@ -923,6 +1455,12 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       )}
 
       <Tabs tabs={tabs} defaultTab="info" onTabChange={setActiveTab} />
+
+      {activeTab === 'opacity' && previews.length > 0 && opacityDirty && (
+        <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700 mt-4">
+          <ButtonOutline onClick={handleApplyChanges}>Apply Changes</ButtonOutline>
+        </div>
+      )}
 
       <QuestionsAnswersModal
         show={showAnswersModal}
@@ -977,6 +1515,24 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         />
       )}
 
+      {showOpacityArtworkSelector && (
+        <ArtworkSelector
+          show={showOpacityArtworkSelector}
+          projectId={item.projectId}
+          currentIndex={item.index}
+          onSelect={handleSelectOpacityArtworkBackground}
+          onClose={() => setShowOpacityArtworkSelector(false)}
+        />
+      )}
+
+      {showOpacityCustomImageSelector && (
+        <CustomImageSelector
+          show={showOpacityCustomImageSelector}
+          onSelect={handleSelectOpacityCustomBackground}
+          onClose={() => setShowOpacityCustomImageSelector(false)}
+        />
+      )}
+
       {deleteReferenceTarget && (
         <Modal
           title="Delete Reference Image"
@@ -994,21 +1550,29 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         </Modal>
       )}
 
-      <ConfirmModal
-        show={!!deleteQuestionTargetId}
-        title="Delete Question"
-        message="Do you really want to delete this question? This cannot be undone."
-        onConfirm={handleConfirmDeleteQuestion}
-        onClose={() => setDeleteQuestionTargetId(null)}
-      />
+      {deleteQuestionTargetId && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ConfirmModal
+            show={!!deleteQuestionTargetId}
+            title="Delete Question"
+            message="Do you really want to delete this question? This cannot be undone."
+            onConfirm={handleConfirmDeleteQuestion}
+            onClose={() => setDeleteQuestionTargetId(null)}
+          />
+        </Suspense>
+      )}
 
-      <ConfirmModal
-        show={!!deletePreviewTarget}
-        title="Delete Preview"
-        message="Do you really want to delete this preview image? This cannot be undone."
-        onConfirm={handleDeletePreview}
-        onClose={() => setDeletePreviewTarget(null)}
-      />
+      {deletePreviewTarget && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ConfirmModal
+            show={!!deletePreviewTarget}
+            title="Delete Preview"
+            message="Do you really want to delete this preview image? This cannot be undone."
+            onConfirm={handleDeletePreview}
+            onClose={() => setDeletePreviewTarget(null)}
+          />
+        </Suspense>
+      )}
     </Modal>
   );
 }

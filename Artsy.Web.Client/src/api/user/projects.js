@@ -34,6 +34,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     estimateItemTokens: (itemId, width, height, modelId = '') => api.get(`${apiPath}/estimate-item-tokens?itemId=${itemId}&width=${width}&height=${height}&modelId=${modelId || ''}`),
     updateItemArtworkType: (request) => api.post(`${apiPath}/update-item-artwork-type`, request),
     updateItemIgnoredQuestions: (request) => api.post(`${apiPath}/update-item-ignored-questions`, request),
+    updateItemOpacity: (request) => api.post(`${apiPath}/update-item-opacity`, request),
     getItemPreviews: (itemId) => api.get(`${apiPath}/get-item-previews?itemId=${itemId}`),
     generateItemPreview: (request) => api.post(`${apiPath}/generate-item-preview`, request),
     deleteItemPreview: (request) => api.post(`${apiPath}/delete-item-preview`, request),
@@ -96,6 +97,17 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     },
     getCollectionArtworkThumbUrl: (collectionId, itemId, artworkId, cacheBust = null) => {
       const params = ['thumb=true'];
+      if (cacheBust) params.push(`r=${cacheBust}`);
+      return `${apiPath}/collection/${collectionId}/item/${itemId}/artwork/${artworkId}?${params.join('&')}`;
+    },
+    getCollectionArtworkJpgWithBgUrl: (collectionId, itemId, artworkId, fullSize = false, cacheBust = null) => {
+      const params = ['jpgWithBg=true'];
+      if (fullSize) params.push('fullSize=true');
+      if (cacheBust) params.push(`r=${cacheBust}`);
+      return `${apiPath}/collection/${collectionId}/item/${itemId}/artwork/${artworkId}?${params.join('&')}`;
+    },
+    getCollectionArtworkJpgWithBgThumbUrl: (collectionId, itemId, artworkId, cacheBust = null) => {
+      const params = ['jpgWithBg=true', 'thumb=true'];
       if (cacheBust) params.push(`r=${cacheBust}`);
       return `${apiPath}/collection/${collectionId}/item/${itemId}/artwork/${artworkId}?${params.join('&')}`;
     },

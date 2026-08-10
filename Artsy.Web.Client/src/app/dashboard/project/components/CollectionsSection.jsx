@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import Icon from '@/components/ui/icon';
@@ -8,19 +8,16 @@ import Message from '@/components/ui/message';
 import Carousel from '@/components/ui/carousel';
 import CarouselElements from '@/components/ui/carousel-elements';
 import Tooltip from '@/components/ui/tooltip';
-import ConfirmModal from '@/components/ui/confirm-modal';
-import CollectionModal from './CollectionModal';
+import Spinner from '@/components/ui/spinner';
+const ConfirmModal = lazy(() => import('@/components/ui/confirm-modal'));
 
-export default function CollectionsSection({ projectId, project, showNewButton = true }) {
+export default function CollectionsSection({ projectId, project, showNewButton = true, refreshKey, onOpenCollection }) {
   const session = useSession();
   const { getCollections, getItems, getCollectionArtworkThumbUrl, deleteCollection, updateCollectionTitle } = Projects(session);
   const [collections, setCollections] = useState([]);
   const [items, setItems] = useState([]);
   const [mount, setMount] = useState(false);
   const [message, setMessage] = useState(null);
-  const [showCollectionModal, setShowCollectionModal] = useState(false);
-  const [resumeCollectionId, setResumeCollectionId] = useState(null);
-  const [resumeCollectionTitle, setResumeCollectionTitle] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [editingCollectionId, setEditingCollectionId] = useState(null);
   const [editingTitle, setEditingTitle] = useState('');
@@ -49,22 +46,14 @@ export default function CollectionsSection({ projectId, project, showNewButton =
   useEffect(() => {
     fetchCollections();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [projectId, refreshKey]);
 
   const handleNewCollection = () => {
-    setResumeCollectionId(null);
-    setResumeCollectionTitle('');
-    setShowCollectionModal(true);
+    if (onOpenCollection) onOpenCollection(null, null);
   };
 
   const handleResumeCollection = (collection) => {
-    setResumeCollectionId(collection.id);
-    setResumeCollectionTitle(collection.title || `Collection #${collection.sequence}`);
-    setShowCollectionModal(true);
-  };
-
-  const handleCollectionSaved = () => {
-    fetchCollections();
+    if (onOpenCollection) onOpenCollection(collection.id, collection.title || `Collection #${collection.sequence}`);
   };
 
   const handleDeleteCollection = (collection, e) => {
@@ -225,23 +214,17 @@ export default function CollectionsSection({ projectId, project, showNewButton =
         />
       )}
 
-      <CollectionModal
-        show={showCollectionModal}
-        projectId={projectId}
-        project={project}
-        collectionId={resumeCollectionId}
-        collectionTitle={resumeCollectionTitle}
-        onClose={() => setShowCollectionModal(false)}
-        onSaved={handleCollectionSaved}
-      />
-
-      <ConfirmModal
-        show={!!deleteTarget}
-        title="Delete Collection"
-        message={`Do you really want to delete this collection? This cannot be undone.`}
-        onConfirm={handleConfirmDelete}
-        onClose={() => setDeleteTarget(null)}
-      />
+      {deleteTarget && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ConfirmModal
+            show={!!deleteTarget}
+            title="Delete Collection"
+            message={`Do you really want to delete this collection? This cannot be undone.`}
+            onConfirm={handleConfirmDelete}
+            onClose={() => setDeleteTarget(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

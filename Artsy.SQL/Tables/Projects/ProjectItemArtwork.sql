@@ -7,12 +7,14 @@ CREATE TABLE IF NOT EXISTS public."ProjectItemArtwork"
     "Prompt" TEXT NOT NULL DEFAULT '',
     "ArtworkType" VARCHAR(16) NOT NULL DEFAULT 'ai',
     "CustomImageId" UUID NULL,
-    "IgnoredQuestions" TEXT NULL
+    "IgnoredQuestions" TEXT NULL,
+    "OpacityJson" TEXT NULL
 );
 
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "ArtworkType" VARCHAR(16) NOT NULL DEFAULT 'ai';
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "CustomImageId" UUID NULL;
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "IgnoredQuestions" TEXT NULL;
+ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "OpacityJson" TEXT NULL;
 
 CREATE INDEX IF NOT EXISTS "IX_ProjectItemArtwork_ProjectId" ON public."ProjectItemArtwork" ("ProjectId");
 CREATE INDEX IF NOT EXISTS "IX_ProjectItemArtwork_ItemId" ON public."ProjectItemArtwork" ("ItemId");

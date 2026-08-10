@@ -1,11 +1,12 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useSession } from '@/context/session';
+import Spinner from '@/components/ui/spinner';
 import appRoutes from './app-routes';
 import dashboardRoutes from './dashboard-routes';
-import RootLayout from '@/app/layout';
-import HomeLayout from '@/app/home/layout';
-import DashboardLayout from '@/app/dashboard/layout';
+const RootLayout = lazy(() => import('@/app/layout'));
+const HomeLayout = lazy(() => import('@/app/home/layout'));
+const DashboardLayout = lazy(() => import('@/app/dashboard/layout'));
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, isReady } = useSession();
@@ -29,7 +30,7 @@ const RouteElement = ({ path, Element, layout: Layout }) => {
       key={path}
       path={path}
       element={
-        <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+        <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
           <Layout>
             <WrappedElement />
           </Layout>

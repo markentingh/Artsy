@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.Processing;
 
 namespace Artsy.API.Services
@@ -24,6 +25,18 @@ namespace Artsy.API.Services
         Task<bool> GenerateProjectCollectionArtworkThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
         Task SaveProjectCollectionArtworkFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData);
         Task<byte[]> GetProjectCollectionArtworkFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
+        Task SaveProjectCollectionArtworkPngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkPngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
+        Task<byte[]> GetProjectCollectionArtworkPngThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
+        Task<bool> GenerateProjectCollectionArtworkPngThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
+        Task SaveProjectCollectionArtworkFullSizePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkFullSizePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
+        Task SaveProjectCollectionArtworkOrigAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkOrigAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
+        Task SaveProjectCollectionArtworkJpgWithBgAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkJpgWithBgAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
+        Task<byte[]> GetProjectCollectionArtworkJpgWithBgThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
+        Task<bool> GenerateProjectCollectionArtworkJpgWithBgThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
         Task SaveProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId, byte[] imageData);
         Task<byte[]> GetProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId);
         Task<byte[]> GetProjectCollectionProductImageThumbAsync(Guid projectId, Guid collectionId, Guid productImageId);
@@ -203,6 +216,20 @@ namespace Artsy.API.Services
                 }));
             using var stream = new MemoryStream();
             image.SaveAsJpeg(stream, new JpegEncoder { Quality = 85 });
+            return stream.ToArray();
+        }
+
+        async Task<byte[]> GeneratePngThumbnailAsync(byte[] imageData, int size = 350)
+        {
+            using var image = Image.Load(imageData);
+            image.Mutate(x => x
+                .Resize(new ResizeOptions
+                {
+                    Size = new Size(size, size),
+                    Mode = ResizeMode.Crop
+                }));
+            using var stream = new MemoryStream();
+            await image.SaveAsync(stream, new PngEncoder());
             return stream.ToArray();
         }
 
@@ -475,6 +502,202 @@ namespace Artsy.API.Services
                 return await GetFromAzureBlobAsync(relativePath);
 
             return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveProjectCollectionArtworkPngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData)
+        {
+            var fileName = $"{artworkId}.png";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+            var thumbFileName = $"{artworkId}_thumb.png";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
+            var thumbImageData = await GeneratePngThumbnailAsync(imageData);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkPngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId)
+        {
+            var fileName = $"{artworkId}.png";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkPngThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId)
+        {
+            var thumbFileName = $"{artworkId}_thumb.png";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
+
+            byte[] thumbBytes;
+            if (_activeStorage == "azure")
+                thumbBytes = await GetFromAzureBlobAsync(thumbRelativePath);
+            else
+                thumbBytes = await GetFromFileSystemAsync(thumbRelativePath);
+
+            if (thumbBytes != null && thumbBytes.Length > 0)
+                return thumbBytes;
+
+            await GenerateProjectCollectionArtworkPngThumbAsync(projectId, collectionId, itemId, artworkId);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(thumbRelativePath);
+            return await GetFromFileSystemAsync(thumbRelativePath);
+        }
+
+        public async Task<bool> GenerateProjectCollectionArtworkPngThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId)
+        {
+            var imageData = await GetProjectCollectionArtworkPngAsync(projectId, collectionId, itemId, artworkId);
+            if (imageData == null || imageData.Length == 0)
+            {
+                imageData = await GetProjectCollectionArtworkFullSizePngAsync(projectId, collectionId, itemId, artworkId);
+                if (imageData == null || imageData.Length == 0)
+                    return false;
+            }
+
+            var thumbFileName = $"{artworkId}_thumb.png";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
+            var thumbImageData = await GeneratePngThumbnailAsync(imageData);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return true;
+            }
+
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+            return true;
+        }
+
+        public async Task SaveProjectCollectionArtworkFullSizePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData)
+        {
+            var fileName = $"{artworkId}_fullsize.png";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkFullSizePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId)
+        {
+            var fileName = $"{artworkId}_fullsize.png";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveProjectCollectionArtworkOrigAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData)
+        {
+            var fileName = $"{artworkId}_orig.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkOrigAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId)
+        {
+            var fileName = $"{artworkId}_orig.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveProjectCollectionArtworkJpgWithBgAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData)
+        {
+            var fileName = $"{artworkId}_bg.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+            var thumbFileName = $"{artworkId}_bg_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkJpgWithBgAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId)
+        {
+            var fileName = $"{artworkId}_bg.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkJpgWithBgThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId)
+        {
+            var thumbFileName = $"{artworkId}_bg_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
+
+            byte[] thumbBytes;
+            if (_activeStorage == "azure")
+                thumbBytes = await GetFromAzureBlobAsync(thumbRelativePath);
+            else
+                thumbBytes = await GetFromFileSystemAsync(thumbRelativePath);
+
+            if (thumbBytes != null && thumbBytes.Length > 0)
+                return thumbBytes;
+
+            await GenerateProjectCollectionArtworkJpgWithBgThumbAsync(projectId, collectionId, itemId, artworkId);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(thumbRelativePath);
+            return await GetFromFileSystemAsync(thumbRelativePath);
+        }
+
+        public async Task<bool> GenerateProjectCollectionArtworkJpgWithBgThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId)
+        {
+            var imageData = await GetProjectCollectionArtworkJpgWithBgAsync(projectId, collectionId, itemId, artworkId);
+            if (imageData == null || imageData.Length == 0)
+                return false;
+
+            var thumbFileName = $"{artworkId}_bg_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return true;
+            }
+
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+            return true;
         }
 
         public async Task SaveProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId, byte[] imageData)

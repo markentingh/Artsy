@@ -50,6 +50,7 @@ builder.Services.Configure<Artsy.API.Models.EmailSettings>(builder.Configuration
 builder.Services.AddScoped<Artsy.API.Services.IEmailService, Artsy.API.Services.EmailService>();
 builder.Services.AddScoped<Artsy.API.Services.ITelegramService, Artsy.API.Services.TelegramService>();
 builder.Services.AddScoped<Artsy.API.Services.IImageService, Artsy.API.Services.ImageService>();
+builder.Services.AddScoped<Artsy.API.Services.IOpacityService, Artsy.API.Services.OpacityService>();
 builder.Services.AddScoped<Artsy.API.Services.ITrendResearchService, Artsy.API.Services.TrendResearchService>();
 builder.Services.AddScoped<Artsy.API.Services.IPrintifyService, Artsy.API.Services.PrintifyService>();
 builder.Services.AddScoped<Artsy.API.Services.IAITokenService, Artsy.API.Services.AITokenService>();

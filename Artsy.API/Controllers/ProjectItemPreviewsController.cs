@@ -115,6 +115,15 @@ namespace Artsy.API.Controllers
                 if (string.IsNullOrWhiteSpace(finalPrompt))
                     return Json(new ApiResponse { success = false, message = "Prompt is required to generate a preview." });
 
+                // Append chroma key background instruction if OpacityJson has chroma keys
+                var opacitySettings = _opacityService.ParseOpacityJson(artwork.OpacityJson);
+                if (opacitySettings != null && opacitySettings.ChromaKeys.Count > 0)
+                {
+                    var firstColor = opacitySettings.ChromaKeys[0];
+                    var hexColor = $"#{firstColor.R:X2}{firstColor.G:X2}{firstColor.B:X2}";
+                    finalPrompt += $" the background for this image must be a solid color using {hexColor} hex color so that we can apply a chroma key to the image later";
+                }
+
                 modelRequest.Prompt = finalPrompt;
                 modelRequest.Size = "1024x1024";
                 modelRequest.Quality = "low";

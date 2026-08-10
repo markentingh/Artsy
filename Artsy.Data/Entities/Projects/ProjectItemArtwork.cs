@@ -10,5 +10,6 @@ namespace Artsy.Data.Entities.Projects
         public string ArtworkType { get; set; } = "ai";
         public Guid? CustomImageId { get; set; }
         public string? IgnoredQuestions { get; set; }
+        public string? OpacityJson { get; set; }
     }
 }

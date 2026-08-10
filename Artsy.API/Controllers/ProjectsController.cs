@@ -34,6 +34,7 @@ namespace Artsy.API.Controllers
         readonly IPrintifyBlueprintVariantRepository _variantRepository;
         readonly IPrintifyBlueprintVariantPlaceholderRepository _placeholderRepository;
         readonly IImageService _imageService;
+        readonly IOpacityService _opacityService;
         readonly IEnumerable<IImageGeneration> _imageGenerations;
         readonly IImageUpscaler _imageUpscaler;
         readonly IImageGenerationModelRepository _imageGenerationModelRepository;
@@ -67,6 +68,7 @@ namespace Artsy.API.Controllers
             IPrintifyBlueprintVariantRepository variantRepository,
             IPrintifyBlueprintVariantPlaceholderRepository placeholderRepository,
             IImageService imageService,
+            IOpacityService opacityService,
             IEnumerable<IImageGeneration> imageGenerations,
             IImageUpscaler imageUpscaler,
             IImageGenerationModelRepository imageGenerationModelRepository,
@@ -99,6 +101,7 @@ namespace Artsy.API.Controllers
             _variantRepository = variantRepository;
             _placeholderRepository = placeholderRepository;
             _imageService = imageService;
+            _opacityService = opacityService;
             _imageGenerations = imageGenerations;
             _imageUpscaler = imageUpscaler;
             _imageGenerationModelRepository = imageGenerationModelRepository;

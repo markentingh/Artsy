@@ -1,16 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
 import ButtonIcon from '@/components/ui/button-icon';
 import Message from '@/components/ui/message';
-import ConfirmModal from '@/components/ui/confirm-modal';
+import Spinner from '@/components/ui/spinner';
 import { List, Item } from '@/components/ui/list';
-import IdeaModal from './IdeaModal';
-import CollectionModal from './CollectionModal';
+const ConfirmModal = lazy(() => import('@/components/ui/confirm-modal'));
+const IdeaModal = lazy(() => import('./IdeaModal'));
 
-export default function IdeaWorkshopSection({ projectId, project }) {
+export default function IdeaWorkshopSection({ projectId, project, onOpenCollection }) {
   const session = useSession();
   const { getIdeas, deleteIdea } = Projects(session);
 
@@ -20,9 +20,6 @@ export default function IdeaWorkshopSection({ projectId, project }) {
   const [showNew, setShowNew] = useState(false);
   const [selectedIdeaId, setSelectedIdeaId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [showCollectionModal, setShowCollectionModal] = useState(false);
-  const [resumeCollectionId, setResumeCollectionId] = useState(null);
-  const [resumeCollectionTitle, setResumeCollectionTitle] = useState('');
 
   const fetchIdeas = async () => {
     try {
@@ -68,9 +65,7 @@ export default function IdeaWorkshopSection({ projectId, project }) {
   const handleCollectionCreated = (collection) => {
     setShowNew(false);
     setSelectedIdeaId(null);
-    setResumeCollectionId(collection.id);
-    setResumeCollectionTitle(collection.title || 'New Collection');
-    setShowCollectionModal(true);
+    if (onOpenCollection) onOpenCollection(collection.id, collection.title || 'New Collection');
     fetchIdeas();
   };
 
@@ -146,32 +141,28 @@ export default function IdeaWorkshopSection({ projectId, project }) {
       )}
 
       {(showNew || selectedIdeaId) && (
-        <IdeaModal
-          projectId={projectId}
-          ideaId={selectedIdeaId}
-          onClose={handleCloseModal}
-          onIdeaCreated={handleIdeaCreated}
-          onCollectionCreated={handleCollectionCreated}
-        />
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <IdeaModal
+            projectId={projectId}
+            ideaId={selectedIdeaId}
+            onClose={handleCloseModal}
+            onIdeaCreated={handleIdeaCreated}
+            onCollectionCreated={handleCollectionCreated}
+          />
+        </Suspense>
       )}
 
-      <CollectionModal
-        show={showCollectionModal}
-        projectId={projectId}
-        project={project}
-        collectionId={resumeCollectionId}
-        collectionTitle={resumeCollectionTitle}
-        onClose={() => setShowCollectionModal(false)}
-        onSaved={fetchIdeas}
-      />
-
-      <ConfirmModal
-        show={!!deleteTarget}
-        title="Delete Idea"
-        message={`Delete idea "${deleteTarget?.title}"? This cannot be undone.`}
-        onConfirm={handleDelete}
-        onClose={() => setDeleteTarget(null)}
-      />
+      {deleteTarget && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ConfirmModal
+            show={!!deleteTarget}
+            title="Delete Idea"
+            message={`Delete idea "${deleteTarget?.title}"? This cannot be undone.`}
+            onConfirm={handleDelete}
+            onClose={() => setDeleteTarget(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import Icon from '@/components/ui/icon';
@@ -6,10 +6,11 @@ import ButtonOutline from '@/components/ui/button-outline';
 import ButtonIcon from '@/components/ui/button-icon';
 import Carousel from '@/components/ui/carousel';
 import Tooltip from '@/components/ui/tooltip';
-import EditArtworkModal from './EditArtworkModal';
-import NewArtworkModal from './NewArtworkModal';
 import Message from '@/components/ui/message';
-import ConfirmModal from '@/components/ui/confirm-modal';
+import Spinner from '@/components/ui/spinner';
+const NewArtworkModal = lazy(() => import('./NewArtworkModal'));
+const EditArtworkModal = lazy(() => import('./EditArtworkModal'));
+const ConfirmModal = lazy(() => import('@/components/ui/confirm-modal'));
 
 export default function ArtworksSection({ projectId, onArtworkChanged }) {
   const session = useSession();
@@ -193,7 +194,7 @@ export default function ArtworksSection({ projectId, onArtworkChanged }) {
       )}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-1">
-          <h2 className="text-xl font-semibold">Artworks</h2>
+          <h2 className="text-xl font-semibold">Artwork Blueprints</h2>
           <Tooltip text="Artworks are the individual designs or uploaded images you assign to your project. They can be applied to printable products for sale, and collections will automatically post them to all of your connected social media accounts to help promote your products. Drag and drop your artworks below to reorder them." />
         </div>
         <ButtonOutline onClick={handleNewArtwork}>
@@ -254,25 +255,37 @@ export default function ArtworksSection({ projectId, onArtworkChanged }) {
         </div>
       )}
 
-      <NewArtworkModal
-        show={showNewModal}
-        onClose={() => setShowNewModal(false)}
-        onSave={handleCreateArtwork}
-      />
-      <EditArtworkModal
-        show={showModal}
-        item={editingItem}
-        onClose={handleCloseModal}
-        onChanged={() => fetchItems()}
-      />
+      {showNewModal && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <NewArtworkModal
+            show={showNewModal}
+            onClose={() => setShowNewModal(false)}
+            onSave={handleCreateArtwork}
+          />
+        </Suspense>
+      )}
+      {showModal && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <EditArtworkModal
+            show={showModal}
+            item={editingItem}
+            onClose={handleCloseModal}
+            onChanged={() => fetchItems()}
+          />
+        </Suspense>
+      )}
 
-      <ConfirmModal
-        show={!!deleteTargetId}
-        title="Delete Artwork"
-        message="Do you really want to delete this artwork? This cannot be undone."
-        onConfirm={handleConfirmDelete}
-        onClose={() => setDeleteTargetId(null)}
-      />
+      {deleteTargetId && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ConfirmModal
+            show={!!deleteTargetId}
+            title="Delete Artwork"
+            message="Do you really want to delete this artwork? This cannot be undone."
+            onConfirm={handleConfirmDelete}
+            onClose={() => setDeleteTargetId(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

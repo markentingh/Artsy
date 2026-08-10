@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, lazy, Suspense, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
 import Message from '@/components/ui/message';
-import ConfirmModal from '@/components/ui/confirm-modal';
+import Spinner from '@/components/ui/spinner';
 import EditableTitle from './components/EditableTitle';
 import EditableKey from './components/EditableKey';
 import CollectionsSection from './components/CollectionsSection';
@@ -15,6 +15,8 @@ import QuestionsSection from './components/QuestionsSection';
 import IdeaWorkshopSection from './components/IdeaWorkshopSection';
 import PublishingSection from './components/PublishingSection';
 import ProductsSection from './components/ProductsSection';
+const ConfirmModal = lazy(() => import('@/components/ui/confirm-modal'));
+const CollectionModal = lazy(() => import('./components/CollectionModal'));
 
 export default function DashboardProject() {
   const { projectId } = useParams();
@@ -27,6 +29,20 @@ export default function DashboardProject() {
   const [message, setMessage] = useState(null);
   const [checklist, setChecklist] = useState(null);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [showCollectionModal, setShowCollectionModal] = useState(false);
+  const [resumeCollectionId, setResumeCollectionId] = useState(null);
+  const [resumeCollectionTitle, setResumeCollectionTitle] = useState('');
+  const [collectionRefreshKey, setCollectionRefreshKey] = useState(0);
+
+  const handleOpenCollection = useCallback((collectionId, collectionTitle) => {
+    setResumeCollectionId(collectionId);
+    setResumeCollectionTitle(collectionTitle || 'New Collection');
+    setShowCollectionModal(true);
+  }, []);
+
+  const handleCollectionSaved = useCallback(() => {
+    setCollectionRefreshKey((k) => k + 1);
+  }, []);
 
   const fetchProject = async () => {
     try {
@@ -143,7 +159,7 @@ export default function DashboardProject() {
       )}
 
       <ProjectChecklist checklist={checklist} />
-      <CollectionsSection projectId={projectId} project={project} showNewButton={!!isComplete} />
+      <CollectionsSection projectId={projectId} project={project} showNewButton={!!isComplete} refreshKey={collectionRefreshKey} onOpenCollection={handleOpenCollection} />
 
       <hr className="border-gray-200 dark:border-gray-700 mb-8" />
 
@@ -171,6 +187,7 @@ export default function DashboardProject() {
       <IdeaWorkshopSection
         projectId={projectId}
         project={project}
+        onOpenCollection={handleOpenCollection}
       />
 
       <hr className="border-gray-200 dark:border-gray-700 mb-8" />
@@ -200,14 +217,32 @@ export default function DashboardProject() {
         )}
       </div>
 
-      <ConfirmModal
-        show={showArchiveModal}
-        title="Archive Project"
-        message="Do you really want to Archive this project? You can unarchive it later."
-        confirmLabel="Archive"
-        onConfirm={handleArchive}
-        onClose={() => setShowArchiveModal(false)}
-      />
+      {showCollectionModal && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <CollectionModal
+            show={showCollectionModal}
+            projectId={projectId}
+            project={project}
+            collectionId={resumeCollectionId}
+            collectionTitle={resumeCollectionTitle}
+            onClose={() => setShowCollectionModal(false)}
+            onSaved={handleCollectionSaved}
+          />
+        </Suspense>
+      )}
+
+      {showArchiveModal && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ConfirmModal
+            show={showArchiveModal}
+            title="Archive Project"
+            message="Do you really want to Archive this project? You can unarchive it later."
+            confirmLabel="Archive"
+            onConfirm={handleArchive}
+            onClose={() => setShowArchiveModal(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

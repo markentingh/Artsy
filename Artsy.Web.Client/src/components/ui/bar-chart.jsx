@@ -1,7 +1,7 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-export default function BarChart({ data, formatValue, height = 200, barColor = '#003cbf', barHoverColor = '#0050ff', className = '', showXAxisLabels = true }) {
+export default function BarChart({ data, formatValue, height = 200, barColor = '#003cbf', barHoverColor = '#0050ff', secondaryColor = '#e91e63', secondaryHoverColor = '#ff4081', className = '', showXAxisLabels = true }) {
   const [hovered, setHovered] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ left: 0, top: 0 });
   const containerRef = useRef(null);
@@ -58,19 +58,42 @@ export default function BarChart({ data, formatValue, height = 200, barColor = '
           <div className="flex items-end gap-0.5 h-full w-full relative">
             {data.map((d, i) => {
               const barHeight = max > 0 ? `${(d.value / max) * 100}%` : '0%';
+              const hasSecondary = d.upscaleCost !== undefined && d.upscaleCost > 0;
+              const secondaryValue = hasSecondary ? d.upscaleCost : 0;
+              const primaryValue = d.value - secondaryValue;
+              const primaryHeightPct = max > 0 ? (primaryValue / max) * 100 : 0;
+              const secondaryHeightPct = max > 0 ? (secondaryValue / max) * 100 : 0;
               return (
                 <div
                   key={i}
                   data-index={i}
-                  className="flex-1 min-w-0 transition-colors cursor-pointer rounded-t relative"
+                  className="flex-1 min-w-0 transition-colors cursor-pointer rounded-t overflow-hidden relative flex flex-col justify-end"
                   style={{
                     height: barHeight,
-                    backgroundColor: hovered === i ? barHoverColor : barColor,
                     minHeight: d.value > 0 ? '2px' : '0',
                   }}
                   onMouseEnter={() => setHovered(i)}
                   onMouseLeave={() => setHovered(null)}
-                />
+                >
+                  {hasSecondary && (
+                    <div
+                      className="w-full transition-colors"
+                      style={{
+                        height: `${secondaryHeightPct}%`,
+                        minHeight: secondaryValue > 0 ? '1px' : '0',
+                        backgroundColor: hovered === i ? secondaryHoverColor : secondaryColor,
+                      }}
+                    />
+                  )}
+                  <div
+                    className="w-full transition-colors"
+                    style={{
+                      height: hasSecondary ? `${primaryHeightPct}%` : '100%',
+                      minHeight: primaryValue > 0 ? '1px' : '0',
+                      backgroundColor: hovered === i ? barHoverColor : barColor,
+                    }}
+                  />
+                </div>
               );
             })}
           </div>
@@ -104,7 +127,14 @@ export default function BarChart({ data, formatValue, height = 200, barColor = '
           <div className="relative bg-[#003cbf] border border-[#003cbf] rounded-lg shadow-lg px-3 py-2 text-sm text-white whitespace-nowrap">
             <div className="absolute -top-2 w-0 h-0 border-l-8 border-r-8 border-b-8 border-l-transparent border-r-transparent border-b-[#003cbf]" style={{ left: '50%', transform: 'translateX(-50%)' }} />
             <div className="font-medium">{data[hovered].title || data[hovered].label}</div>
-            <div>{formatValue ? formatValue(data[hovered].value) : data[hovered].value}</div>
+            {data[hovered].upscaleCost !== undefined ? (
+              <>
+                <div>Artwork Cost: {formatValue ? formatValue(data[hovered].value - data[hovered].upscaleCost) : (data[hovered].value - data[hovered].upscaleCost)}</div>
+                <div>Upscale Cost: {formatValue ? formatValue(data[hovered].upscaleCost) : data[hovered].upscaleCost}</div>
+              </>
+            ) : (
+              <div>{formatValue ? formatValue(data[hovered].value) : data[hovered].value}</div>
+            )}
             {data[hovered].totalTokens !== undefined && (
               <div className="mt-1 pt-1 border-t border-white/30 space-y-0.5 text-xs">
                 <div>Tokens Used: {data[hovered].totalTokens.toLocaleString()}</div>

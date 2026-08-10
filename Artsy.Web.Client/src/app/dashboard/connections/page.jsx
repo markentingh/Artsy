@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useSession } from '@/context/session';
 import { Connections } from '@/api/user/connections';
 import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';
 import Button from '@/components/ui/button';
-import ReconnectInstagramModal from '@/components/modals/ReconnectInstagramModal';
+import Spinner from '@/components/ui/spinner';
+const ReconnectInstagramModal = lazy(() => import('@/components/modals/ReconnectInstagramModal'));
 
 const staticServices = [
   { key: 'telegram', name: 'Telegram', color: 'bg-blue-400' },
@@ -354,11 +355,15 @@ export default function DashboardConnections() {
           : instagramAccounts.map((account) => renderInstagramCard(account))}
         {!loadingInstagram && instagramAccounts.length > 0 && renderAddInstagramCard()}
       </div>
-      <ReconnectInstagramModal
-        show={showReconnectModal}
-        onClose={() => setShowReconnectModal(false)}
-        onReconnected={() => setShowReconnectModal(false)}
-      />
+      {showReconnectModal && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ReconnectInstagramModal
+            show={showReconnectModal}
+            onClose={() => setShowReconnectModal(false)}
+            onReconnected={() => setShowReconnectModal(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

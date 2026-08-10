@@ -227,8 +227,20 @@ export default function ImageGenerationsTab() {
 
       {dailyCosts !== null && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
-          <div className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-2">
-            Cost (USD) — {costRange === '30days' ? 'Past 30 Days' : costRange === 'thismonth' ? 'This Month' : costRange === 'lastmonth' ? 'Last Month' : costRange === '3months' ? 'Past 3 Months' : costRange === '12months' ? 'Past 12 Months' : 'Year to Date'}
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-bold text-gray-500 dark:text-gray-400">
+              Cost (USD) — {costRange === '30days' ? 'Past 30 Days' : costRange === 'thismonth' ? 'This Month' : costRange === 'lastmonth' ? 'Last Month' : costRange === '3months' ? 'Past 3 Months' : costRange === '12months' ? 'Past 12 Months' : 'Year to Date'}
+            </div>
+            <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+              <div className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: '#003cbf' }} />
+                Artwork
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: '#e91e63' }} />
+                Upscale
+              </div>
+            </div>
           </div>
           <BarChart
             showXAxisLabels={costRange !== '3months' && costRange !== 'ytd'}
@@ -249,6 +261,7 @@ export default function ImageGenerationsTab() {
                     label: monthAbbr,
                     title: fullLabel,
                     value: entry?.totalCost || 0,
+                    upscaleCost: entry?.upscaleCost || 0,
                     totalTokens: entry?.totalTokens || 0,
                     totalInputTextTokens: entry?.totalInputTextTokens || 0,
                     totalInputImageTokens: entry?.totalInputImageTokens || 0,
@@ -270,6 +283,7 @@ export default function ImageGenerationsTab() {
                     label: '',
                     title: fullLabel,
                     value: entry?.totalCost || 0,
+                    upscaleCost: entry?.upscaleCost || 0,
                     totalTokens: entry?.totalTokens || 0,
                     totalInputTextTokens: entry?.totalInputTextTokens || 0,
                     totalInputImageTokens: entry?.totalInputImageTokens || 0,
@@ -293,6 +307,7 @@ export default function ImageGenerationsTab() {
                     label: dd,
                     title: fullLabel,
                     value: entry?.totalCost || 0,
+                    upscaleCost: entry?.upscaleCost || 0,
                     totalTokens: entry?.totalTokens || 0,
                     totalInputTextTokens: entry?.totalInputTextTokens || 0,
                     totalInputImageTokens: entry?.totalInputImageTokens || 0,
@@ -313,6 +328,7 @@ export default function ImageGenerationsTab() {
                     label: dd,
                     title: fullLabel,
                     value: entry?.totalCost || 0,
+                    upscaleCost: entry?.upscaleCost || 0,
                     totalTokens: entry?.totalTokens || 0,
                     totalInputTextTokens: entry?.totalInputTextTokens || 0,
                     totalInputImageTokens: entry?.totalInputImageTokens || 0,

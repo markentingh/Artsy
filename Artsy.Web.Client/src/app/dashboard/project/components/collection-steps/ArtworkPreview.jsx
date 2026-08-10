@@ -1,21 +1,34 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useCollection } from '@/context/collection';
 import TextArea from '@/components/forms/textarea';
 import ButtonOutline from '@/components/ui/button-outline';
+import Carousel from '@/components/ui/carousel';
 import Spinner from '@/components/ui/spinner';
 import Tooltip from '@/components/ui/tooltip';
 
 export default function ArtworkPreview() {
   const {
     aiItems, currentItemIndex, currentItem,
-    isGenerating, previewImageData,
+    isGenerating, previewImageData, currentArtwork,
     showChanges, setShowChanges,
     requestedChanges, setRequestedChanges,
     collectionId, ensureCollection,
     doGeneratePreview, advanceToNextItem,
     setCollectionArtwork,
-    api, onClose, setArtworkPreview, setStep, STEPS,
+    api, onClose, onSaved, setArtworkPreview, setStep, STEPS,
   } = useCollection();
+
+  const hasOpacity = currentArtwork?.opacity === true;
+
+  const carouselImages = useMemo(() => {
+    if (!previewImageData || !currentArtwork || !collectionId) return null;
+    if (hasOpacity) {
+      const pngUrl = previewImageData;
+      const jpgWithBgUrl = api.getCollectionArtworkJpgWithBgUrl(collectionId, currentItem.id, currentArtwork.id, false, Date.now());
+      return [pngUrl, jpgWithBgUrl];
+    }
+    return null;
+  }, [previewImageData, currentArtwork, hasOpacity, collectionId, currentItem, api]);
 
   const handleTryAgain = useCallback(() => {
     setStep(STEPS.ARTWORK_QUESTIONS);
@@ -48,6 +61,7 @@ export default function ArtworkPreview() {
           if (artRes.data.success) {
             const updatedArtwork = artRes.data.data || [];
             setCollectionArtwork(updatedArtwork);
+            if (onSaved) onSaved();
             advanceToNextItem(undefined, updatedArtwork);
             return;
           }
@@ -57,7 +71,7 @@ export default function ArtworkPreview() {
       }
     }
     advanceToNextItem();
-  }, [ensureCollection, aiItems, currentItemIndex, api, advanceToNextItem, setCollectionArtwork]);
+  }, [ensureCollection, aiItems, currentItemIndex, api, advanceToNextItem, setCollectionArtwork, onSaved]);
 
   return (
     <div className="flex flex-col h-full">
@@ -68,6 +82,22 @@ export default function ArtworkPreview() {
         <div className="w-[512px] h-[512px] max-w-full flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden">
           {isGenerating ? (
             <Spinner className="text-3xl" />
+          ) : hasOpacity && carouselImages ? (
+            <div
+              className="w-full h-full"
+              style={{
+                backgroundImage: 'url(/checkerboard.png)',
+                backgroundSize: '20px 20px',
+                backgroundRepeat: 'repeat',
+              }}
+            >
+              <Carousel
+                images={carouselImages}
+                alt="Artwork preview"
+                imageClassName="!max-h-none w-full h-[512px] object-contain"
+                onImageClick={(src) => setArtworkPreview({ images: carouselImages, src })}
+              />
+            </div>
           ) : previewImageData ? (
             <img
               src={previewImageData}

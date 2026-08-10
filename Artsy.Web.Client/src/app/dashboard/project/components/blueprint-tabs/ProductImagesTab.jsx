@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, lazy, Suspense } from 'react';
 import Modal from '@/components/ui/modal';
 import Select from '@/components/forms/select';
 import TextArea from '@/components/forms/textarea';
@@ -6,11 +6,12 @@ import Input from '@/components/forms/input';
 import ButtonOutline from '@/components/ui/button-outline';
 import ButtonIcon from '@/components/ui/button-icon';
 import Icon from '@/components/ui/icon';
-import ConfirmModal from '@/components/ui/confirm-modal';
+import Spinner from '@/components/ui/spinner';
 import { List, Item } from '@/components/ui/list';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import { useProductBlueprint } from '@/context/productBlueprint';
+const ConfirmModal = lazy(() => import('@/components/ui/confirm-modal'));
 
 export default function ProductImagesTab() {
   const session = useSession();
@@ -290,13 +291,17 @@ export default function ProductImagesTab() {
         </Modal>
       )}
 
-      <ConfirmModal
-        show={!!deleteProductImageTarget}
-        title="Delete Product Image"
-        message={`Do you really want to delete this product image${deleteProductImageTarget ? ` (${deleteProductImageTarget.title} - ${deleteProductImageTarget.variantColor})` : ''}? This cannot be undone.`}
-        onConfirm={handleConfirmDeleteProductImage}
-        onClose={() => setDeleteProductImageTarget(null)}
-      />
+      {deleteProductImageTarget && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ConfirmModal
+            show={!!deleteProductImageTarget}
+            title="Delete Product Image"
+            message={`Do you really want to delete this product image${deleteProductImageTarget ? ` (${deleteProductImageTarget.title} - ${deleteProductImageTarget.variantColor})` : ''}? This cannot be undone.`}
+            onConfirm={handleConfirmDeleteProductImage}
+            onClose={() => setDeleteProductImageTarget(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

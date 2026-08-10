@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { CollectionProvider, useCollection, STEPS } from '@/context/collection';
 import Modal from '@/components/ui/modal';
 import Spinner from '@/components/ui/spinner';
@@ -6,17 +6,17 @@ import Message from '@/components/ui/message';
 import Steps from '@/components/ui/steps';
 import Icon from '@/components/ui/icon';
 import ArtworkPreviewModal from './ProductImagePreview';
-import ProjectQuestions from './collection-steps/ProjectQuestions';
-import ArtworkQuestions from './collection-steps/ArtworkQuestions';
-import ArtworkPreview from './collection-steps/ArtworkPreview';
-import ReadyToGenerate from './collection-steps/ReadyToGenerate';
-import PostSocialMedia from './collection-steps/PostSocialMedia';
-import SummaryStep from './collection-steps/SummaryStep';
-import CreateProducts from './collection-steps/CreateProducts';
-import PublishProductsStep from './collection-steps/PublishProductsStep';
-import ProductImagePrompt from './collection-steps/ProductImagePrompt';
-import ProductImagePreview from './collection-steps/ProductImagePreview';
 import CollectionSetupList from './CollectionSetupList';
+const ProjectQuestions = lazy(() => import('./collection-steps/ProjectQuestions'));
+const ArtworkQuestions = lazy(() => import('./collection-steps/ArtworkQuestions'));
+const ArtworkPreview = lazy(() => import('./collection-steps/ArtworkPreview'));
+const ReadyToGenerate = lazy(() => import('./collection-steps/ReadyToGenerate'));
+const PostSocialMedia = lazy(() => import('./collection-steps/PostSocialMedia'));
+const SummaryStep = lazy(() => import('./collection-steps/SummaryStep'));
+const CreateProducts = lazy(() => import('./collection-steps/CreateProducts'));
+const PublishProductsStep = lazy(() => import('./collection-steps/PublishProductsStep'));
+const ProductImagePrompt = lazy(() => import('./collection-steps/ProductImagePrompt'));
+const ProductImagePreview = lazy(() => import('./collection-steps/ProductImagePreview'));
 
 const stepTitle = (step, title) => {
   const prefix = title || 'New Collection';
@@ -117,16 +117,18 @@ function CollectionWizard() {
               </div>
             )}
             <div className={showChecklist ? "flex-1 min-w-[600px] flex flex-col" : ""}>
-              {step === STEPS.PROJECT_QUESTIONS && <ProjectQuestions />}
-              {step === STEPS.ARTWORK_QUESTIONS && <ArtworkQuestions />}
-              {step === STEPS.ARTWORK_PREVIEW && <ArtworkPreview />}
-              {step === STEPS.READY_TO_GENERATE && <ReadyToGenerate />}
-              {step === STEPS.PRODUCT_IMAGE_PROMPT && <ProductImagePrompt />}
-              {step === STEPS.PRODUCT_IMAGE_PREVIEW && <ProductImagePreview />}
-              {step === STEPS.CREATE_PRODUCTS && <CreateProducts />}
-              {step === STEPS.PUBLISH_PRODUCTS && <PublishProductsStep />}
-              {step === STEPS.SOCIAL_MEDIA && <PostSocialMedia />}
-              {step === STEPS.SUMMARY && <SummaryStep />}
+              <Suspense fallback={<div className="flex items-center justify-center py-12"><Spinner className="text-4xl" /></div>}>
+                {step === STEPS.PROJECT_QUESTIONS && <ProjectQuestions />}
+                {step === STEPS.ARTWORK_QUESTIONS && <ArtworkQuestions />}
+                {step === STEPS.ARTWORK_PREVIEW && <ArtworkPreview />}
+                {step === STEPS.READY_TO_GENERATE && <ReadyToGenerate />}
+                {step === STEPS.PRODUCT_IMAGE_PROMPT && <ProductImagePrompt />}
+                {step === STEPS.PRODUCT_IMAGE_PREVIEW && <ProductImagePreview />}
+                {step === STEPS.CREATE_PRODUCTS && <CreateProducts />}
+                {step === STEPS.PUBLISH_PRODUCTS && <PublishProductsStep />}
+                {step === STEPS.SOCIAL_MEDIA && <PostSocialMedia />}
+                {step === STEPS.SUMMARY && <SummaryStep />}
+              </Suspense>
             </div>
           </div>
         </>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import { Printify } from '@/api/user/printify';
@@ -10,9 +10,10 @@ import Tooltip from '@/components/ui/tooltip';
 import Message from '@/components/ui/message';
 import Checked from '@/components/ui/checked';
 import CarouselElements from '@/components/ui/carousel-elements';
-import ConfirmModal from '@/components/ui/confirm-modal';
-import FindPrintifyBlueprintModal from './FindPrintifyBlueprintModal';
-import ConfigureProductBlueprint from './ConfigureProductBlueprint';
+import Spinner from '@/components/ui/spinner';
+const ConfirmModal = lazy(() => import('@/components/ui/confirm-modal'));
+const FindPrintifyBlueprintModal = lazy(() => import('./FindPrintifyBlueprintModal'));
+const ConfigureProductBlueprint = lazy(() => import('./ConfigureProductBlueprint'));
 
 export default function ProductsSection({ projectId, onProductsChanged }) {
   const session = useSession();
@@ -183,30 +184,40 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
         />
       )}
 
-      <FindPrintifyBlueprintModal
-        show={showFindBlueprint}
-        onSelect={handleFindBlueprint}
-        onClose={() => setShowFindBlueprint(false)}
-      />
-
-      {configBlueprint && (
-        <ConfigureProductBlueprint
-          show={!!configBlueprint}
-          blueprint={configBlueprint}
-          existingConfig={editingBlueprint}
-          projectId={projectId}
-          onSave={handleSaveBlueprintConfig}
-          onClose={() => { setConfigBlueprint(null); setEditingBlueprint(null); }}
-        />
+      {showFindBlueprint && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <FindPrintifyBlueprintModal
+            show={showFindBlueprint}
+            onSelect={handleFindBlueprint}
+            onClose={() => setShowFindBlueprint(false)}
+          />
+        </Suspense>
       )}
 
-      <ConfirmModal
-        show={!!deleteTarget}
-        title="Delete Product"
-        message={`Do you really want to delete this product${deleteTarget ? ` (${deleteTarget.name})` : ''}? This cannot be undone.`}
-        onConfirm={handleConfirmDelete}
-        onClose={() => setDeleteTarget(null)}
-      />
+      {configBlueprint && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ConfigureProductBlueprint
+            show={!!configBlueprint}
+            blueprint={configBlueprint}
+            existingConfig={editingBlueprint}
+            projectId={projectId}
+            onSave={handleSaveBlueprintConfig}
+            onClose={() => { setConfigBlueprint(null); setEditingBlueprint(null); }}
+          />
+        </Suspense>
+      )}
+
+      {deleteTarget && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><Spinner className="text-4xl" /></div>}>
+          <ConfirmModal
+            show={!!deleteTarget}
+            title="Delete Product"
+            message={`Do you really want to delete this product${deleteTarget ? ` (${deleteTarget.name})` : ''}? This cannot be undone.`}
+            onConfirm={handleConfirmDelete}
+            onClose={() => setDeleteTarget(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
