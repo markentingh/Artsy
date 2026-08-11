@@ -428,6 +428,12 @@ namespace Artsy.API.Controllers
                         // Apply chroma keys to create transparent PNG
                         var pngBytes = await _opacityService.ApplyChromaKeysAsync(genResult.ImageBytes, opacitySettings);
 
+                        // Apply overlay color if set (tints all non-transparent pixels)
+                        if (opacitySettings.Overlay != null && !string.IsNullOrWhiteSpace(opacitySettings.Overlay.Color))
+                        {
+                            pngBytes = await _opacityService.ApplyOverlayAsync(pngBytes, opacitySettings.Overlay.Color);
+                        }
+
                         if (request.IsFullSize)
                             await _imageService.SaveProjectCollectionArtworkFullSizePngAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, pngBytes);
                         else
@@ -435,33 +441,41 @@ namespace Artsy.API.Controllers
 
                         // Resolve background image bytes
                         byte[]? bgBytes = null;
-                        if (opacitySettings.Background != null && !string.IsNullOrWhiteSpace(opacitySettings.Background.Id))
+                        string? bgColor = null;
+                        if (opacitySettings.Background != null)
                         {
-                            try
+                            if (!string.IsNullOrWhiteSpace(opacitySettings.Background.Id))
                             {
-                                var bgId = Guid.Parse(opacitySettings.Background.Id);
-                                if (opacitySettings.Background.Type == "custom")
+                                try
                                 {
-                                    var customImg = await _customImageRepository.GetByIdAsync(bgId);
-                                    if (customImg != null)
-                                        bgBytes = await _imageService.GetCustomImageAsync(customImg.AppUserId, customImg.Id, customImg.Extension);
-                                }
-                                else if (opacitySettings.Background.Type == "artwork")
-                                {
-                                    var bgCollectionArtwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(request.CollectionId, bgId);
-                                    if (bgCollectionArtwork != null)
+                                    var bgId = Guid.Parse(opacitySettings.Background.Id);
+                                    if (opacitySettings.Background.Type == "custom")
                                     {
-                                        bgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, bgId, bgCollectionArtwork.Id);
-                                        if (bgBytes == null || bgBytes.Length == 0)
-                                            bgBytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(request.ProjectId, request.CollectionId, bgId, bgCollectionArtwork.Id);
+                                        var customImg = await _customImageRepository.GetByIdAsync(bgId);
+                                        if (customImg != null)
+                                            bgBytes = await _imageService.GetCustomImageAsync(customImg.AppUserId, customImg.Id, customImg.Extension);
+                                    }
+                                    else if (opacitySettings.Background.Type == "artwork")
+                                    {
+                                        var bgCollectionArtwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(request.CollectionId, bgId);
+                                        if (bgCollectionArtwork != null)
+                                        {
+                                            bgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, bgId, bgCollectionArtwork.Id);
+                                            if (bgBytes == null || bgBytes.Length == 0)
+                                                bgBytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(request.ProjectId, request.CollectionId, bgId, bgCollectionArtwork.Id);
+                                        }
                                     }
                                 }
+                                catch { /* ignore background resolution errors, fall back to color or black */ }
                             }
-                            catch { /* ignore background resolution errors, fall back to black */ }
+                            else if (opacitySettings.Background.Type == "color" && !string.IsNullOrWhiteSpace(opacitySettings.Background.Color))
+                            {
+                                bgColor = opacitySettings.Background.Color;
+                            }
                         }
 
                         // Composite PNG over background to create JPG with background
-                        var jpgWithBgBytes = await _opacityService.CompositeOverBackgroundAsync(pngBytes, bgBytes);
+                        var jpgWithBgBytes = await _opacityService.CompositeOverBackgroundAsync(pngBytes, bgBytes, bgColor);
                         await _imageService.SaveProjectCollectionArtworkJpgWithBgAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, jpgWithBgBytes);
 
                         created.Opacity = true;
@@ -914,7 +928,12 @@ namespace Artsy.API.Controllers
                         if (thumb)
                             pngBytes = await _imageService.GetProjectCollectionArtworkPngThumbAsync(artwork.ProjectId, collectionId, itemId, artworkId);
                         else if (fullSize)
+                        {
                             pngBytes = await _imageService.GetProjectCollectionArtworkFullSizePngAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                            // Fall back to regular PNG if full-size doesn't exist
+                            if (pngBytes == null || pngBytes.Length == 0)
+                                pngBytes = await _imageService.GetProjectCollectionArtworkPngAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                        }
                         else
                             pngBytes = await _imageService.GetProjectCollectionArtworkPngAsync(artwork.ProjectId, collectionId, itemId, artworkId);
                         if (pngBytes == null || pngBytes.Length == 0)
@@ -927,7 +946,12 @@ namespace Artsy.API.Controllers
                 if (thumb)
                     bytes = await _imageService.GetProjectCollectionArtworkThumbAsync(artwork.ProjectId, collectionId, itemId, artworkId);
                 else if (fullSize)
+                {
                     bytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                    // Fall back to regular image if full-size doesn't exist
+                    if (bytes == null || bytes.Length == 0)
+                        bytes = await _imageService.GetProjectCollectionArtworkImageAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                }
                 else
                     bytes = await _imageService.GetProjectCollectionArtworkImageAsync(artwork.ProjectId, collectionId, itemId, artworkId);
                 if (bytes == null || bytes.Length == 0)
@@ -1411,6 +1435,8 @@ namespace Artsy.API.Controllers
                     var productByBlueprintId = collectionProducts.ToDictionary(p => p.ProjectBlueprintId);
                     var printifyProduct = printifyProducts.FirstOrDefault(p => productByBlueprintId.TryGetValue(request.ProjectBlueprintId, out var prod) && prod.Id == p.ProductId);
 
+                    var mockupImageCount = 0;
+
                     if (printifyProduct != null)
                     {
                         var mockups = (await _mockupRepository.GetByPrintifyProductIdAsync(printifyProduct.Id)).ToList();
@@ -1425,6 +1451,30 @@ namespace Artsy.API.Controllers
                                 request.ProjectId, request.CollectionId, mockup.Id);
                             var dims = await _imageService.GetImageDimensionsAsync(imgBytes);
                             inputImages.Add(dims ?? (1024, 1024));
+                            mockupImageCount++;
+                        }
+                    }
+
+                    // Fallback: if no mockup images were found, use the Printify blueprint image for the variant color
+                    if (mockupImageCount == 0 && !string.IsNullOrWhiteSpace(request.VariantColor))
+                    {
+                        var bpImages = (await _printifyBlueprintImageRepository.GetByBlueprintIdAsync(printifyBlueprintId)).ToList();
+                        if (bpImages.Count > 0)
+                        {
+                            var bpImageIds = bpImages.Select(img => img.Id).ToList();
+                            var variants = (await _printifyBlueprintImageVariantRepository.GetByBlueprintImageIdsAsync(bpImageIds)).ToList();
+                            var matchingVariant = variants.FirstOrDefault(v =>
+                                v.VariantColor.Equals(request.VariantColor, StringComparison.OrdinalIgnoreCase));
+                            if (matchingVariant != null)
+                            {
+                                var matchingImage = bpImages.First(img => img.Id == matchingVariant.BlueprintImageId);
+                                var imgBytes = await _imageService.GetPrintifyCatalogImageAsync(printifyBlueprintId, matchingImage.ImageIndex, false);
+                                if (imgBytes != null && imgBytes.Length > 0)
+                                {
+                                    var dims = await _imageService.GetImageDimensionsAsync(imgBytes);
+                                    inputImages.Add(dims ?? (1024, 1024));
+                                }
+                            }
                         }
                     }
                 }
@@ -1466,6 +1516,17 @@ namespace Artsy.API.Controllers
                 return Json(new ApiResponse { success = false, message = ex.Message });
             }
         }
+
+        private static string GetPositionLabel(int position) => position switch
+        {
+            1 => "front",
+            2 => "back",
+            3 => "top",
+            4 => "bottom",
+            5 => "left",
+            6 => "right",
+            _ => "front"
+        };
 
         [HttpPost("generate-product-image")]
         public async Task<IActionResult> GenerateProductImage([FromBody] GenerateProductImageRequest request)
@@ -1543,6 +1604,9 @@ namespace Artsy.API.Controllers
                     var productByBlueprintId = collectionProducts.ToDictionary(p => p.ProjectBlueprintId);
                     var printifyProduct = printifyProducts.FirstOrDefault(p => productByBlueprintId.TryGetValue(request.ProjectBlueprintId, out var prod) && prod.Id == p.ProductId);
 
+                    var printifyImageCount = 0;
+                    var printifyImagePositions = new List<string>();
+
                     if (printifyProduct != null)
                     {
                         var mockups = (await _mockupRepository.GetByPrintifyProductIdAsync(printifyProduct.Id)).ToList();
@@ -1551,8 +1615,6 @@ namespace Artsy.API.Controllers
                             ? defaultMockups
                             : mockups.Take(2).ToList();
 
-                        var printifyImageCount = 0;
-                        var printifyImagePositions = new List<string>();
                         foreach (var mockup in selectedMockups)
                         {
                             var imgBytes = await _imageService.GetProjectCollectionMockupAsync(
@@ -1565,7 +1627,36 @@ namespace Artsy.API.Controllers
                                 printifyImagePositions.Add(mockup.Position ?? "front");
                             }
                         }
+                    }
 
+                    // Fallback: if no mockup images were found, use the Printify blueprint image for the variant color
+                    if (printifyImageCount == 0 && !string.IsNullOrWhiteSpace(request.VariantColor))
+                    {
+                        var bpImages = (await _printifyBlueprintImageRepository.GetByBlueprintIdAsync(printifyBlueprintId)).ToList();
+                        if (bpImages.Count > 0)
+                        {
+                            var bpImageIds = bpImages.Select(img => img.Id).ToList();
+                            var variants = (await _printifyBlueprintImageVariantRepository.GetByBlueprintImageIdsAsync(bpImageIds)).ToList();
+                            // Find the image whose variant color matches
+                            var matchingVariant = variants.FirstOrDefault(v =>
+                                v.VariantColor.Equals(request.VariantColor, StringComparison.OrdinalIgnoreCase));
+                            if (matchingVariant != null)
+                            {
+                                var matchingImage = bpImages.First(img => img.Id == matchingVariant.BlueprintImageId);
+                                var imgBytes = await _imageService.GetPrintifyCatalogImageAsync(printifyBlueprintId, matchingImage.ImageIndex, false);
+                                if (imgBytes != null && imgBytes.Length > 0)
+                                {
+                                    inputImages.Add(imgBytes);
+                                    inputImageRefs.Add(new { type = "blueprint", id = matchingImage.Id.ToString() });
+                                    printifyImageCount++;
+                                    printifyImagePositions.Add(GetPositionLabel(matchingImage.Position));
+                                }
+                            }
+                        }
+                    }
+
+                    if (printifyImageCount > 0)
+                    {
                         promptBuilder.AppendLine();
                         for (var i = 0; i < printifyImageCount; i++)
                         {
@@ -1666,7 +1757,8 @@ namespace Artsy.API.Controllers
                     Width = 2048,
                     Height = 2048,
                     Accepted = false,
-                    ResponseId = genResult.ResponseId ?? ""
+                    ResponseId = genResult.ResponseId ?? "",
+                    VariantColor = request.VariantColor ?? ""
                 };
 
                 if (existing != null)
@@ -1681,6 +1773,17 @@ namespace Artsy.API.Controllers
                 }
 
                 await _imageService.SaveProjectCollectionProductImageAsync(request.ProjectId, request.CollectionId, productImage.Id, genResult.ImageBytes);
+
+                // Update product name if provided
+                if (!string.IsNullOrWhiteSpace(request.ProductName))
+                {
+                    var collectionProduct = await _productRepository.GetByCollectionAndBlueprintIdAsync(request.CollectionId, request.ProjectBlueprintId);
+                    if (collectionProduct != null && collectionProduct.Name != request.ProductName)
+                    {
+                        collectionProduct.Name = request.ProductName;
+                        await _productRepository.UpdateAsync(collectionProduct);
+                    }
+                }
 
                 await _projectImageGenerationRepository.CreateAsync(new ProjectImageGeneration
                 {
@@ -2006,6 +2109,32 @@ namespace Artsy.API.Controllers
                 });
 
                 await _productRepository.BulkUpdateActiveAsync(request.CollectionId, products);
+                return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("update-collection-product-name")]
+        public async Task<IActionResult> UpdateCollectionProductName([FromBody] UpdateCollectionProductNameRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.CollectionId == Guid.Empty || request.ProjectBlueprintId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Collection ID and Project Blueprint ID are required." });
+
+            try
+            {
+                var product = await _productRepository.GetByCollectionAndBlueprintIdAsync(request.CollectionId, request.ProjectBlueprintId);
+                if (product == null)
+                    return Json(new ApiResponse { success = false, message = "Product not found." });
+
+                product.Name = request.Name ?? "";
+                await _productRepository.UpdateAsync(product);
                 return Json(new ApiResponse { success = true });
             }
             catch (Exception ex)

@@ -15,6 +15,7 @@ export default function CollectionSetupList() {
     currentItemIndex,
     projectQuestions,
     printifyProducts, mockups,
+    collectionProducts,
     reviewStep,
     instagramPosted,
   } = useCollection();
@@ -105,23 +106,6 @@ export default function CollectionSetupList() {
     reviewStep(STEPS.ARTWORK_QUESTIONS, itemId);
   };
 
-  const handleSkipProductImage = async (combo) => {
-    if (!collectionId) return;
-    try {
-      await api.deleteProductImage({
-        collectionId,
-        projectBlueprintId: combo.projectBlueprintId,
-        productImageId: combo.productImageId,
-      });
-      setAllProductImages(prev => prev.filter(img =>
-        !(img.projectBlueprintId === combo.projectBlueprintId &&
-          img.productImageId === combo.productImageId)
-      ));
-    } catch (e) {
-      console.error('deleteProductImage error:', e?.response?.data || e);
-    }
-  };
-
   const handleReviewProductImage = (combo) => {
     reviewStep(STEPS.PRODUCT_IMAGE_PROMPT, combo);
   };
@@ -183,6 +167,8 @@ export default function CollectionSetupList() {
           img.projectBlueprintId === combo.projectBlueprintId &&
           img.productImageId === combo.productImageId
         );
+        const cp = collectionProducts.find(p => p.projectBlueprintId === combo.projectBlueprintId);
+        const displayName = cp?.name || combo.blueprintName;
         const currentCombo = selectedProductCombos[currentProductComboIndex];
         const isCurrentItem = (step === STEPS.PRODUCT_IMAGE_PROMPT || step === STEPS.PRODUCT_IMAGE_PREVIEW) &&
           currentCombo &&
@@ -208,15 +194,10 @@ export default function CollectionSetupList() {
                 : isCurrentItem
                 ? 'text-blue-600 dark:text-blue-400'
                 : 'text-gray-700 dark:text-gray-300'}>
-                {combo.blueprintName}
+                {displayName}
               </span>
             </div>
             <div className="flex items-center gap-1 ml-auto">
-              {isAccepted && !isCurrentItem && (
-                <ButtonOutline size="small" color="gray" onClick={() => handleSkipProductImage(combo)}>
-                  Skip
-                </ButtonOutline>
-              )}
               {!isCurrentItem && (
                 <ButtonOutline size="small" color="blue" onClick={() => handleReviewProductImage(combo)}>
                   Review

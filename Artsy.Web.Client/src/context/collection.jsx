@@ -132,6 +132,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const [currentProductImageIndex, setCurrentProductImageIndex] = useState(0);
   const [printifyProducts, setPrintifyProducts] = useState([]);
   const [mockups, setMockups] = useState([]);
+  const [collectionProducts, setCollectionProducts] = useState([]);
 
   const [socialMediaImageOrder, setSocialMediaImageOrder] = useState([]);
   const [socialMediaSelectedImages, setSocialMediaSelectedImages] = useState({});
@@ -643,13 +644,14 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         let savedAnsMap = {};
         let artworkList = [];
 
-        const [ansRes, artRes, ppRes, mkRes, igRes, igPostRes] = await Promise.all([
+        const [ansRes, artRes, ppRes, mkRes, igRes, igPostRes, cpRes] = await Promise.all([
           api.getCollectionAnswers(existingCollectionId),
           api.getCollectionArtwork(existingCollectionId),
           printifyProductsApi.getByCollection(existingCollectionId),
           printifyProductsApi.getMockups(existingCollectionId),
           instagramApi.checkPosted(existingCollectionId),
           instagramApi.getPost(existingCollectionId),
+          api.getCollectionProducts(existingCollectionId),
         ]);
 
         if (ansRes.data.success) {
@@ -677,6 +679,10 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
         if (mkRes.data.success) {
           setMockups(mkRes.data.data || []);
+        }
+
+        if (cpRes.data.success) {
+          setCollectionProducts(cpRes.data.data || []);
         }
 
         if (igRes.data.success) {
@@ -816,6 +822,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     printifyImageIndexByColor,
     currentProductImageIndex, setCurrentProductImageIndex,
     printifyProducts, setPrintifyProducts,
+    collectionProducts, setCollectionProducts,
     mockups, setMockups, loadMockups,
     socialMediaImageOrder, setSocialMediaImageOrder,
     socialMediaSelectedImages, setSocialMediaSelectedImages,

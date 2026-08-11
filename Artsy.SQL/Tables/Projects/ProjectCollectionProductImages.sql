@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionProductImages"
     "ProjectBlueprintId" UUID NOT NULL REFERENCES public."ProjectBlueprints"("Id"),
     "PrintifyImageId" VARCHAR(32) NOT NULL DEFAULT '',
     "ProductImageId" UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
+    "VariantColor" VARCHAR(64) NOT NULL DEFAULT '',
     "ImageModel" VARCHAR(16) NOT NULL DEFAULT '',
     "Prompt" TEXT NOT NULL DEFAULT '',
     "Width" INT NOT NULL DEFAULT 0,
@@ -17,9 +18,11 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionProductImages"
 ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "Active" BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "PrintifyImageId" VARCHAR(32) NOT NULL DEFAULT '';
 ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "ProductImageId" UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';
+ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "VariantColor" VARCHAR(64) NOT NULL DEFAULT '';
 
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_ProjectCollectionProductImages_CollectionId_BlueprintId_ProductImageId"
     ON public."ProjectCollectionProductImages" ("CollectionId", "ProjectBlueprintId", "ProductImageId");
 
 
 CREATE INDEX IF NOT EXISTS "IX_ProjectCollectionProductImages_ProjectId" ON public."ProjectCollectionProductImages" ("ProjectId");
+

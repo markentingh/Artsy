@@ -15,7 +15,7 @@ export default function SummaryStep() {
     project, collectionId, collectionTitle, blueprints,
     allProductImages, collectionArtwork, printifyProducts,
     api, onClose, setMessage, instagramPost,
-    setArtworkPreview,
+    setArtworkPreview, collectionProducts,
   } = useCollection();
 
   const printifyApi = Projects(session);
@@ -122,12 +122,14 @@ export default function SummaryStep() {
             const isPublished = publishedBlueprints[bp.id] || false;
             const hasPrintifyProduct = printifyProducts.some(pp => pp.projectBlueprintId === bp.id);
             if (!hasPrintifyProduct) return null;
+            const cp = collectionProducts.find(p => p.projectBlueprintId === bp.id);
+            const displayName = cp?.name || bp.name;
             return (
               <Item key={bp.id}>
                 <div className="flex items-center w-full">
                   <Checked checked={isPublished} />
                   <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {bp.name}
+                    {displayName}
                   </span>
                   <div className="ml-auto flex items-center gap-3">
                     {printifyProductIds[bp.id] && (

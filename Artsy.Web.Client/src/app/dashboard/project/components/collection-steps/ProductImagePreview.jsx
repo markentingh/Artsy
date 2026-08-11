@@ -13,6 +13,7 @@ export default function ProductImagePreview() {
     allProductImages, setAllProductImages,
     setCurrentProductComboIndex,
     selectedProductImageModel,
+    collectionProducts,
   } = useCollection();
   const { refreshTokens } = useDashboard();
 
@@ -28,6 +29,7 @@ export default function ProductImagePreview() {
     setIsGeneratingProductImage(true);
     setMessage(null);
     try {
+      const cp = collectionProducts.find(p => p.projectBlueprintId === comboArg.projectBlueprintId);
       const res = await api.generateProductImage({
         projectId,
         collectionId,
@@ -35,7 +37,9 @@ export default function ProductImagePreview() {
         productImageId: comboArg.productImageId,
         modelId: selectedProductImageModel?.id,
         prompt: productImagePrompt,
+        variantColor: comboArg.variantColor || '',
         requestedChanges: changes,
+        productName: cp?.name || undefined,
       });
       if (res.data.success) {
         setCurrentProductImage(res.data.data);
@@ -51,7 +55,7 @@ export default function ProductImagePreview() {
     } finally {
       setIsGeneratingProductImage(false);
     }
-  }, [projectId, collectionId, api, productImagePrompt, setIsGeneratingProductImage, setCurrentProductImage, setShowProductImageChanges, setProductImageChanges, setMessage, refreshTokens, selectedProductImageModel, onSaved]);
+  }, [projectId, collectionId, api, productImagePrompt, setIsGeneratingProductImage, setCurrentProductImage, setShowProductImageChanges, setProductImageChanges, setMessage, refreshTokens, selectedProductImageModel, onSaved, collectionProducts]);
 
   useEffect(() => {
     if (!currentProductImage && combo && !isGeneratingProductImage) {

@@ -433,7 +433,7 @@ export default function PostSocialMedia() {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder={generatingDescription ? 'Generating description from AI...' : 'Enter the description for your Instagram post...'}
-          rows={4}
+          rows={10}
           disabled={generatingDescription}
           className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
         />

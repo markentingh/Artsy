@@ -119,6 +119,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     getProductImages: (collectionId) => api.get(`${apiPath}/collection/${collectionId}/product-images`),
     updateCollectionProductsActive: (request) => api.post(`${apiPath}/update-collection-products-active`, request),
     getCollectionProducts: (collectionId) => api.get(`${apiPath}/get-collection-products?collectionId=${collectionId}`),
+    updateCollectionProductName: (request) => api.post(`${apiPath}/update-collection-product-name`, request),
     getProductBlueprintImages: (projectBlueprintId) => api.get(`${apiPath}/get-product-blueprint-images?projectBlueprintId=${projectBlueprintId}`),
     getAllProductBlueprintImages: (projectId) => api.get(`${apiPath}/get-all-product-blueprint-images?projectId=${projectId}`),
     createProductBlueprintImage: (request) => api.post(`${apiPath}/create-product-blueprint-image`, request),

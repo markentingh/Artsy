@@ -105,8 +105,6 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
 
   const handleSaveBlueprintConfig = async () => {
     await fetchBlueprints();
-    setConfigBlueprint(null);
-    setEditingBlueprint(null);
     if (onProductsChanged) onProductsChanged();
   };
 

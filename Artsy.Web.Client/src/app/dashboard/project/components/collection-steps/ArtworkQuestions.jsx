@@ -6,6 +6,7 @@ import TextArea from '@/components/forms/textarea';
 import Select from '@/components/forms/select';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
+import Spinner from '@/components/ui/spinner';
 
 export default function ArtworkQuestions() {
   const session = useSession();
@@ -190,22 +191,27 @@ export default function ArtworkQuestions() {
       )}
       <div className="flex flex-wrap items-end gap-4 justify-between mb-4">
         <div className="min-w-[200px]">
-          <Select
-            label="AI Image Model"
-            name="imageModel"
-            value={selectedImageModel?.id || ''}
-            onChange={handleModelChange}
-            options={modelOptions}
-            fitContent
-          />
+          <div className="flex items-end gap-3">
+            <Select
+              label="AI Image Model"
+              name="imageModel"
+              value={selectedImageModel?.id || ''}
+              onChange={handleModelChange}
+              options={modelOptions}
+              fitContent
+            />
+            {estimatingTokens ? (
+              <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400" style={{ marginBottom: '2em' }}>
+                <Spinner className="text-sm" />
+                <span>Estimating...</span>
+              </div>
+            ) : calculatedTokens !== null ? (
+              <div className="text-sm text-gray-500 dark:text-gray-400" style={{ marginBottom: '2em' }}>
+                <span className="font-medium">Token Cost: <span className="text-white font-bold">{calculatedTokens.toLocaleString()}</span></span>
+              </div>
+            ) : null}
+          </div>
         </div>
-        {estimatingTokens ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Estimating tokens...</p>
-        ) : calculatedTokens !== null ? (
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-            Calculated Tokens: {calculatedTokens}
-          </p>
-        ) : null}
       </div>
       <div className="max-h-[40vh] overflow-y-auto">
         {currentItemQuestions.length === 0 ? (

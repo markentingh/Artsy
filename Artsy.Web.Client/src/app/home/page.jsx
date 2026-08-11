@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 import { useSession } from '@/context/session';
 import ShinyImage from '@/components/ui/shiny-image';
 
-function LearnMoreButton() {
+function LearnMoreButton({ large = false }) {
   return (
     <Link
       to="/learn-more"
-      className="inline-flex items-center justify-center px-6 py-3 border border-white/40 text-white rounded-full hover:bg-white/10 transition"
+      className={`inline-flex items-center justify-center rounded-full border border-white/40 text-white hover:bg-white/10 transition ${large ? 'px-8 py-4 text-lg' : 'px-6 py-3'}`}
     >
       Learn More
     </Link>
@@ -123,11 +123,11 @@ export default function Home() {
             <div className="flex flex-wrap items-center gap-4">
               <Link
                 to="/subscriptions"
-                className="inline-flex items-center justify-center px-8 py-3 bg-white text-slate-950 rounded-full font-medium hover:bg-white/90 transition"
+                className="inline-flex items-center justify-center px-10 py-4 text-lg bg-blue-600 text-white rounded-full font-medium hover:bg-blue-700 transition"
               >
                 Sign Up
               </Link>
-              <LearnMoreButton />
+              <LearnMoreButton large />
             </div>
           </div>
         </div>

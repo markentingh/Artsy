@@ -158,7 +158,7 @@ export default function DashboardProject() {
         </Message>
       )}
 
-      <ProjectChecklist checklist={checklist} />
+      <ProjectChecklist checklist={checklist} project={project} />
       <CollectionsSection projectId={projectId} project={project} showNewButton={!!isComplete} refreshKey={collectionRefreshKey} onOpenCollection={handleOpenCollection} />
 
       <hr className="border-gray-200 dark:border-gray-700 mb-8" />

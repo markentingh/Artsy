@@ -90,8 +90,9 @@ export default function DashboardProjects() {
         color: form.color
       });
       if (response.data.success) {
-        setProjects((prev) => [{ ...response.data.data, images: [] }, ...prev]);
+        const createdProject = response.data.data;
         handleCloseModal();
+        navigate(`/dashboard/project/${createdProject.id}`);
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to create project' });
       }

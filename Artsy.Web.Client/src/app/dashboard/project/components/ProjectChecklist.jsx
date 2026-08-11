@@ -2,7 +2,7 @@ import React from 'react';
 import Checked from '@/components/ui/checked';
 import { List, Item } from '@/components/ui/list';
 
-export default function ProjectChecklist({ checklist }) {
+export default function ProjectChecklist({ checklist, project }) {
   const items = [
     {
       label: 'Set up Artwork Blueprints to be Generated',
@@ -18,24 +18,25 @@ export default function ProjectChecklist({ checklist }) {
       isChecked: (checklist?.productBlueprintsAddedCompleted ?? 0) > 0,
     },
     {
-      label: 'Add one or more Questions to the Project',
-      key: 'questionsAdded',
-      completed: checklist?.questionsAddedCompleted ?? 0,
-      total: checklist?.questionsAddedTotal ?? 1,
-      isChecked: (checklist?.questionsAddedCompleted ?? 0) > 0,
-    },
-    {
-      label: 'Artwork Questions',
-      key: 'itemQuestionsAdded',
-      completed: checklist?.itemQuestionsAddedCompleted ?? 0,
-      total: checklist?.itemQuestionsAddedTotal ?? 1,
-    },
-    {
-      label: 'Publish at least one Collection',
-      key: 'collectionsAdded',
-      completed: (checklist?.collectionsAddedCompleted ?? 0) > 0 ? 1 : 0,
+      label: 'Select Printify Shop for Publishing Products to',
+      key: 'printifyShopSelected',
+      completed: project?.printifyStoreId ? 1 : 0,
       total: 1,
-      isChecked: (checklist?.collectionsAddedCompleted ?? 0) > 0,
+      isChecked: !!project?.printifyStoreId,
+    },
+    {
+      label: 'Select Social Media Account for Posting to',
+      key: 'socialMediaAccountSelected',
+      completed: project?.instagramId ? 1 : 0,
+      total: 1,
+      isChecked: !!project?.instagramId,
+    },
+    {
+      label: 'Configure Social Media Post Description',
+      key: 'socialMediaDescriptionConfigured',
+      completed: (project?.socialMediaDescription || project?.socialMediaPrompt) ? 1 : 0,
+      total: 1,
+      isChecked: !!(project?.socialMediaDescription || project?.socialMediaPrompt),
     },
   ];
 

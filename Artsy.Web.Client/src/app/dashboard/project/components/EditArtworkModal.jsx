@@ -80,13 +80,18 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const [activeTab, setActiveTab] = useState('info');
   const fileInputRef = useRef(null);
 
-  // Opacity Mask state
-  const [chromaKeys, setChromaKeys] = useState([]);
-  const [fuzziness, setFuzziness] = useState(1);
-  const [opacityBackground, setOpacityBackground] = useState(null); // {type:"artwork"|"custom", id:""}
+  // Opacity Mask state — single stateful object
+  const [opacitySettings, setOpacitySettings] = useState({ chromakeys: [], fuziness: 1, background: null, overlay: null });
+  const [loadedOpacityJson, setLoadedOpacityJson] = useState('null');
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [pendingColor, setPendingColor] = useState('#00ff00');
   const pendingColorRef = useRef('#00ff00');
+  const [showBgColorPicker, setShowBgColorPicker] = useState(false);
+  const [pendingBgColor, setPendingBgColor] = useState('#000000');
+  const pendingBgColorRef = useRef('#000000');
+  const [showOverlayColorPicker, setShowOverlayColorPicker] = useState(false);
+  const [pendingOverlayColor, setPendingOverlayColor] = useState('#ffffff');
+  const pendingOverlayColorRef = useRef('#ffffff');
   const [showOpacityArtworkSelector, setShowOpacityArtworkSelector] = useState(false);
   const [showOpacityCustomImageSelector, setShowOpacityCustomImageSelector] = useState(false);
   const [opacityBgPreview, setOpacityBgPreview] = useState(null);
@@ -101,7 +106,19 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
-  const [savedOpacity, setSavedOpacity] = useState({ chromaKeys: [], fuzziness: 1, background: null });
+
+  // Derived values from the single state object
+  const chromaKeys = opacitySettings.chromakeys;
+  const fuzziness = opacitySettings.fuziness;
+  const opacityBackground = opacitySettings.background;
+  const opacityOverlay = opacitySettings.overlay;
+
+  // Serialize current settings and compare to loaded JSON to determine dirty state
+  const currentOpacityJson = useMemo(() => {
+    if (!chromaKeys || chromaKeys.length === 0) return 'null';
+    return JSON.stringify({ chromakeys: chromaKeys, fuziness: fuzziness, background: opacityBackground || undefined, overlay: opacityOverlay || undefined });
+  }, [chromaKeys, fuzziness, opacityBackground, opacityOverlay]);
+  const opacityDirty = currentOpacityJson !== loadedOpacityJson;
 
   const reset = () => {
     const itemTitle = item?.title || '';
@@ -134,11 +151,14 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setDeleteReferenceTarget(null);
     setShowArtworkSelector(false);
     setActiveTab('info');
-    setChromaKeys([]);
-    setFuzziness(1);
-    setOpacityBackground(null);
+    setOpacitySettings({ chromakeys: [], fuziness: 1, background: null, overlay: null });
+    setLoadedOpacityJson('null');
     setShowColorPicker(false);
     setPendingColor('#00ff00');
+    setShowBgColorPicker(false);
+    setPendingBgColor('#000000');
+    setShowOverlayColorPicker(false);
+    setPendingOverlayColor('#ffffff');
     setShowOpacityArtworkSelector(false);
     setShowOpacityCustomImageSelector(false);
     setOpacityBgPreview(null);
@@ -178,11 +198,22 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
               const loadedKeys = parsed.chromakeys || [];
               const loadedFuzz = parsed.fuziness ?? 1;
               const loadedBg = parsed.background || null;
-              setChromaKeys(loadedKeys);
-              setFuzziness(loadedFuzz);
-              setOpacityBackground(loadedBg);
-              setSavedOpacity({ chromaKeys: [...loadedKeys], fuzziness: loadedFuzz, background: loadedBg });
-              if (parsed.background && parsed.background.id) {
+              const loadedOverlay = parsed.overlay || null;
+              const settings = { chromakeys: loadedKeys, fuziness: loadedFuzz, background: loadedBg, overlay: loadedOverlay };
+              setOpacitySettings(settings);
+              // Store the serialized form exactly as we would produce it, for dirty comparison
+              setLoadedOpacityJson(loadedKeys.length > 0
+                ? JSON.stringify({ chromakeys: loadedKeys, fuziness: loadedFuzz, background: loadedBg || undefined, overlay: loadedOverlay || undefined })
+                : 'null');
+              if (loadedOverlay && loadedOverlay.color) {
+                setPendingOverlayColor(loadedOverlay.color);
+                pendingOverlayColorRef.current = loadedOverlay.color;
+              }
+              if (parsed.background && parsed.background.type === 'color' && parsed.background.color) {
+                setOpacityBgPreview(null);
+                setPendingBgColor(parsed.background.color);
+                pendingBgColorRef.current = parsed.background.color;
+              } else if (parsed.background && parsed.background.id) {
                 if (parsed.background.type === 'custom') {
                   setOpacityBgPreview(getCustomImageUrl(parsed.background.id, true));
                 } else if (parsed.background.type === 'artwork') {
@@ -200,11 +231,10 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
               }
             }
           } catch {
-            setChromaKeys([]);
-            setFuzziness(1);
-            setOpacityBackground(null);
+            setOpacitySettings({ chromakeys: [], fuziness: 1, background: null, overlay: null });
+            setLoadedOpacityJson('null');
             setOpacityBgPreview(null);
-            setSavedOpacity({ chromaKeys: [], fuzziness: 1, background: null });
+            setPendingBgColor('#000000');
           }
         }
       } catch (error) {
@@ -822,27 +852,31 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   };
 
   // Opacity Mask handlers
-  const buildOpacityJson = useCallback((keys, fuzz, bg) => {
-    if (!keys || keys.length === 0) return null;
-    const obj = { chromakeys: keys, fuziness: fuzz };
-    if (bg) obj.background = bg;
-    return JSON.stringify(obj);
-  }, []);
-
-  const saveOpacity = useCallback(async (keys, fuzz, bg) => {
+  const saveOpacity = useCallback(async () => {
     if (!item) return;
-    const opacityJson = buildOpacityJson(keys, fuzz, bg);
+    const opacityJson = chromaKeys.length > 0
+      ? JSON.stringify({ chromakeys: chromaKeys, fuziness: fuzziness, background: opacityBackground || undefined, overlay: opacityOverlay || undefined })
+      : null;
     try {
       const response = await updateItemOpacity({ itemId: item.id, opacityJson });
       if (response.data.success) {
-        setSavedOpacity({ chromaKeys: [...keys], fuzziness: fuzz, background: bg });
+        setLoadedOpacityJson(currentOpacityJson);
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to save opacity settings' });
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save opacity settings' });
     }
-  }, [item, updateItemOpacity, buildOpacityJson, setMessage]);
+  }, [item, updateItemOpacity, chromaKeys, fuzziness, opacityBackground, opacityOverlay, currentOpacityJson, setMessage]);
+
+  const handleSaveAllChanges = async () => {
+    if (!item) return;
+    const promises = [];
+    if (promptDirty) promises.push(handleSavePrompt());
+    if (imageModelDirty) promises.push(handleSaveImageModel());
+    if (opacityDirty) promises.push(saveOpacity());
+    await Promise.all(promises);
+  };
 
   const handleColorPickerChange = (colorObj) => {
     const hex = typeof colorObj === 'string' ? colorObj : colorObj?.hex;
@@ -856,9 +890,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     if (!hex) return;
     pendingColorRef.current = hex;
     if (chromaKeys.length >= 32 * 32 - 1) return;
-    const newKeys = [...chromaKeys, hex];
-    setChromaKeys(newKeys);
-    setShowColorPicker(false);
+    setOpacitySettings(prev => ({ ...prev, chromakeys: [...prev.chromakeys, hex] }));
   };
 
   const handleColorPickerClose = () => {
@@ -870,31 +902,18 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   };
 
   const handleDeleteChromaKey = (index) => {
-    const newKeys = chromaKeys.filter((_, i) => i !== index);
-    setChromaKeys(newKeys);
+    setOpacitySettings(prev => ({ ...prev, chromakeys: prev.chromakeys.filter((_, i) => i !== index) }));
   };
 
   const handleFuzzinessChange = (value) => {
-    setFuzziness(value);
+    setOpacitySettings(prev => ({ ...prev, fuziness: value }));
   };
 
-  const handleApplyChanges = () => {
-    saveOpacity(chromaKeys, fuzziness, opacityBackground);
-  };
-
-  const opacityDirty = useMemo(() => {
-    const keysChanged = chromaKeys.length !== savedOpacity.chromaKeys.length ||
-      chromaKeys.some((k, i) => k !== savedOpacity.chromaKeys[i]);
-    const fuzzChanged = fuzziness !== savedOpacity.fuzziness;
-    const bgChanged = (opacityBackground?.type !== savedOpacity.background?.type) ||
-      (opacityBackground?.id !== savedOpacity.background?.id);
-    return keysChanged || fuzzChanged || bgChanged;
-  }, [chromaKeys, fuzziness, opacityBackground, savedOpacity]);
 
   const handleSelectOpacityArtworkBackground = async (artworkItem) => {
     setShowOpacityArtworkSelector(false);
     const bg = { type: 'artwork', id: artworkItem.id };
-    setOpacityBackground(bg);
+    setOpacitySettings(prev => ({ ...prev, background: bg }));
     try {
       const previewResp = await getItemPreviews(artworkItem.id);
       if (previewResp.data.success) {
@@ -909,13 +928,52 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const handleSelectOpacityCustomBackground = (img) => {
     setShowOpacityCustomImageSelector(false);
     const bg = { type: 'custom', id: img.id };
-    setOpacityBackground(bg);
+    setOpacitySettings(prev => ({ ...prev, background: bg }));
     setOpacityBgPreview(getCustomImageUrl(img.id, true));
   };
 
   const handleRemoveOpacityBackground = () => {
-    setOpacityBackground(null);
+    setOpacitySettings(prev => ({ ...prev, background: null }));
     setOpacityBgPreview(null);
+  };
+
+  const handleBgColorPickerChange = (colorObj) => {
+    const hex = typeof colorObj === 'string' ? colorObj : colorObj?.hex;
+    if (hex) pendingBgColorRef.current = hex;
+  };
+
+  const handleBgColorPickerOk = (colorObj) => {
+    const hex = typeof colorObj === 'string' ? colorObj : colorObj?.hex;
+    if (!hex) return;
+    pendingBgColorRef.current = hex;
+    setPendingBgColor(hex);
+    setOpacitySettings(prev => ({ ...prev, background: { type: 'color', color: hex } }));
+    setOpacityBgPreview(null);
+  };
+
+  const handleBgColorPickerClose = () => {
+    setShowBgColorPicker(false);
+  };
+
+  const handleOverlayColorPickerChange = (colorObj) => {
+    const hex = typeof colorObj === 'string' ? colorObj : colorObj?.hex;
+    if (hex) pendingOverlayColorRef.current = hex;
+  };
+
+  const handleOverlayColorPickerOk = (colorObj) => {
+    const hex = typeof colorObj === 'string' ? colorObj : colorObj?.hex;
+    if (!hex) return;
+    pendingOverlayColorRef.current = hex;
+    setPendingOverlayColor(hex);
+    setOpacitySettings(prev => ({ ...prev, overlay: { color: hex } }));
+  };
+
+  const handleOverlayColorPickerClose = () => {
+    setShowOverlayColorPicker(false);
+  };
+
+  const handleRemoveOverlayColor = () => {
+    setOpacitySettings(prev => ({ ...prev, overlay: null }));
   };
 
   const latestPreviewThumbUrl = useMemo(() => {
@@ -989,8 +1047,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const handlePreviewClick = useCallback(() => {
     if (!eyeDropperMode || !eyeDropperColor) return;
     if (chromaKeys.length >= 32 * 32 - 1) return;
-    const newKeys = [...chromaKeys, eyeDropperColor];
-    setChromaKeys(newKeys);
+    setOpacitySettings(prev => ({ ...prev, chromakeys: [...prev.chromakeys, eyeDropperColor] }));
     setEyeDropperMode(false);
     setEyeDropperColor(null);
     setEyeDropperPos(null);
@@ -1000,7 +1057,18 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const handlePreviewWheel = useCallback((e) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setZoom(prev => Math.max(1, Math.min(10, Math.round((prev + delta) * 100) / 100)));
+    setZoom(prevZoom => {
+      const newZoom = Math.max(1, Math.min(10, Math.round((prevZoom + delta) * 100) / 100));
+      if (newZoom === prevZoom) return prevZoom;
+      // Zoom relative to the center of the preview container:
+      // The element point at the container center stays fixed.
+      // pan_new = pan_old * newZoom / prevZoom
+      setPan(prevPan => (newZoom === 1 ? { x: 0, y: 0 } : {
+        x: prevPan.x * newZoom / prevZoom,
+        y: prevPan.y * newZoom / prevZoom,
+      }));
+      return newZoom;
+    });
   }, []);
 
   // Attach wheel listener non-passively (React onWheel is passive by default)
@@ -1079,6 +1147,20 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
             data[i + 3] = Math.round(a * (1 - opacityStrength));
           }
         }
+        // Apply overlay color to all non-transparent pixels
+        if (opacityOverlay?.color) {
+          const cleaned = opacityOverlay.color.replace('#', '');
+          const or = parseInt(cleaned.substring(0, 2), 16);
+          const og = parseInt(cleaned.substring(2, 4), 16);
+          const ob = parseInt(cleaned.substring(4, 6), 16);
+          for (let i = 0; i < data.length; i += 4) {
+            if (data[i + 3] > 0) {
+              data[i] = or;
+              data[i + 1] = og;
+              data[i + 2] = ob;
+            }
+          }
+        }
         ctx.putImageData(imageData, 0, 0);
         if (!cancelled) setProcessedPreviewUrl(canvas.toDataURL('image/png'));
       } catch {
@@ -1091,7 +1173,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     };
     img.src = latestPreviewThumbUrl;
     return () => { cancelled = true; };
-  }, [latestPreviewThumbUrl, chromaKeys, fuzziness]);
+  }, [latestPreviewThumbUrl, chromaKeys, fuzziness, opacityOverlay]);
 
   const previewTabContent = (
     <div>
@@ -1113,13 +1195,6 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
           <span>Generate Preview</span>
         </ButtonOutline>
       </div>
-      {imageModelDirty && (
-        <div className="mb-4">
-          <ButtonOutline onClick={handleSaveImageModel}>
-            Save Changes
-          </ButtonOutline>
-        </div>
-      )}
       {previewEstimatedCost != null && (
         <div className="mb-4">
           <span className="text-sm text-gray-600 dark:text-gray-400">
@@ -1179,11 +1254,6 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
             onChange={(e) => setPrompt(e.target.value)}
             className="w-full"
           />
-          {promptDirty && (
-            <ButtonOutline onClick={handleSavePrompt}>
-              Save Changes
-            </ButtonOutline>
-          )}
         </div>
       ),
     }] : []),
@@ -1248,7 +1318,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No reference images uploaded.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-12">No reference images uploaded.</p>
           )}
         </div>
       ),
@@ -1258,43 +1328,79 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       label: 'Opacity Mask',
       content: (
         <div>
-          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-4">Chroma Key Colors</h3>
-          <div className="grid gap-1 mb-4" style={{ gridTemplateColumns: 'repeat(auto-fill, 64px)' }}>
-            {chromaKeys.map((color, index) => (
-              <div
-                key={index}
-                className="relative group rounded border border-gray-300 dark:border-gray-600 cursor-pointer"
-                style={{ backgroundColor: color, width: '64px', height: '64px' }}
-                onClick={() => handleDeleteChromaKey(index)}
-                title={`Remove ${color}`}
-              >
-                <div className="absolute top-0 right-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-red-600 rounded-bl rounded-tr w-4 h-4">
-                  <Icon name="close" className="text-white" style={{ fontSize: '12px', lineHeight: 1 }} />
-                </div>
-              </div>
-            ))}
-            {chromaKeys.length < 32 * 32 - 1 && (
-              <>
-                <div
-                  className="rounded border-2 border-dashed border-gray-400 dark:border-gray-500 flex items-center justify-center cursor-pointer hover:border-primary-500 hover:bg-primary-500/5 transition"
-                  style={{ width: '64px', height: '64px' }}
-                  title="Add Chroma Key"
-                  onClick={() => setShowColorPicker(true)}
-                >
-                  <Icon name="add" className="text-gray-400 text-sm" />
-                </div>
-                {previews.length > 0 && (
+          <div className="flex gap-6 mb-4">
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-4">Chroma Key Colors</h3>
+              <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fill, 64px)' }}>
+                {chromaKeys.map((color, index) => (
                   <div
-                    className={`rounded border-2 flex items-center justify-center cursor-pointer transition ${eyeDropperMode ? 'border-primary-500 bg-primary-500/10 text-primary-500' : 'border-gray-400 dark:border-gray-500 text-gray-400 hover:border-primary-500 hover:bg-primary-500/5'}`}
-                    style={{ width: '64px', height: '64px' }}
-                    title="Pick color from preview"
-                    onClick={handleToggleEyeDropper}
+                    key={index}
+                    className="relative group rounded border border-gray-300 dark:border-gray-600 cursor-pointer"
+                    style={{ backgroundColor: color, width: '64px', height: '64px' }}
+                    onClick={() => handleDeleteChromaKey(index)}
+                    title={`Remove ${color}`}
                   >
-                    <Icon name="colorize" className="text-sm" />
+                    <div className="absolute top-0 right-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-red-600 rounded-bl rounded-tr w-4 h-4">
+                      <Icon name="close" className="text-white" style={{ fontSize: '12px', lineHeight: 1 }} />
+                    </div>
+                  </div>
+                ))}
+                {chromaKeys.length < 32 * 32 - 1 && (
+                  <>
+                    <div
+                      className="rounded border-2 border-dashed border-gray-400 dark:border-gray-500 flex items-center justify-center cursor-pointer hover:border-primary-500 hover:bg-primary-500/5 transition"
+                      style={{ width: '64px', height: '64px' }}
+                      title="Add Chroma Key"
+                      onClick={() => setShowColorPicker(true)}
+                    >
+                      <Icon name="add" className="text-gray-400 text-sm" />
+                    </div>
+                    {previews.length > 0 && (
+                      <div
+                        className={`rounded border-2 flex items-center justify-center cursor-pointer transition ${eyeDropperMode ? 'border-primary-500 bg-primary-500/10 text-primary-500' : 'border-gray-400 dark:border-gray-500 text-gray-400 hover:border-primary-500 hover:bg-primary-500/5'}`}
+                        style={{ width: '64px', height: '64px' }}
+                        title="Pick color from preview"
+                        onClick={handleToggleEyeDropper}
+                      >
+                        <Icon name="colorize" className="text-lg" />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="shrink-0">
+              <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-4">Overlay Color</h3>
+              <div
+                className={`relative group rounded border-2 flex items-center justify-center cursor-pointer transition ${
+                  opacityOverlay?.color
+                    ? 'border-gray-300 dark:border-gray-600'
+                    : 'border-dashed border-gray-400 dark:border-gray-500 hover:border-primary-500 hover:bg-primary-500/5'
+                }`}
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  backgroundColor: opacityOverlay?.color || 'transparent',
+                }}
+                title={opacityOverlay?.color ? `Change overlay color (${opacityOverlay.color})` : 'Add overlay color'}
+                onClick={() => {
+                  setPendingOverlayColor(opacityOverlay?.color || '#ffffff');
+                  pendingOverlayColorRef.current = opacityOverlay?.color || '#ffffff';
+                  setShowOverlayColorPicker(true);
+                }}
+              >
+                <Icon name="add" className="text-gray-400 text-sm" />
+                {opacityOverlay?.color && (
+                  <div
+                    className="absolute top-0 right-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-red-600 rounded-bl rounded-tr w-4 h-4"
+                    onClick={(e) => { e.stopPropagation(); handleRemoveOverlayColor(); }}
+                    title="Remove overlay color"
+                  >
+                    <Icon name="close" className="text-white" style={{ fontSize: '12px', lineHeight: 1 }} />
                   </div>
                 )}
-              </>
-            )}
+              </div>
+            </div>
           </div>
 
           {showColorPicker && (
@@ -1303,6 +1409,24 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
               onChange={handleColorPickerChange}
               onOk={handleAddChromaKey}
               onClose={handleColorPickerClose}
+            />
+          )}
+
+          {showBgColorPicker && (
+            <ColorPicker
+              color={pendingBgColor}
+              onChange={handleBgColorPickerChange}
+              onOk={handleBgColorPickerOk}
+              onClose={handleBgColorPickerClose}
+            />
+          )}
+
+          {showOverlayColorPicker && (
+            <ColorPicker
+              color={pendingOverlayColor}
+              onChange={handleOverlayColorPickerChange}
+              onOk={handleOverlayColorPickerOk}
+              onClose={handleOverlayColorPickerClose}
             />
           )}
 
@@ -1333,9 +1457,16 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
                       ref={previewContainerRef}
                       className={`w-[350px] h-[350px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 relative ${eyeDropperMode ? 'cursor-crosshair' : (zoom > 1 ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : '')}`}
                       style={{
+                        backgroundColor: opacityBgPreview
+                          ? 'transparent'
+                          : opacityBackground?.type === 'color' && opacityBackground?.color
+                            ? opacityBackground.color
+                            : 'transparent',
                         backgroundImage: opacityBgPreview
                           ? 'none'
-                          : 'url(/checkerboard.png)',
+                          : opacityBackground?.type === 'color' && opacityBackground?.color
+                            ? 'none'
+                            : 'url(/checkerboard.png)',
                         backgroundSize: opacityBgPreview ? 'auto' : '20px 20px',
                         backgroundRepeat: opacityBgPreview ? 'no-repeat' : 'repeat',
                         backgroundPosition: 'center',
@@ -1355,6 +1486,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
                             transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
                             transformOrigin: 'center',
                             transition: isPanning ? 'none' : 'transform 0.1s ease-out',
+                            imageRendering: zoom > 1 ? 'pixelated' : 'auto',
                           }}
                           draggable={false}
                         />
@@ -1367,6 +1499,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
                           transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
                           transformOrigin: 'center',
                           transition: isPanning ? 'none' : 'transform 0.1s ease-out',
+                          imageRendering: zoom > 1 ? 'pixelated' : 'auto',
                         }}
                         draggable={false}
                       />
@@ -1413,13 +1546,33 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
                     <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300">Background</h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400">for Social Media Posts</p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2">
+                    {(!opacityBackground || opacityBackground.type === 'color') && (
+                      <div
+                        className={`rounded border-2 flex items-center justify-center cursor-pointer transition ${
+                          opacityBackground?.type === 'color'
+                            ? 'border-gray-300 dark:border-gray-600'
+                            : 'border-dashed border-gray-400 dark:border-gray-500 hover:border-primary-500 hover:bg-primary-500/5'
+                        }`}
+                        style={{
+                          width: '48px',
+                          height: '48px',
+                          backgroundColor: opacityBackground?.type === 'color' ? opacityBackground.color : 'transparent',
+                        }}
+                        title={opacityBackground?.type === 'color' ? `Change color (${opacityBackground.color})` : 'Add background color'}
+                        onClick={() => {
+                          setPendingBgColor(opacityBackground?.color || '#000000');
+                          pendingBgColorRef.current = opacityBackground?.color || '#000000';
+                          setShowBgColorPicker(true);
+                        }}
+                      >
+                        <Icon name="add" className="text-gray-400 text-sm" />
+                      </div>
+                    )}
                     <ButtonOutline onClick={() => setShowOpacityArtworkSelector(true)}>
-                      <Icon name="add" className="mr-2" />
                       <span>Use Artwork</span>
                     </ButtonOutline>
                     <ButtonOutline onClick={() => setShowOpacityCustomImageSelector(true)}>
-                      <Icon name="add" className="mr-2" />
                       <span>Custom Image</span>
                     </ButtonOutline>
                     {opacityBackground && (
@@ -1456,9 +1609,9 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
 
       <Tabs tabs={tabs} defaultTab="info" onTabChange={setActiveTab} />
 
-      {activeTab === 'opacity' && previews.length > 0 && opacityDirty && (
+      {(promptDirty || imageModelDirty || opacityDirty) && (
         <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700 mt-4">
-          <ButtonOutline onClick={handleApplyChanges}>Apply Changes</ButtonOutline>
+          <ButtonOutline onClick={handleSaveAllChanges}>Save Changes</ButtonOutline>
         </div>
       )}
 

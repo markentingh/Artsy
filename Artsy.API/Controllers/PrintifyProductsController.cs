@@ -457,7 +457,7 @@ namespace Artsy.API.Controllers
 
                 var productRequest = new PrintifyProductRequest
                 {
-                    Title = bp.Name,
+                    Title = !string.IsNullOrWhiteSpace(product.Name) ? product.Name : bp.Name,
                     Description = description,
                     SafetyInformation = bp.SafetyInfo ?? "",
                     BlueprintId = bp.BlueprintId,

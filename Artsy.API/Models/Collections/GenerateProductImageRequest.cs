@@ -22,8 +22,14 @@ namespace Artsy.API.Models.Collections
         [JsonPropertyName("prompt")]
         public string Prompt { get; set; } = "";
 
+        [JsonPropertyName("variantColor")]
+        public string VariantColor { get; set; } = "";
+
         [JsonPropertyName("requestedChanges")]
         public string? RequestedChanges { get; set; }
+
+        [JsonPropertyName("productName")]
+        public string? ProductName { get; set; }
     }
 
     public class AcceptProductImageRequest
@@ -114,5 +120,17 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("productImageId")]
         public Guid ProductImageId { get; set; }
+    }
+
+    public class UpdateCollectionProductNameRequest
+    {
+        [JsonPropertyName("collectionId")]
+        public Guid CollectionId { get; set; }
+
+        [JsonPropertyName("projectBlueprintId")]
+        public Guid ProjectBlueprintId { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
     }
 }

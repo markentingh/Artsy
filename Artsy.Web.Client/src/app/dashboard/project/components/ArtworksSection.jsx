@@ -141,6 +141,8 @@ export default function ArtworksSection({ projectId, onArtworkChanged }) {
     dragOverItem.current = null;
     try {
       await reorderItems({ projectId, itemIds });
+      // Update local index properties to match the new order (1-based, matching backend)
+      setItems(prev => prev.map((item, i) => ({ ...item, index: i + 1 })));
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to reorder artworks' });
       fetchItems();

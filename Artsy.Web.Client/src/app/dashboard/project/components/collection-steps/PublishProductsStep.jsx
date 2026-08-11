@@ -16,6 +16,7 @@ export default function PublishProductsStep() {
     productImageVariants, STEPS, setStep,
     setMessage, printifyProducts,
     collectionArtwork, api, onClose,
+    collectionProducts,
   } = useCollection();
 
   const printifyApi = Projects(session);
@@ -152,12 +153,14 @@ export default function PublishProductsStep() {
             const isPublished = publishedBlueprints[bp.id] || false;
             const hasPrintifyProduct = blueprintIdsWithPrintify.has(bp.id);
             if (!hasPrintifyProduct) return null;
+            const cp = collectionProducts.find(p => p.projectBlueprintId === bp.id);
+            const displayName = cp?.name || bp.name;
             return (
               <Item key={bp.id}>
                 <div className="flex items-center w-full">
                   <Checked checked={isPublished} />
                   <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {bp.name}
+                    {displayName}
                   </span>
                   <div className="ml-auto flex items-center gap-3">
                     <span className="text-xs text-gray-500 dark:text-gray-400">

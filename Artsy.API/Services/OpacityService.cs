@@ -22,9 +22,14 @@ namespace Artsy.API.Services
 
         /// <summary>
         /// Composites a transparent PNG over a background image (resized to fill), producing a JPG.
-        /// If backgroundBytes is null, uses solid black.
+        /// If backgroundBytes is null, uses the backgroundColor if provided, otherwise solid black.
         /// </summary>
-        Task<byte[]> CompositeOverBackgroundAsync(byte[] pngBytes, byte[]? backgroundBytes);
+        Task<byte[]> CompositeOverBackgroundAsync(byte[] pngBytes, byte[]? backgroundBytes, string? backgroundColor = null);
+
+        /// <summary>
+        /// Applies an overlay color to all non-transparent pixels in a PNG, preserving alpha.
+        /// </summary>
+        Task<byte[]> ApplyOverlayAsync(byte[] pngBytes, string overlayColor);
     }
 
     public class OpacitySettings
@@ -32,12 +37,19 @@ namespace Artsy.API.Services
         public List<(byte R, byte G, byte B)> ChromaKeys { get; set; } = new();
         public float Fuzziness { get; set; } = 0.0f;
         public BackgroundSettings? Background { get; set; }
+        public OverlaySettings? Overlay { get; set; }
     }
 
     public class BackgroundSettings
     {
-        public string Type { get; set; } = ""; // "artwork" or "custom"
+        public string Type { get; set; } = ""; // "artwork", "custom", or "color"
         public string Id { get; set; } = "";
+        public string Color { get; set; } = ""; // hex color when Type == "color"
+    }
+
+    public class OverlaySettings
+    {
+        public string Color { get; set; } = ""; // hex color
     }
 
     public class OpacityService : IOpacityService
@@ -79,7 +91,17 @@ namespace Artsy.API.Services
                         bg.Type = typeEl.GetString() ?? "";
                     if (bgEl.TryGetProperty("id", out var idEl))
                         bg.Id = idEl.GetString() ?? "";
+                    if (bgEl.TryGetProperty("color", out var colorEl))
+                        bg.Color = colorEl.GetString() ?? "";
                     settings.Background = bg;
+                }
+
+                if (root.TryGetProperty("overlay", out var overlayEl) && overlayEl.ValueKind == JsonValueKind.Object)
+                {
+                    var overlay = new OverlaySettings();
+                    if (overlayEl.TryGetProperty("color", out var overlayColorEl))
+                        overlay.Color = overlayColorEl.GetString() ?? "";
+                    settings.Overlay = overlay;
                 }
 
                 return settings;
@@ -133,7 +155,7 @@ namespace Artsy.API.Services
             return stream.ToArray();
         }
 
-        public async Task<byte[]> CompositeOverBackgroundAsync(byte[] pngBytes, byte[]? backgroundBytes)
+        public async Task<byte[]> CompositeOverBackgroundAsync(byte[] pngBytes, byte[]? backgroundBytes, string? backgroundColor = null)
         {
             using var foreground = Image.Load<Rgba32>(pngBytes);
             using var canvas = new Image<Rgba32>(foreground.Width, foreground.Height);
@@ -154,8 +176,14 @@ namespace Artsy.API.Services
             }
             else
             {
-                // Solid black background
-                canvas.Mutate(ctx => ctx.BackgroundColor(Color.Black));
+                // Use background color if provided, otherwise solid black
+                var bgColor = Color.Black;
+                if (!string.IsNullOrWhiteSpace(backgroundColor))
+                {
+                    var (r, g, b) = ParseHexColor(backgroundColor);
+                    bgColor = Color.FromRgb(r, g, b);
+                }
+                canvas.Mutate(ctx => ctx.BackgroundColor(bgColor));
             }
 
             // Draw the transparent PNG on top
@@ -163,6 +191,29 @@ namespace Artsy.API.Services
 
             using var stream = new MemoryStream();
             await canvas.SaveAsync(stream, new JpegEncoder { Quality = 90 });
+            return stream.ToArray();
+        }
+
+        public async Task<byte[]> ApplyOverlayAsync(byte[] pngBytes, string overlayColor)
+        {
+            using var image = Image.Load<Rgba32>(pngBytes);
+            var (or, og, ob) = ParseHexColor(overlayColor);
+
+            for (int y = 0; y < image.Height; y++)
+            {
+                for (int x = 0; x < image.Width; x++)
+                {
+                    var pixel = image[x, y];
+                    if (pixel.A > 0)
+                    {
+                        // Replace RGB with overlay color, preserve alpha
+                        image[x, y] = new Rgba32(or, og, ob, pixel.A);
+                    }
+                }
+            }
+
+            using var stream = new MemoryStream();
+            await image.SaveAsync(stream, new PngEncoder());
             return stream.ToArray();
         }
 

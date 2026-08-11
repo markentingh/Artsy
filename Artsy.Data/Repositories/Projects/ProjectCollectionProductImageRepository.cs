@@ -61,8 +61,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             image.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectCollectionProductImages"" (""Id"", ""ProjectId"", ""CollectionId"", ""ProjectBlueprintId"", ""ProductImageId"", ""ImageModel"", ""Prompt"", ""Width"", ""Height"", ""Accepted"", ""ResponseId"", ""Active"")
-                VALUES (@Id, @ProjectId, @CollectionId, @ProjectBlueprintId, @ProductImageId, @ImageModel, @Prompt, @Width, @Height, @Accepted, @ResponseId, @Active)
+                INSERT INTO public.""ProjectCollectionProductImages"" (""Id"", ""ProjectId"", ""CollectionId"", ""ProjectBlueprintId"", ""ProductImageId"", ""ImageModel"", ""Prompt"", ""Width"", ""Height"", ""Accepted"", ""ResponseId"", ""VariantColor"", ""Active"")
+                VALUES (@Id, @ProjectId, @CollectionId, @ProjectBlueprintId, @ProductImageId, @ImageModel, @Prompt, @Width, @Height, @Accepted, @ResponseId, @VariantColor, @Active)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectCollectionProductImage>(query, image);
         }
@@ -72,7 +72,7 @@ namespace Artsy.Data.Repositories.Projects
             const string query = @"
                 UPDATE public.""ProjectCollectionProductImages""
                 SET ""ImageModel"" = @ImageModel, ""Prompt"" = @Prompt, ""Width"" = @Width, ""Height"" = @Height,
-                    ""Accepted"" = @Accepted, ""ResponseId"" = @ResponseId, ""Active"" = @Active
+                    ""Accepted"" = @Accepted, ""ResponseId"" = @ResponseId, ""VariantColor"" = @VariantColor, ""Active"" = @Active
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, image);
         }

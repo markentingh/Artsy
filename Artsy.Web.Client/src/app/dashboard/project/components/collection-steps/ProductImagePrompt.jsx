@@ -3,6 +3,7 @@ import { useCollection } from '@/context/collection';
 import { useDashboard } from '@/context/dashboard';
 import TextArea from '@/components/forms/textarea';
 import Select from '@/components/forms/select';
+import Input from '@/components/forms/input';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 import Spinner from '@/components/ui/spinner';
@@ -20,10 +21,52 @@ export default function ProductImagePrompt() {
     setArtworkPreview,
     mockups, printifyProducts, loadMockups,
     imageModels, selectedProductImageModel, setSelectedProductImageModel,
+    collectionProducts, setCollectionProducts,
   } = useCollection();
   const { refreshTokens } = useDashboard();
 
   const combo = selectedProductCombos[currentProductComboIndex];
+
+  // Product name: load from collectionProducts, default to blueprint name
+  const collectionProduct = useMemo(() => {
+    if (!combo) return null;
+    return collectionProducts.find(p => p.projectBlueprintId === combo.projectBlueprintId);
+  }, [combo, collectionProducts]);
+
+  const [productName, setProductName] = useState('');
+  const productNameTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (!combo) return;
+    const bp = blueprints.find(b => b.id === combo.projectBlueprintId);
+    const existing = collectionProduct?.name;
+    setProductName(existing || bp?.name || '');
+  }, [combo, collectionProduct, blueprints]);
+
+  const handleProductNameChange = useCallback((e) => {
+    const value = e.target.value;
+    setProductName(value);
+    if (!collectionId || !combo) return;
+    if (productNameTimerRef.current) clearTimeout(productNameTimerRef.current);
+    productNameTimerRef.current = setTimeout(async () => {
+      try {
+        await api.updateCollectionProductName({
+          collectionId,
+          projectBlueprintId: combo.projectBlueprintId,
+          name: value,
+        });
+        setCollectionProducts(prev => prev.map(p =>
+          p.projectBlueprintId === combo.projectBlueprintId
+            ? { ...p, name: value }
+            : p
+        ));
+      } catch { /* ignore */ }
+    }, 1000);
+  }, [collectionId, combo, api, setCollectionProducts]);
+
+  useEffect(() => () => {
+    if (productNameTimerRef.current) clearTimeout(productNameTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (collectionId && mockups.length === 0) {
@@ -32,13 +75,21 @@ export default function ProductImagePrompt() {
   }, [collectionId, mockups.length, loadMockups]);
 
   const mockupImages = useMemo(() => {
-    if (!combo || !printifyProducts.length || !mockups.length) return [];
-    const pp = printifyProducts.find(p => p.projectBlueprintId === combo.projectBlueprintId);
-    if (!pp) return [];
-    return mockups.filter(m => m.printifyProductId === pp.id).map(m => m.imageUrl);
+    if (!combo) return [];
+    // If mockups exist for this product, use them
+    if (printifyProducts.length && mockups.length) {
+      const pp = printifyProducts.find(p => p.projectBlueprintId === combo.projectBlueprintId);
+      if (pp) {
+        const imgs = mockups.filter(m => m.printifyProductId === pp.id).map(m => m.imageUrl);
+        if (imgs.length > 0) return imgs;
+      }
+    }
+    // Fallback: use the Printify blueprint image for the variant color
+    if (combo.printifyImageUrl) return [combo.printifyImageUrl];
+    return [];
   }, [combo, printifyProducts, mockups]);
 
-  const modelOptions = useMemo(() => imageModels.map(m => ({ value: m.id, label: m.model })), [imageModels]);
+  const modelOptions = useMemo(() => imageModels.map(m => ({ value: m.id, label: m.name })), [imageModels]);
 
   const [thumbRetried, setThumbRetried] = useState({});
   const [thumbFailed, setThumbFailed] = useState({});
@@ -67,7 +118,7 @@ export default function ProductImagePrompt() {
       .map(a => ({
         itemId: a.itemId,
         artworkId: a.id,
-        url: api.getCollectionArtworkImageUrl(collectionId, a.itemId, a.id, true),
+        url: api.getCollectionArtworkImageUrl(collectionId, a.itemId, a.id, false),
         thumbUrl: api.getCollectionArtworkThumbUrl(collectionId, a.itemId, a.id),
       }));
   }, [collectionId, collectionArtwork, api, placementItemId]);
@@ -87,9 +138,9 @@ export default function ProductImagePrompt() {
     return [...productImg, ...mockupImages, ...artworkImages.map(a => a.thumbUrl)];
   }, [existingProductImage, mockupImages, artworkImages]);
 
-  const fullSizeImages = useMemo(() => {
+  const allFullSizeImages = useMemo(() => {
     const productImg = existingProductImage ? [existingProductImage] : [];
-    const mockupFull = mockupImages.map(url => url.replace('&thumb=true', ''));
+    const mockupFull = mockupImages.map(url => url.replace(/([?&])thumb=true&?/, '$1').replace(/[?&]$/, ''));
     return [...productImg, ...mockupFull, ...artworkImages.map(a => a.url)];
   }, [existingProductImage, mockupImages, artworkImages]);
 
@@ -119,18 +170,21 @@ export default function ProductImagePrompt() {
     }
   }, [artworkImages, existingProductImage, mockupImages, collectionId, api, refreshTokens]);
 
-  const imagesWithRetry = useMemo(() => {
-    return allImages.map((url, i) => {
-      if (thumbFailed[i]) return null;
-      if (thumbRetried[i]) return `${url}&r=${thumbRetried[i]}`;
-      return url;
-    }).filter(Boolean);
-  }, [allImages, thumbRetried, thumbFailed]);
-
-  const failedCount = Object.keys(thumbFailed).length;
-  const displayImages = failedCount > 0 && imagesWithRetry.length === 0
-    ? []
-    : imagesWithRetry;
+  const { displayImages, fullSizeImages } = useMemo(() => {
+    const thumbs = [];
+    const fulls = [];
+    allImages.forEach((url, i) => {
+      if (thumbFailed[i]) return;
+      if (thumbRetried[i]) {
+        thumbs.push(`${url}&r=${thumbRetried[i]}`);
+        fulls.push(`${allFullSizeImages[i]}${allFullSizeImages[i].includes('?') ? '&' : '?'}r=${thumbRetried[i]}`);
+      } else {
+        thumbs.push(url);
+        fulls.push(allFullSizeImages[i]);
+      }
+    });
+    return { displayImages: thumbs, fullSizeImages: fulls };
+  }, [allImages, allFullSizeImages, thumbRetried, thumbFailed]);
 
   useEffect(() => {
     if (!combo || !collectionId || !projectId) return;
@@ -144,6 +198,7 @@ export default function ProductImagePrompt() {
           projectBlueprintId: combo.projectBlueprintId,
           productImageId: combo.productImageId,
           prompt: productImagePrompt,
+          variantColor: combo.variantColor || '',
           modelId: selectedProductImageModel?.id,
         });
         if (res.data.success) {
@@ -161,36 +216,16 @@ export default function ProductImagePrompt() {
   }, [combo, collectionId, projectId, api, productImagePrompt, selectedProductImageModel]);
 
   const handleNext = useCallback(() => {
+    if (!productName.trim()) {
+      setMessage({ type: 'error', text: 'Enter a product title.' });
+      return;
+    }
     if (!productImagePrompt.trim()) {
       setMessage({ type: 'error', text: 'Enter a product image prompt.' });
       return;
     }
     setStep(STEPS.PRODUCT_IMAGE_PREVIEW);
-  }, [productImagePrompt, setStep, setMessage, STEPS]);
-
-  const handleSkip = useCallback(async () => {
-    if (!combo || !collectionId) {
-      moveToNextCombo();
-      return;
-    }
-    const existing = allProductImages.find(img =>
-      img.projectBlueprintId === combo.projectBlueprintId &&
-      img.productImageId === combo.productImageId
-    );
-    if (!existing || !existing.accepted) {
-      try {
-        await api.deleteProductImage({
-          collectionId,
-          projectBlueprintId: combo.projectBlueprintId,
-          productImageId: combo.productImageId,
-        });
-      } catch (e) {
-        console.error('deleteProductImage error:', e?.response?.data || e);
-      }
-    }
-    setSelectedProductCombos(prev => prev.filter((_, idx) => idx !== currentProductComboIndex));
-    moveToNextCombo();
-  }, [combo, collectionId, api, allProductImages, currentProductComboIndex, setSelectedProductCombos]);
+  }, [productName, productImagePrompt, setStep, setMessage, STEPS]);
 
   const moveToNextCombo = useCallback(() => {
     const nextIndex = currentProductComboIndex >= selectedProductCombos.length - 1
@@ -223,7 +258,7 @@ export default function ProductImagePrompt() {
                 infiniteScroll
                 imageClassName="!max-h-none w-full h-full object-contain"
                 onImageError={handleImageError}
-                onImageClick={(src) => setArtworkPreview({ images: fullSizeImages, src, alt: 'Image Preview' })}
+                onImageClick={(_src, index) => setArtworkPreview({ images: fullSizeImages, _idx: index, alt: 'Image Preview' })}
                 placeholder="No Thumbnail"
               />
             </div>
@@ -233,34 +268,48 @@ export default function ProductImagePrompt() {
               <span className="text-sm text-gray-500 dark:text-gray-400">No Thumbnail</span>
             </div>
           )}
+          {!productName.trim() && (
+            <p className="text-sm text-red-600 dark:text-red-400 mt-2">Product title is required.</p>
+          )}
         </div>
       )}
 
       <div className="mb-4">
-        <div className="flex flex-wrap items-end gap-4 justify-between mb-2">
-          <div className="min-w-[200px]">
-            <Select
-              label="AI Image Model"
-              name="productImageModel"
-              value={selectedProductImageModel?.id || ''}
-              onChange={(value) => {
-                const model = imageModels.find(m => m.id === value);
-                setSelectedProductImageModel(model || null);
-              }}
-              options={modelOptions}
-              fitContent
+        <div className="grid grid-cols-2 gap-4 mb-2">
+          <div>
+            <Input
+              label="Product Title"
+              name="productName"
+              value={productName}
+              onChange={handleProductNameChange}
+              placeholder="Product name..."
             />
           </div>
-          {estimatingTokens ? (
-            <div className="flex items-center gap-2 mb-2 text-sm text-gray-500 dark:text-gray-400">
-              <Spinner className="text-sm" />
-              <span>Estimating token cost...</span>
+          <div>
+            <div className="flex items-end gap-3">
+              <Select
+                label="AI Image Model"
+                name="productImageModel"
+                value={selectedProductImageModel?.id || ''}
+                onChange={(value) => {
+                  const model = imageModels.find(m => m.id === value);
+                  setSelectedProductImageModel(model || null);
+                }}
+                options={modelOptions}
+                fitContent
+              />
+              {estimatingTokens ? (
+                <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400" style={{ marginBottom: '2em' }}>
+                  <Spinner className="text-sm" />
+                  <span>Estimating...</span>
+                </div>
+              ) : tokenEstimate != null ? (
+                <div className="text-sm text-gray-500 dark:text-gray-400" style={{ marginBottom: '2em' }}>
+                  <span className="font-medium">Token Cost: <span className="text-white font-bold">{tokenEstimate.toLocaleString()}</span></span>
+                </div>
+              ) : null}
             </div>
-          ) : tokenEstimate != null ? (
-            <div className="mb-2 text-sm text-gray-500 dark:text-gray-400">
-              <span className="font-medium">{tokenEstimate.toLocaleString()}</span> tokens
-            </div>
-          ) : null}
+          </div>
         </div>
         <TextArea
           name="productImagePrompt"
@@ -274,10 +323,7 @@ export default function ProductImagePrompt() {
 
       <div className="buttons flex justify-end gap-2 mt-auto">
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
-        <ButtonOutline onClick={handleSkip}>
-          Skip
-        </ButtonOutline>
-        <ButtonOutline onClick={handleNext} disabled={!productImagePrompt.trim()}>
+        <ButtonOutline onClick={handleNext} disabled={!productImagePrompt.trim() || !productName.trim()}>
           Generate Image
         </ButtonOutline>
       </div>
