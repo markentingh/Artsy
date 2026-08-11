@@ -335,14 +335,20 @@ namespace Artsy.API.Controllers.Admin
         }
 
         [HttpGet("blueprints")]
-        public async Task<IActionResult> SearchBlueprints([FromQuery] string? keyword, [FromQuery] string? brand, [FromQuery] int start = 0, [FromQuery] int length = 20)
+        public async Task<IActionResult> SearchBlueprints([FromQuery] string? keyword, [FromQuery] string? brand, [FromQuery] string? publishedFilter = null, [FromQuery] int start = 0, [FromQuery] int length = 20)
         {
             try
             {
                 var kw = keyword ?? "";
                 var br = brand ?? "all";
-                var results = await _printifyBlueprintRepo.SearchAsync(kw, br, start, length, null);
-                var total = await _printifyBlueprintRepo.GetCountAsync(kw, br, null);
+                bool? published = publishedFilter switch
+                {
+                    "unpublished" => false,
+                    "published" => true,
+                    _ => null
+                };
+                var results = await _printifyBlueprintRepo.SearchAsync(kw, br, start, length, published);
+                var total = await _printifyBlueprintRepo.GetCountAsync(kw, br, published);
 
                 return Json(new ApiResponse
                 {

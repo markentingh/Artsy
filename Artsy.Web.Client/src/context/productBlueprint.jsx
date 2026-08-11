@@ -59,7 +59,7 @@ export function ProductBlueprintProvider({
   const initialProductBlueprintImages = useRef([]);
 
   const isEditing = !!existingConfig;
-  const projectBlueprintId = existingConfig?.id;
+  const [projectBlueprintId, setProjectBlueprintId] = useState(existingConfig?.id);
 
   const loadVariants = async (blueprintId, printProviderId) => {
     try {
@@ -470,6 +470,10 @@ export function ProductBlueprintProvider({
           setMessage({ type: 'error', text: resp.data.message || 'Failed to create blueprint' });
           setSaving(false);
           return;
+        }
+        // Store the newly created blueprint ID so subsequent saves update instead of creating duplicates
+        if (resp.data.data?.id) {
+          setProjectBlueprintId(resp.data.data.id);
         }
       }
 

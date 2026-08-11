@@ -14,10 +14,11 @@ const Printify = (args) => Api({ ...args, useToken: true }).endpoints(({ api }) 
       api.post(`${apiPath}/fetch-shipping`, { blueprintId, printProviderId }),
     downloadCatalogImage: (blueprintId, index, url) =>
       api.post(`${apiPath}/download-catalog-image`, { blueprintId, index, url }),
-    searchBlueprints: (keyword = '', brand = '', start = 0, length = 20) => {
+    searchBlueprints: (keyword = '', brand = '', start = 0, length = 20, publishedFilter = null) => {
       const params = new URLSearchParams();
       if (keyword) params.append('keyword', keyword);
       if (brand) params.append('brand', brand);
+      if (publishedFilter && publishedFilter !== 'all') params.append('publishedFilter', publishedFilter);
       params.append('start', start);
       params.append('length', length);
       return api.get(`${apiPath}/blueprints?${params.toString()}`);

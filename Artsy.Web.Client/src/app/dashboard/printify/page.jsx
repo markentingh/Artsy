@@ -18,6 +18,7 @@ export default function DashboardPrintify() {
   const [search, setSearch] = useState('');
   const [brand, setBrand] = useState('all');
   const [brands, setBrands] = useState([]);
+  const [publishFilter, setPublishFilter] = useState('all');
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -49,7 +50,7 @@ export default function DashboardPrintify() {
       })
       .catch(() => {});
 
-    handleSearch(savedSearch, savedBrand);
+    handleSearch(savedSearch, savedBrand, 'all');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -70,7 +71,7 @@ export default function DashboardPrintify() {
     return () => window.removeEventListener('resize', updateMaxHeight);
   }, []);
 
-  const handleSearch = useCallback((keyword, brandVal, append = false) => {
+  const handleSearch = useCallback((keyword, brandVal, pfVal, append = false) => {
     if (!append) {
       setSearching(true);
       setSearchInitiated(true);
@@ -79,7 +80,7 @@ export default function DashboardPrintify() {
     }
     setMessage(null);
     const start = append ? results.length : 0;
-    searchBlueprints(keyword, brandVal, start, 20)
+    searchBlueprints(keyword, brandVal, start, 20, pfVal)
       .then((resp) => {
         if (resp.data.success) {
           const newResults = resp.data.data.blueprints || [];
@@ -100,12 +101,12 @@ export default function DashboardPrintify() {
         setSearching(false);
         setLoadingMore(false);
       });
-  }, [searchBlueprints, results.length]);
+  }, [searchBlueprints, results.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleScroll = (e) => {
     const el = e.target;
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 50 && hasMore && !loadingMore) {
-      handleSearch(search, brand, true);
+      handleSearch(search, brand, publishFilter, true);
     }
   };
 
@@ -115,7 +116,7 @@ export default function DashboardPrintify() {
     saveFilter(value, brand);
     if (debounceTimer) clearTimeout(debounceTimer);
     const timer = setTimeout(() => {
-      handleSearch(value, brand);
+      handleSearch(value, brand, publishFilter);
     }, 400);
     setDebounceTimer(timer);
   };
@@ -124,7 +125,13 @@ export default function DashboardPrintify() {
     const value = e.target.value;
     setBrand(value);
     saveFilter(search, value);
-    handleSearch(search, value);
+    handleSearch(search, value, publishFilter);
+  };
+
+  const handlePublishFilterChange = (e) => {
+    const value = e.target.value;
+    setPublishFilter(value);
+    handleSearch(search, brand, value);
   };
 
   const handleBlueprintClick = (bp) => {
@@ -164,13 +171,23 @@ export default function DashboardPrintify() {
             className="flex-1 mb-0"
           />
         </div>
-        <div className="right-side shrink-0">
+        <div className="right-side shrink-0 flex items-center gap-2">
           <Select
             name="printifyBrand"
             placeholder="All brands"
             options={brands.map((b) => ({ value: b, label: b }))}
             value={brand === 'all' ? '' : brand}
             onChange={handleBrandChange}
+            className="mb-0 w-[10em]"
+          />
+          <Select
+            name="printifyPublishFilter"
+            options={[
+              { value: 'all', label: 'All Blueprints' },
+              { value: 'unpublished', label: 'Unpublished Only' },
+            ]}
+            value={publishFilter}
+            onChange={handlePublishFilterChange}
             className="mb-0 w-[10em]"
           />
         </div>
@@ -217,7 +234,7 @@ export default function DashboardPrintify() {
               {hasMore && (
                 <div
                   className="cursor-pointer rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 hover:border-primary-500 transition flex flex-col items-center justify-center"
-                  onClick={() => !loadingMore && handleSearch(search, brand, true)}
+                  onClick={() => !loadingMore && handleSearch(search, brand, publishFilter, true)}
                 >
                   <div className="w-full aspect-square flex items-center justify-center bg-gray-100 dark:bg-gray-700">
                     {loadingMore ? (

@@ -115,7 +115,10 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
 
   // Serialize current settings and compare to loaded JSON to determine dirty state
   const currentOpacityJson = useMemo(() => {
-    if (!chromaKeys || chromaKeys.length === 0) return 'null';
+    const hasChromaKeys = chromaKeys && chromaKeys.length > 0;
+    const hasBackground = !!opacityBackground;
+    const hasOverlay = !!opacityOverlay;
+    if (!hasChromaKeys && !hasBackground && !hasOverlay) return 'null';
     return JSON.stringify({ chromakeys: chromaKeys, fuziness: fuzziness, background: opacityBackground || undefined, overlay: opacityOverlay || undefined });
   }, [chromaKeys, fuzziness, opacityBackground, opacityOverlay]);
   const opacityDirty = currentOpacityJson !== loadedOpacityJson;
@@ -854,7 +857,10 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   // Opacity Mask handlers
   const saveOpacity = useCallback(async () => {
     if (!item) return;
-    const opacityJson = chromaKeys.length > 0
+    const hasChromaKeys = chromaKeys && chromaKeys.length > 0;
+    const hasBackground = !!opacityBackground;
+    const hasOverlay = !!opacityOverlay;
+    const opacityJson = (hasChromaKeys || hasBackground || hasOverlay)
       ? JSON.stringify({ chromakeys: chromaKeys, fuziness: fuzziness, background: opacityBackground || undefined, overlay: opacityOverlay || undefined })
       : null;
     try {
