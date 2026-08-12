@@ -383,7 +383,7 @@ namespace Artsy.API.Controllers
         {
             try
             {
-                var client = _httpClientFactory.CreateClient();
+                var client = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
 
                 var fields = new Dictionary<string, string>
                 {
@@ -433,7 +433,7 @@ namespace Artsy.API.Controllers
         {
             try
             {
-                var client = _httpClientFactory.CreateClient();
+                var client = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
 
                 var content = new FormUrlEncodedContent(new Dictionary<string, string>
                 {
@@ -472,7 +472,7 @@ namespace Artsy.API.Controllers
 
         private async Task<bool> WaitForMediaReady(AppUserInstagramAccount account, string containerId, int maxAttempts = 10, int delayMs = 3000)
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
             for (var i = 0; i < maxAttempts; i++)
             {
                 await Task.Delay(delayMs);
@@ -494,7 +494,7 @@ namespace Artsy.API.Controllers
         {
             try
             {
-                var client = _httpClientFactory.CreateClient();
+                var client = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
 
                 var content = new FormUrlEncodedContent(new Dictionary<string, string>
                 {
@@ -526,7 +526,7 @@ namespace Artsy.API.Controllers
         {
             try
             {
-                var client = _httpClientFactory.CreateClient();
+                var client = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
                 var url = $"https://graph.instagram.com/{mediaId}?fields=permalink&access_token={Uri.EscapeDataString(account.MetaAccessToken)}";
                 var response = await client.GetAsync(url);
                 var json = await response.Content.ReadAsStringAsync();
@@ -542,7 +542,7 @@ namespace Artsy.API.Controllers
 
         private async Task<(string access_token, string refresh_token, int expires_in)> ExchangeCodeForToken(string code)
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
             var url = $"https://api.instagram.com/oauth/access_token";
             var content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
@@ -599,7 +599,7 @@ namespace Artsy.API.Controllers
 
         private async Task<(string userId, string instagramBusinessAccountId, string username, string profilePictureUrl)> GetAccountInfo(string accessToken)
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
             var url = $"https://graph.instagram.com/me?fields=id,username,profile_picture_url&access_token={Uri.EscapeDataString(accessToken)}";
             var response = await client.GetAsync(url);
             var json = await response.Content.ReadAsStringAsync();
@@ -613,3 +613,4 @@ namespace Artsy.API.Controllers
         }
     }
 }
+

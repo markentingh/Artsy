@@ -71,7 +71,7 @@ export default function CarouselElements({ elements, gap = 16, className = '' })
       <div ref={containerRef} className="overflow-hidden">
         <div
           ref={trackRef}
-          className="flex transition-transform duration-300 ease-in-out"
+          className="flex transition-transform duration-300 ease-in-out min-w-full justify-start"
           style={{ transform: `translateX(-${slideOffset}px)`, gap: `${gap}px` }}
         >
           {elements.map((el, i) => (

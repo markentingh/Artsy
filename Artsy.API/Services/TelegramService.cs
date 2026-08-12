@@ -87,7 +87,7 @@ namespace Artsy.API.Services
 
         private async Task Post(string method, object payload)
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
             var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
             var response = await client.PostAsync($"{BaseUrl}{ConnectionSettings.TelegramBotToken}/{method}", content);
             response.EnsureSuccessStatusCode();

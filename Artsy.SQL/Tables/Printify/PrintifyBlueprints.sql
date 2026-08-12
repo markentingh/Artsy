@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS public."PrintifyBlueprints"
     "Brand" VARCHAR(128) NOT NULL DEFAULT '',
     "Model" VARCHAR(128) NOT NULL DEFAULT '',
     "ImageCount" INT NOT NULL DEFAULT 0,
+    "ImagesDownloaded" INT NOT NULL DEFAULT 0,
     "Published" BOOLEAN NOT NULL DEFAULT FALSE,
     "ImagePrompt" TEXT NOT NULL DEFAULT '',
     "DateCreated" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -14,6 +15,8 @@ CREATE TABLE IF NOT EXISTS public."PrintifyBlueprints"
 
 ALTER TABLE public."PrintifyBlueprints" ADD COLUMN IF NOT EXISTS "Published" BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE public."PrintifyBlueprints" ADD COLUMN IF NOT EXISTS "ImagePrompt" TEXT NOT NULL DEFAULT '';
+ALTER TABLE public."PrintifyBlueprints" ADD COLUMN IF NOT EXISTS "Status" INT NOT NULL DEFAULT 1;
+ALTER TABLE public."PrintifyBlueprints" ADD COLUMN IF NOT EXISTS "ImagesDownloaded" INT NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS idx_printify_blueprints_brand ON public."PrintifyBlueprints" ("Brand");
 CREATE INDEX IF NOT EXISTS idx_printify_blueprints_title ON public."PrintifyBlueprints" ("Title");

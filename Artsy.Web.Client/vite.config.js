@@ -59,6 +59,11 @@ export default defineConfig(({ mode }) => {
                 '^/printify': {
                     target,
                     secure: false
+                },
+                '^/hubs': {
+                    target,
+                    secure: false,
+                    ws: true
                 }
             },
             port: port,

@@ -16,6 +16,7 @@ namespace Artsy.API.Services
         Task DeleteProjectItemPreviewAsync(Guid projectId, Guid itemId, Guid previewId);
         Task SavePrintifyCatalogImageAsync(int blueprintId, int imageIndex, byte[] imageData);
         Task<byte[]> GetPrintifyCatalogImageAsync(int blueprintId, int imageIndex, bool thumb = false);
+        Task<int> CountPrintifyCatalogImagesAsync(int blueprintId);
         Task SaveProjectItemReferenceAsync(Guid projectId, Guid referenceId, string extension, byte[] imageData);
         Task<byte[]> GetProjectItemReferenceAsync(Guid projectId, Guid referenceId, string extension, bool thumb = false);
         Task DeleteProjectItemReferenceAsync(Guid projectId, Guid referenceId, string extension);
@@ -203,6 +204,37 @@ namespace Artsy.API.Services
                 }
             }
             return fileBytes;
+        }
+
+        public async Task<int> CountPrintifyCatalogImagesAsync(int blueprintId)
+        {
+            var basePath = Path.Combine("Printify", "catalog", blueprintId.ToString());
+            if (_activeStorage == "azure")
+            {
+                var connectionString = _configuration["Storage:AzureBlob:ConnectionString"];
+                var containerName = _configuration["Storage:AzureBlob:ContainerName"];
+                if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(containerName))
+                    return 0;
+
+                var blobServiceClient = new BlobServiceClient(connectionString);
+                var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
+                var prefix = basePath.Replace("\\", "/") + "/";
+                int count = 0;
+                await foreach (var blob in containerClient.GetBlobsAsync(prefix: prefix))
+                {
+                    var name = blob.Name;
+                    if (name.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) && !name.EndsWith("_thumb.jpg", StringComparison.OrdinalIgnoreCase))
+                        count++;
+                }
+                return count;
+            }
+
+            var dir = Path.Combine(_environment.ContentRootPath, "Content", basePath);
+            if (!Directory.Exists(dir))
+                return 0;
+
+            var files = Directory.GetFiles(dir, "*.jpg");
+            return files.Count(f => !f.EndsWith("_thumb.jpg", StringComparison.OrdinalIgnoreCase));
         }
 
         async Task<byte[]> GenerateThumbnailAsync(byte[] imageData, int size = 350)

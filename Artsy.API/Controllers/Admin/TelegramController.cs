@@ -55,7 +55,7 @@ namespace Artsy.API.Controllers.Admin
 
             try
             {
-                var client = _httpClientFactory.CreateClient();
+                var client = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
                 var response = await client.GetAsync($"https://api.telegram.org/bot{ConnectionSettings.TelegramBotToken}/setWebhook?url={Uri.EscapeDataString(request.Url)}");
                 var json = await response.Content.ReadAsStringAsync();
                 var result = JsonSerializer.Deserialize<TelegramApiResponse>(json);
@@ -73,7 +73,7 @@ namespace Artsy.API.Controllers.Admin
 
         private async Task<TelegramWebhookInfoResponse?> GetWebhookInfoFromTelegram()
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
             var response = await client.GetAsync($"https://api.telegram.org/bot{ConnectionSettings.TelegramBotToken}/getWebhookInfo");
             var json = await response.Content.ReadAsStringAsync();
             return JsonSerializer.Deserialize<TelegramWebhookInfoResponse>(json);

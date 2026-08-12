@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Artsy.AI", "Artsy.AI\Artsy.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Artsy.Upscaler", "Artsy.Upscaler\Artsy.Upscaler.csproj", "{8B7F1C2D-3E4F-4A5B-9C6D-7E8F9A0B1C2E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Artsy.PrintifyScraper", "Artsy.PrintifyScraper\Artsy.PrintifyScraper.csproj", "{53F94747-DF7F-434C-9B47-0FA3EC8E7DFF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -109,6 +111,18 @@ Global
 		{8B7F1C2D-3E4F-4A5B-9C6D-7E8F9A0B1C2E}.Release|x64.Build.0 = Release|Any CPU
 		{8B7F1C2D-3E4F-4A5B-9C6D-7E8F9A0B1C2E}.Release|x86.ActiveCfg = Release|Any CPU
 		{8B7F1C2D-3E4F-4A5B-9C6D-7E8F9A0B1C2E}.Release|x86.Build.0 = Release|Any CPU
+		{53F94747-DF7F-434C-9B47-0FA3EC8E7DFF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{53F94747-DF7F-434C-9B47-0FA3EC8E7DFF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{53F94747-DF7F-434C-9B47-0FA3EC8E7DFF}.Debug|x64.ActiveCfg = Debug|x64
+		{53F94747-DF7F-434C-9B47-0FA3EC8E7DFF}.Debug|x64.Build.0 = Debug|x64
+		{53F94747-DF7F-434C-9B47-0FA3EC8E7DFF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{53F94747-DF7F-434C-9B47-0FA3EC8E7DFF}.Debug|x86.Build.0 = Debug|Any CPU
+		{53F94747-DF7F-434C-9B47-0FA3EC8E7DFF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{53F94747-DF7F-434C-9B47-0FA3EC8E7DFF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{53F94747-DF7F-434C-9B47-0FA3EC8E7DFF}.Release|x64.ActiveCfg = Release|x64
+		{53F94747-DF7F-434C-9B47-0FA3EC8E7DFF}.Release|x64.Build.0 = Release|x64
+		{53F94747-DF7F-434C-9B47-0FA3EC8E7DFF}.Release|x86.ActiveCfg = Release|Any CPU
+		{53F94747-DF7F-434C-9B47-0FA3EC8E7DFF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

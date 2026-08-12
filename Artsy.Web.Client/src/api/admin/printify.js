@@ -4,8 +4,10 @@ const Printify = (args) => Api({ ...args, useToken: true }).endpoints(({ api }) 
   const apiPath = '/api/admin/printify';
   return {
     getCatalogCount: () => api.get(`${apiPath}/catalog-count`),
-    refreshCatalog: (allVariants = false) =>
-      api.post(`${apiPath}/refresh-catalog`, { allVariants }),
+    refreshCatalog: (allVariants = false, productImages = false) =>
+      api.post(`${apiPath}/refresh-catalog`, { allVariants, productImages }),
+    downloadBlueprintImages: (blueprintId) =>
+      api.post(`${apiPath}/download-blueprint-images?id=${blueprintId}`),
     fetchPrintProviders: (blueprintId) =>
       api.post(`${apiPath}/fetch-print-providers`, { blueprintId }),
     fetchVariants: (blueprintId, printProviderId) =>
@@ -35,6 +37,10 @@ const Printify = (args) => Api({ ...args, useToken: true }).endpoints(({ api }) 
       api.post(`${apiPath}/blueprints/${blueprintId}/images`, data),
     convertVariants: () =>
       api.post(`${apiPath}/convert-variants`),
+    loadVariantOptions: () =>
+      api.post(`${apiPath}/load-variant-options`),
+    getVariantOptionKeys: () =>
+      api.get(`${apiPath}/variant-option-keys`),
   };
 });
 

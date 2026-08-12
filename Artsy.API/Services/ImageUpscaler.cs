@@ -49,3 +49,4 @@ public class ImageUpscaler : IImageUpscaler
         return resultBytes;
     }
 }
+

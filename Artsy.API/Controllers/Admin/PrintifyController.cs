@@ -47,11 +47,8 @@ namespace Artsy.API.Controllers.Admin
 
         private HttpClient CreatePrintifyClient()
         {
-            var client = _httpClientFactory.CreateClient();
             var token = ConnectionSettings.PrintifyApiToken;
-            if (!string.IsNullOrEmpty(token))
-                client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-            return client;
+            return IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory, token);
         }
 
         [HttpGet("catalog-count")]
@@ -74,6 +71,7 @@ namespace Artsy.API.Controllers.Admin
             try
             {
                 var allVariants = body.TryGetProperty("allVariants", out var av) && av.GetBoolean();
+                var productImages = body.TryGetProperty("productImages", out var pi) && pi.GetBoolean();
 
                 using var client = CreatePrintifyClient();
                 var response = await client.GetAsync("https://api.printify.com/v1/catalog/blueprints.json");
@@ -85,7 +83,7 @@ namespace Artsy.API.Controllers.Admin
 
                 var bpEntities = new List<PrintifyBlueprint>();
                 var blueprintIds = new List<int>();
-                var imagesToDownload = new List<object>();
+                var blueprintImageCounts = new Dictionary<int, int>();
 
                 foreach (var bp in blueprints)
                 {
@@ -105,18 +103,17 @@ namespace Artsy.API.Controllers.Admin
                     });
 
                     blueprintIds.Add(blueprintId);
-
-                    for (int i = 0; i < images.Length; i++)
-                    {
-                        if (!string.IsNullOrEmpty(images[i]))
-                            imagesToDownload.Add(new { blueprintId, index = i, url = images[i] });
-                    }
+                    blueprintImageCounts[blueprintId] = images.Length;
                 }
-
-                await _printifyBlueprintRepo.UpsertBatchAsync(bpEntities);
 
                 var existingIds = await _printifyBlueprintRepo.GetAllBlueprintIdsAsync();
                 var existingSet = new HashSet<int>(existingIds);
+
+                var missingIds = existingSet.Except(blueprintIds).ToList();
+                if (missingIds.Count > 0)
+                    await _printifyBlueprintRepo.SetMissingStatusAsync(missingIds, 0);
+
+                await _printifyBlueprintRepo.UpsertBatchAsync(bpEntities);
 
                 List<int> newBlueprints;
                 List<int> existingBlueprints;
@@ -132,7 +129,25 @@ namespace Artsy.API.Controllers.Admin
                     existingBlueprints = new List<int>();
                 }
 
-                return Json(new ApiResponse { success = true, data = new { count = bpEntities.Count, newBlueprints, existingBlueprints, images = imagesToDownload } });
+                var imagesToDownload = new List<int>();
+                if (productImages)
+                {
+                    var imageInfo = (await _printifyBlueprintRepo.GetAllBlueprintsImageInfoAsync()).ToList();
+                    var imageInfoById = imageInfo.ToDictionary(i => i.BlueprintId, i => i);
+                    imagesToDownload = bpEntities
+                        .Where(bp =>
+                        {
+                            var imagesDownloaded = imageInfoById.TryGetValue(bp.BlueprintId, out var info) ? info.ImagesDownloaded : 0;
+                            return imagesDownloaded < bp.ImageCount;
+                        })
+                        .OrderBy(bp => imageInfoById.ContainsKey(bp.BlueprintId))
+                        .ThenByDescending(bp => imageInfoById.TryGetValue(bp.BlueprintId, out var info) ? info.DateCreated : DateTime.MinValue)
+                        .Select(bp => bp.BlueprintId)
+                        .Distinct()
+                        .ToList();
+                }
+
+                return Json(new ApiResponse { success = true, data = new { count = bpEntities.Count, newBlueprints, existingBlueprints, retired = missingIds, images = imagesToDownload } });
             }
             catch (Exception ex)
             {
@@ -201,6 +216,11 @@ namespace Artsy.API.Controllers.Admin
 
                 using var client = CreatePrintifyClient();
                 var response = await client.GetAsync($"https://api.printify.com/v1/catalog/blueprints/{blueprintId}/print_providers/{printProviderId}/variants.json?show-out-of-stock=1");
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    await _printifyBlueprintRepo.UpdateStatusAsync(blueprintId, 0);
+                    return Json(new ApiResponse { success = false, message = $"Blueprint {blueprintId} not found (404); marked as archived." });
+                }
                 if (!response.IsSuccessStatusCode)
                     return Json(new ApiResponse { success = false, message = $"Printify API error: {response.StatusCode}" });
 
@@ -216,6 +236,27 @@ namespace Artsy.API.Controllers.Admin
                     {
                         var variantId = v.TryGetProperty("id", out var vid) ? vid.GetInt32() : 0;
                         var options = v.TryGetProperty("options", out var opt) ? JsonSerializer.Serialize(opt) : "{}";
+
+                        // Parse color and size from options JSON
+                        var color = "";
+                        var size = "";
+                        if (v.TryGetProperty("options", out var optEl) && optEl.ValueKind == JsonValueKind.Object)
+                        {
+                            if (optEl.TryGetProperty("color", out var colorEl))
+                                color = colorEl.GetString() ?? "";
+                            if (string.IsNullOrEmpty(color) && optEl.TryGetProperty("finish", out var finishEl))
+                                color = finishEl.GetString() ?? "";
+                            if (optEl.TryGetProperty("size", out var sizeEl))
+                                size = sizeEl.GetString() ?? "";
+                        }
+
+                        // If no color/finish in options, fall back to variant title; if title matches size, use "Default"
+                        if (string.IsNullOrEmpty(color))
+                        {
+                            var title = v.TryGetProperty("title", out var vt) ? vt.GetString() ?? "" : "";
+                            color = string.Equals(title, size, StringComparison.OrdinalIgnoreCase) ? "Default" : title;
+                        }
+
                         var vDecorationMethods = v.TryGetProperty("decoration_methods", out var vdm)
                             ? JsonSerializer.Serialize(vdm.EnumerateArray().Select(d => d.GetString() ?? "").ToArray())
                             : "[]";
@@ -225,7 +266,8 @@ namespace Artsy.API.Controllers.Admin
                             VariantId = variantId,
                             BlueprintId = blueprintId,
                             PrintProviderId = printProviderId,
-                            Color = v.TryGetProperty("title", out var vt) ? vt.GetString() ?? "" : "",
+                            Color = color,
+                            Size = size,
                             Options = options,
                             DecorationMethods = vDecorationMethods
                         });
@@ -322,7 +364,7 @@ namespace Artsy.API.Controllers.Admin
                 if (existing.Length > 0)
                     return Json(new ApiResponse { success = true, data = new { downloaded = false } });
 
-                using var client = _httpClientFactory.CreateClient();
+                using var client = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
                 var imageBytes = await client.GetByteArrayAsync(url);
                 await _imageService.SavePrintifyCatalogImageAsync(blueprintId, index, imageBytes);
 
@@ -347,7 +389,8 @@ namespace Artsy.API.Controllers.Admin
                     "published" => true,
                     _ => null
                 };
-                var results = await _printifyBlueprintRepo.SearchAsync(kw, br, start, length, published);
+                var sort = publishedFilter?.ToLowerInvariant() is "newest" or "oldest" ? publishedFilter.ToLowerInvariant() : null;
+                var results = await _printifyBlueprintRepo.SearchAsync(kw, br, start, length, published, sort);
                 var total = await _printifyBlueprintRepo.GetCountAsync(kw, br, published);
 
                 return Json(new ApiResponse
@@ -478,6 +521,7 @@ namespace Artsy.API.Controllers.Admin
                 {
                     id = v.VariantId,
                     color = v.Color,
+                    hexColor = v.HexColor,
                     size = v.Size ?? "",
                     placeholders = allPlaceholders.TryGetValue(v.VariantId, out var phs) ? phs : new List<object>(),
                     decoration_methods = JsonSerializer.Deserialize<string[]>(v.DecorationMethods) ?? Array.Empty<string>()
@@ -592,8 +636,105 @@ namespace Artsy.API.Controllers.Admin
         {
             try
             {
-                var updated = await _variantRepo.ConvertVariantsAsync();
+                // Return the list of (BlueprintId, PrintProviderId) pairs that have empty Color
+                var pairs = await _variantRepo.GetDistinctBlueprintProvidersWithEmptyColorOrSizeAsync();
+                var pairList = pairs.ToList();
+
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = new
+                    {
+                        pairs = pairList.Select(p => new { blueprintId = p.BlueprintId, printProviderId = p.PrintProviderId }),
+                        total = pairList.Count
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("variant-option-keys")]
+        public async Task<IActionResult> GetVariantOptionKeys()
+        {
+            try
+            {
+                var (keys, maxKeys) = await _variantRepo.GetDistinctOptionKeysAsync();
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = new
+                    {
+                        maxKeys,
+                        keys = keys.Select(k => new { key = k.Key, maxCount = k.MaxCount })
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("load-variant-options")]
+        public async Task<IActionResult> LoadVariantOptions()
+        {
+            try
+            {
+                var updated = await _variantRepo.LoadVariantOptionsAsync();
                 return Json(new ApiResponse { success = true, data = new { updated } });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("download-blueprint-images")]
+        public async Task<IActionResult> DownloadBlueprintImages([FromQuery] int id)
+        {
+            try
+            {
+                if (id == 0)
+                    return Json(new ApiResponse { success = false, message = "Missing blueprint id" });
+
+                using var client = CreatePrintifyClient();
+                var response = await client.GetAsync($"https://api.printify.com/v1/catalog/blueprints/{id}.json");
+                if (!response.IsSuccessStatusCode)
+                    return Json(new ApiResponse { success = false, message = $"Printify API error: {response.StatusCode}" });
+
+                var json = await response.Content.ReadAsStringAsync();
+                var bp = JsonSerializer.Deserialize<JsonElement>(json);
+
+                var images = bp.ValueKind == JsonValueKind.Array && bp.GetArrayLength() > 0
+                    ? bp[0].TryGetProperty("images", out var imgEl)
+                        ? imgEl.EnumerateArray().Select(i => i.GetString() ?? "").Where(u => !string.IsNullOrEmpty(u)).ToList()
+                        : new List<string>()
+                    : bp.TryGetProperty("images", out var imgEl2)
+                        ? imgEl2.EnumerateArray().Select(i => i.GetString() ?? "").Where(u => !string.IsNullOrEmpty(u)).ToList()
+                        : new List<string>();
+
+                var existingCount = await _imageService.CountPrintifyCatalogImagesAsync(id);
+                if (existingCount >= images.Count)
+                {
+                    await _printifyBlueprintRepo.UpdateImagesDownloadedAsync(id, images.Count);
+                    return Json(new ApiResponse { success = true, data = new { downloaded = 0, skipped = true } });
+                }
+
+                using var imageClient = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
+                int downloaded = 0;
+                for (int i = 0; i < images.Count; i++)
+                {
+                    var imageBytes = await imageClient.GetByteArrayAsync(images[i]);
+                    await _imageService.SavePrintifyCatalogImageAsync(id, i, imageBytes);
+                    downloaded++;
+                }
+
+                await _printifyBlueprintRepo.UpdateImagesDownloadedAsync(id, images.Count);
+
+                return Json(new ApiResponse { success = true, data = new { downloaded } });
             }
             catch (Exception ex)
             {

@@ -22,6 +22,7 @@ export default function ImagesTab() {
         colorMap.set(color, {
           value: color,
           label: color,
+          hexColor: v.hexColor,
           note: allOutOfStock ? { text: 'Out of Stock', type: 'red' } : null,
         });
       }

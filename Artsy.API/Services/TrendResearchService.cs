@@ -38,7 +38,7 @@ namespace Artsy.API.Services
             if (string.IsNullOrEmpty(apiKey))
                 throw new InvalidOperationException("SerpApi key is not configured.");
 
-            var client = _httpClientFactory.CreateClient();
+            var client = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
             var url = $"https://serpapi.com/search.json?engine=google_trends&q={Uri.EscapeDataString(seedKeyword)}&data_type=RELATED_QUERIES&date=now+1-m&api_key={apiKey}";
 
             var response = await client.GetAsync(url);
@@ -80,7 +80,7 @@ namespace Artsy.API.Services
             if (string.IsNullOrEmpty(apiKey))
                 return new List<int>();
 
-            var client = _httpClientFactory.CreateClient();
+            var client = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
             var url = $"https://serpapi.com/search.json?engine=google_trends&q={Uri.EscapeDataString(keyword)}&data_type=TIMESERIES&date=now+1-m&api_key={apiKey}";
 
             var response = await client.GetAsync(url);
@@ -106,7 +106,7 @@ namespace Artsy.API.Services
             if (string.IsNullOrEmpty(apiKey))
                 throw new InvalidOperationException("Etsy keystring is not configured.");
 
-            var client = _httpClientFactory.CreateClient();
+            var client = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
             client.DefaultRequestHeaders.Add("x-api-key", apiKey);
 
             var encodedKeyword = Uri.EscapeDataString(keyword);
@@ -125,3 +125,4 @@ namespace Artsy.API.Services
         }
     }
 }
+

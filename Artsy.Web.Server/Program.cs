@@ -4,6 +4,7 @@ using System.Text.Json;
 using Artsy.API.Services;
 using Artsy.Auth.Services;
 using Artsy.Data.Interfaces;
+using Artsy.PrintifyScraper.Services;
 using Microsoft.AspNetCore.StaticFiles;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -33,7 +34,10 @@ builder.Services.AddTransient<Artsy.API.Services.IImageUpscaler, Artsy.API.Servi
 builder.Services.AddTransient<Artsy.API.Services.IImageTokens>(sp => new Artsy.API.Services.ImageTokensForOpenAI(0m, 0m, 0m));
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHealthChecks();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    options.MaximumParallelInvocationsPerClient = 5;
+});
 
 builder.Services.AddControllers()
     .AddApplicationPart(Assembly.Load("Artsy.API"))
@@ -54,6 +58,7 @@ builder.Services.AddScoped<Artsy.API.Services.IOpacityService, Artsy.API.Service
 builder.Services.AddScoped<Artsy.API.Services.ITrendResearchService, Artsy.API.Services.TrendResearchService>();
 builder.Services.AddScoped<Artsy.API.Services.IPrintifyService, Artsy.API.Services.PrintifyService>();
 builder.Services.AddScoped<Artsy.API.Services.IAITokenService, Artsy.API.Services.AITokenService>();
+builder.Services.AddSingleton<IPrintifyScraperService, PrintifyScraperService>();
 
 builder.Services.AddSwaggerGen(e =>
 {
@@ -159,6 +164,7 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.MapControllers();
 app.MapHub<Artsy.API.Hubs.TrendResearchHub>("/hubs/trend-research");
+app.MapHub<Artsy.API.Hubs.PrintifyScraperHub>("/hubs/printify-scraper");
 app.MapFallbackToFile("index.html");
 
 Console.WriteLine(

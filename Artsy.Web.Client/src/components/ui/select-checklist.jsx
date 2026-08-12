@@ -65,8 +65,12 @@ export default function SelectChecklist({
       const cbHtml = checkboxesRef.current
         ? `<input type="checkbox" ${checked ? 'checked' : ''} class="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 select-checklist-cb" />`
         : '';
+      const colorHtml = option.hexColor
+        ? `<span class="flex items-center gap-1 mr-2">${option.hexColor.split(',').map((h) => h.trim() ? `<span class="w-5 h-5 rounded-full border border-gray-300 dark:border-gray-600" style="background-color: #${h.trim()}; flex-shrink: 0;"></span>` : '').join('')}</span>`
+        : '';
       return `<label class="flex items-center gap-2 px-3 py-2 ${checkboxesRef.current ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}" data-value="${option.value}">
         ${cbHtml}
+        ${colorHtml}
         <span class="text-sm">${escapedLabel}</span>
         ${noteHtml}
       </label>`;

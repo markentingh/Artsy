@@ -331,6 +331,7 @@ namespace Artsy.API.Controllers
                 {
                     id = v.VariantId,
                     color = v.Color,
+                    hexColor = v.HexColor,
                     size = v.Size ?? "",
                     placeholders = allPlaceholders.TryGetValue(v.VariantId, out var phs) ? phs : new List<object>(),
                     decoration_methods = JsonSerializer.Deserialize<string[]>(v.DecorationMethods) ?? Array.Empty<string>()

@@ -1,15 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useSession } from '@/context/session';
 import { Telegram } from '@/api/admin/telegram';
 import { Printify } from '@/api/admin/printify';
+import { createPrintifyScraperHubConnection } from '@/api/admin/printifyScraper';
 import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';
 import Button from '@/components/ui/button';
+import ButtonOutline from '@/components/ui/button-outline';
+import List, { Item } from '@/components/ui/list';
+import Tooltip from '@/components/ui/tooltip';
+import CarouselElements from '@/components/ui/carousel-elements';
+import ProductImagePreview from '@/app/dashboard/project/components/ProductImagePreview';
+import ConfigurePrintifyBlueprint from '@/app/dashboard/printify/components/ConfigurePrintifyBlueprint';
+import { TYPE_OPTIONS } from '@/context/printifyBlueprint';
 
 export default function DashboardServices() {
   const session = useSession();
   const { getWebhookInfo, setWebhook } = Telegram(session);
-  const { getCatalogCount, refreshCatalog, fetchPrintProviders, fetchVariants, fetchShipping, downloadCatalogImage, convertVariants, convertImageVariants } = Printify(session);
+  const { getCatalogCount, refreshCatalog, fetchPrintProviders, fetchVariants, fetchShipping, downloadCatalogImage, downloadBlueprintImages, convertVariants, convertImageVariants, getBlueprintImageUrl, getBlueprintImages, getVariantOptionKeys, loadVariantOptions } = Printify(session);
 
   const [webhookUrl, setWebhookUrl] = useState('');
   const [maxConnections, setMaxConnections] = useState(0);
@@ -26,6 +34,25 @@ export default function DashboardServices() {
   const [allVariants, setAllVariants] = useState(false);
   const [productImages, setProductImages] = useState(false);
   const [catalogAction, setCatalogAction] = useState('refresh');
+  const [convertProgress, setConvertProgress] = useState(null);
+  const [variantOptionKeys, setVariantOptionKeys] = useState(null);
+  const [maxOptionKeys, setMaxOptionKeys] = useState(null);
+
+  // Printify Scraper state
+  const scraperHubRef = useRef(null);
+  const [scraperRunning, setScraperRunning] = useState(false);
+  const [scraperStatus, setScraperStatus] = useState('');
+  const [scraperProgress, setScraperProgress] = useState(null);
+  const [scraperPanel, setScraperPanel] = useState(null);
+  const [scraperError, setScraperError] = useState(null);
+  const [selectedColors, setSelectedColors] = useState({});
+  const [selectedType, setSelectedType] = useState(String(0));
+  const [selectedPosition, setSelectedPosition] = useState('1');
+  const [blueprintImageVariantMap, setBlueprintImageVariantMap] = useState({});
+  const [configureBlueprintId, setConfigureBlueprintId] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const currentImageRef = useRef(null);
 
   const fetchWebhookInfo = async () => {
     try {
@@ -50,6 +77,22 @@ export default function DashboardServices() {
     fetchCatalogCount();
   }, []);
 
+  useEffect(() => {
+    if (!scraperPanel?.blueprintId) {
+      setBlueprintImageVariantMap({});
+      return;
+    }
+    getBlueprintImages(scraperPanel.blueprintId).then((resp) => {
+      if (resp.data?.success) {
+        const map = {};
+        (resp.data.data || []).forEach((img) => {
+          map[img.imageIndex] = img.variantColors || [];
+        });
+        setBlueprintImageVariantMap(map);
+      }
+    });
+  }, [scraperPanel?.blueprintId]);
+
   const fetchCatalogCount = async () => {
     try {
       const response = await getCatalogCount();
@@ -72,15 +115,46 @@ export default function DashboardServices() {
 
     if (catalogAction === 'convertVariants') {
       try {
+        setConvertProgress({ current: 0, total: 0 });
+        // 1. Get the list of (blueprintId, printProviderId) pairs with empty Color
         const resp = await convertVariants();
-        if (resp.data.success)
-          setMessage({ type: 'success', text: `Converted ${resp.data.data.updated} variants.` });
-        else
-          setMessage({ type: 'error', text: resp.data.message || 'Failed to convert variants' });
+        if (!resp.data.success) {
+          setMessage({ type: 'error', text: resp.data.message || 'Failed to get variant pairs' });
+          setRefreshing(false);
+          setConvertProgress(null);
+          return;
+        }
+
+        const pairs = resp.data.data.pairs || [];
+        const total = pairs.length;
+        setConvertProgress({ current: 0, total });
+
+        if (total === 0) {
+          setMessage({ type: 'success', text: 'No variants with empty colors found.' });
+          setRefreshing(false);
+          setConvertProgress(null);
+          return;
+        }
+
+        // 2. Loop through pairs and call fetchVariants for each
+        let completed = 0;
+        let errors = 0;
+        for (const pair of pairs) {
+          try {
+            await fetchVariants(pair.blueprintId, pair.printProviderId);
+          } catch {
+            errors++;
+          }
+          completed++;
+          setConvertProgress({ current: completed, total });
+        }
+
+        setMessage({ type: 'success', text: `Fetched variants from ${completed}/${total} providers.${errors > 0 ? ` (${errors} errors)` : ''}` });
       } catch (error) {
         setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to convert variants' });
       } finally {
         setRefreshing(false);
+        setConvertProgress(null);
       }
       return;
     }
@@ -100,15 +174,50 @@ export default function DashboardServices() {
       return;
     }
 
+    if (catalogAction === 'getVariantOptions') {
+      try {
+        const resp = await getVariantOptionKeys();
+        if (resp.data.success) {
+          setVariantOptionKeys(resp.data.data.keys || []);
+          setMaxOptionKeys(resp.data.data.maxKeys ?? null);
+          setMessage({ type: 'success', text: `Found ${(resp.data.data.keys || []).length} distinct option keys.` });
+        } else {
+          setMessage({ type: 'error', text: resp.data.message || 'Failed to get variant option keys' });
+        }
+      } catch (error) {
+        setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to get variant option keys' });
+      } finally {
+        setRefreshing(false);
+      }
+      return;
+    }
+
+    if (catalogAction === 'loadVariantOptions') {
+      try {
+        const resp = await loadVariantOptions();
+        if (resp.data.success) {
+          setMessage({ type: 'success', text: `Loaded options into ${resp.data.data.updated} variants.` });
+        } else {
+          setMessage({ type: 'error', text: resp.data.message || 'Failed to load variant options' });
+        }
+      } catch (error) {
+        setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load variant options' });
+      } finally {
+        setRefreshing(false);
+      }
+      return;
+    }
+
     const isAllVariants = catalogAction === 'allVariants';
     try {
-      const response = await refreshCatalog(isAllVariants);
+      const response = await refreshCatalog(isAllVariants, productImages);
       if (!response.data.success) {
         setMessage({ type: 'error', text: response.data.message || 'Failed to refresh catalog' });
         return;
       }
 
-      const { count, newBlueprints: newBps, existingBlueprints: existingBps, images: imgList } = response.data.data;
+      const { count, newBlueprints: newBps, existingBlueprints: existingBps, retired: retiredIds, images: imgList } = response.data.data;
+      const retired = retiredIds || [];
       setCatalogCount(count);
 
       const newBpList = newBps || [];
@@ -120,6 +229,8 @@ export default function DashboardServices() {
       let shippingDone = 0;
       let imagesDownloaded = 0;
       let imagesSkipped = 0;
+      let imagesDone = 0;
+      const imagesTotal = imgs.length;
 
       const updateProgress = (phase, detail) => {
         setProgress({
@@ -128,7 +239,7 @@ export default function DashboardServices() {
           blueprints: { done: providersDone, total: allBps.length },
           variants: { done: variantsDone },
           shipping: { done: shippingDone },
-          images: { downloaded: imagesDownloaded, skipped: imagesSkipped, total: imgs.length },
+          images: { downloaded: imagesDone, skipped: imagesSkipped, total: imagesTotal },
         });
       };
 
@@ -195,17 +306,23 @@ export default function DashboardServices() {
         await processVariantsOnly(existingBpList[i], newBpList.length + i, allBps.length);
       }
 
+      setMessage({
+        type: 'info',
+        text: `Catalog refreshed. ${count} blueprints, ${newBpList.length} new, ${existingBpList.length} existing, ${retired.length} retired.`,
+      });
+
       if (productImages) {
         for (let i = 0; i < imgs.length; i++) {
-          const img = imgs[i];
-          updateProgress('images', `Image ${i + 1}/${imgs.length}`);
+          const blueprintId = imgs[i];
           try {
-            const dlResp = await downloadCatalogImage(img.blueprintId, img.index, img.url);
+            const dlResp = await downloadBlueprintImages(blueprintId);
             if (dlResp.data.success) {
-              if (dlResp.data.data.downloaded) imagesDownloaded++;
-              else imagesSkipped++;
+              imagesDownloaded += dlResp.data.data.downloaded || 0;
+              if (dlResp.data.data.skipped) imagesSkipped++;
             }
           } catch {}
+          imagesDone++;
+          updateProgress('images', `Image ${imagesDownloaded}`);
         }
       }
 
@@ -213,12 +330,203 @@ export default function DashboardServices() {
       setProgress((prev) => ({ ...prev, done: true }));
       setMessage({
         type: 'success',
-        text: `Catalog refreshed. ${count} blueprints, ${providersDone} provider sets, ${variantsDone} variant sets, ${shippingDone} shipping records, ${imagesDownloaded} images downloaded (${imagesSkipped} already existed).`,
+        text: `Catalog refreshed. ${count} blueprints, ${newBpList.length} new, ${existingBpList.length} existing, ${retired.length} retired, ${providersDone} provider sets, ${variantsDone} variant sets, ${shippingDone} shipping records, ${imagesDownloaded} images downloaded.`,
       });
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to refresh catalog' });
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  // --- Printify Scraper ---
+
+  const setupScraperHub = useCallback(async () => {
+    if (scraperHubRef.current) return scraperHubRef.current;
+
+    const connection = createPrintifyScraperHubConnection(session.token);
+
+    connection.on('PrintifyScraperProgress', (event) => {
+      console.log('[PrintifyScraperHub] Progress:', event);
+      const { stage, data } = event;
+      const msg = data?.message || '';
+
+      if (stage === 'init') {
+        setScraperProgress({ total: data.total, processed: 0 });
+        setScraperStatus(msg);
+        setScraperError(null);
+      } else if (stage === 'blueprint-start') {
+        setScraperProgress(prev => ({ ...prev, processed: data.processed, total: data.total }));
+        setScraperStatus(msg);
+        setScraperPanel(null);
+        setScraperError(null);
+      } else if (stage === 'scraping') {
+        setScraperStatus(msg);
+      } else if (stage === 'colors-extracted') {
+        setScraperStatus(msg);
+      } else if (stage === 'image-prompt') {
+        setScraperStatus(msg);
+        currentImageRef.current = { blueprintId: data.blueprintId, imageIndex: data.imageIndex };
+        const imageCountMatch = data.message?.match(/\/(\d+)/);
+        const imageCount = data.imageCount || (imageCountMatch ? parseInt(imageCountMatch[1], 10) : 0);
+        const allColors = (data.providers || []).flatMap(p => p.colors || []);
+        let defaultColors = {};
+        if (allColors.length === 1 && allColors[0]?.name) {
+          defaultColors = { [allColors[0].name]: true };
+        } else if (data.variantColors?.length === 1) {
+          const match = allColors.find(c => c.name === data.variantColors[0]);
+          if (match?.name) defaultColors = { [match.name]: true };
+        }
+        setSelectedColors(defaultColors);
+        setSelectedType(String(data.type || 0));
+        setSelectedPosition(String(data.position || 1));
+        setScraperPanel({
+          blueprintId: data.blueprintId,
+          blueprintTitle: data.blueprintTitle,
+          printifyUrl: data.printifyUrl,
+          imageIndex: data.imageIndex,
+          imageCount,
+          imageBase64: data.imageBase64,
+          type: data.type,
+          position: data.position,
+          providers: data.providers,
+          variantColors: data.variantColors,
+        });
+      } else if (stage === 'image-complete') {
+        setScraperStatus(msg);
+        setScraperPanel(null);
+      } else if (stage === 'image-skip') {
+        setScraperStatus(msg);
+      } else if (stage === 'blueprint-complete') {
+        setScraperStatus(msg);
+        setScraperPanel(null);
+      } else if (stage === 'blueprint-skip') {
+        setScraperStatus(msg);
+        setScraperPanel(null);
+        setScraperError(null);
+      } else if (stage === 'blueprint-error') {
+        setScraperStatus(msg);
+        setScraperPanel(null);
+        setScraperError({ blueprintId: data.blueprintId, title: data.blueprintTitle, message: data.message, url: data.url });
+      } else if (stage === 'complete') {
+        setScraperStatus(msg);
+        setScraperPanel(null);
+      }
+    });
+
+    connection.on('PrintifyScraperComplete', (response) => {
+      console.log('[PrintifyScraperHub] Complete:', response);
+      setScraperRunning(false);
+      if (response.success) {
+        setScraperStatus(response.message || 'Complete!');
+      } else {
+        setScraperStatus(`Error: ${response.message}`);
+        setMessage({ type: 'error', text: response.message || 'Scraper failed' });
+      }
+    });
+
+    await connection.start();
+    scraperHubRef.current = connection;
+    return connection;
+  }, [session.token]);
+
+  const handleMatchImagesToVariants = async () => {
+    setScraperRunning(true);
+    setScraperStatus('Starting...');
+    setScraperProgress(null);
+    setScraperPanel(null);
+    setMessage(null);
+
+    try {
+      const connection = await setupScraperHub();
+      await connection.invoke('StartMatching');
+    } catch (error) {
+      setScraperRunning(false);
+      setScraperStatus(`Error: ${error?.message || 'Failed to start scraper'}`);
+      setMessage({ type: 'error', text: error?.message || 'Failed to start scraper' });
+    }
+  };
+
+  const handleColorToggle = (colorName) => {
+    setSelectedColors(prev => ({ ...prev, [colorName]: !prev[colorName] }));
+  };
+
+  const allColors = useMemo(() =>
+    (scraperPanel?.providers || []).flatMap((p) => p.colors || []),
+    [scraperPanel?.providers]
+  );
+
+  const groupedColors = useMemo(() => {
+    const map = new Map();
+    for (const c of allColors) {
+      if (!map.has(c.name)) map.set(c.name, new Set());
+      if (c.hex) map.get(c.name).add(c.hex);
+    }
+    return Array.from(map.entries())
+      .map(([name, hexes]) => ({ name, hexes: Array.from(hexes) }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [allColors]);
+
+  const allColorsSelected = useMemo(() =>
+    allColors.length > 0 && allColors.every((c) => selectedColors[c.name]),
+    [allColors, selectedColors]
+  );
+
+  const handleSelectAllNone = () => {
+    if (allColorsSelected) {
+      setSelectedColors({});
+    } else {
+      const all = {};
+      allColors.forEach((c) => {
+        all[c.name] = true;
+      });
+      setSelectedColors(all);
+    }
+  };
+
+  const handleViewBlueprint = () => {
+    if (scraperPanel?.blueprintId) setConfigureBlueprintId(scraperPanel.blueprintId);
+  };
+
+  const handleConfigureClose = () => {
+    setConfigureBlueprintId(null);
+  };
+
+  const handleOpenImagePreview = (index) => {
+    setPreviewIndex(index);
+    setShowPreview(true);
+  };
+
+  const handleCloseImagePreview = () => {
+    setShowPreview(false);
+  };
+
+  const handleApplyVariants = async (goBack = false) => {
+    if (!currentImageRef.current || !scraperHubRef.current) return;
+    const { blueprintId, imageIndex } = currentImageRef.current;
+    const selected = Object.entries(selectedColors).filter(([_, v]) => v).map(([k]) => k);
+    setScraperStatus(goBack ? 'Applying variants and going back...' : 'Applying variants...');
+    setScraperPanel(null);
+    try {
+      await scraperHubRef.current.invoke('ApplyVariants', blueprintId, imageIndex, selected, parseInt(selectedPosition, 10), parseInt(selectedType, 10), goBack);
+    } catch (error) {
+      setScraperStatus(`Error applying variants: ${error?.message}`);
+    }
+  };
+
+  const handleBackVariants = async () => {
+    await handleApplyVariants(true);
+  };
+
+  const handleSkipBlueprint = async () => {
+    if (!scraperError || !scraperHubRef.current) return;
+    const { blueprintId } = scraperError;
+    setScraperStatus('Skipping blueprint...');
+    setScraperError(null);
+    try {
+      await scraperHubRef.current.invoke('SkipBlueprint', blueprintId);
+    } catch (error) {
+      setScraperStatus(`Error skipping: ${error?.message}`);
     }
   };
 
@@ -264,6 +572,36 @@ export default function DashboardServices() {
       setSaving(false);
     }
   };
+
+  const blueprintImageCarouselElements = useMemo(() => {
+    if (!scraperPanel?.blueprintId || !scraperPanel?.imageCount) return [];
+    return Array.from({ length: scraperPanel.imageCount }, (_, i) => {
+      const variantColors = blueprintImageVariantMap[i] || [];
+      const label = variantColors.join(', ') || 'No variants';
+      const isCurrent = i === scraperPanel.imageIndex;
+      return (
+        <div
+          key={i}
+          className={`shrink-0 flex mt-1 flex-col items-center w-24 ${isCurrent ? 'ring-2 ring-primary-500 rounded' : ''}`}
+        >
+          <img
+            src={getBlueprintImageUrl(scraperPanel.blueprintId, i)}
+            alt={`Image ${i + 1}`}
+            className="w-24 h-24 object-cover rounded-t cursor-pointer"
+            onClick={() => handleOpenImagePreview(i)}
+          />
+          <div className="w-24 text-xs text-center text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 p-1 rounded-b break-words" title={label}>
+            {label}
+          </div>
+        </div>
+      );
+    });
+  }, [scraperPanel, blueprintImageVariantMap, getBlueprintImageUrl, handleOpenImagePreview]);
+
+  const previewImages = useMemo(() => {
+    if (!scraperPanel?.blueprintId || !scraperPanel?.imageCount) return [];
+    return Array.from({ length: scraperPanel.imageCount }, (_, i) => getBlueprintImageUrl(scraperPanel.blueprintId, i));
+  }, [scraperPanel, getBlueprintImageUrl]);
 
   return (
     <div>
@@ -374,24 +712,84 @@ export default function DashboardServices() {
               >
                 <option value="refresh">Refresh Catalog</option>
                 <option value="allVariants">All Product Variants</option>
-                <option value="convertVariants">Convert Variants</option>
+                <option value="convertVariants">Find Missing Variants</option>
                 <option value="convertImageVariants">Convert Image Variants</option>
+                <option value="matchImages">Match Images to Variants</option>
+                <option value="getVariantOptions">Get Variant Options</option>
+                <option value="loadVariantOptions">Load Variant Options</option>
               </select>
-              <Button onClick={handleRefreshCatalog} disabled={refreshing}>
-                {refreshing ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Icon name="progress_activity" spin className="w-4 h-4" />
-                    Refreshing...
-                  </span>
-                ) : (
-                  'Refresh Catalog'
-                )}
-              </Button>
+              <Tooltip text={
+                catalogAction === 'refresh' ? 'Fetches the full Printify catalog (blueprints, print providers, variants, shipping, and images) and updates the local database.' :
+                catalogAction === 'allVariants' ? 'Fetches all product variants from Printify for every blueprint and print provider, including out-of-stock items.' :
+                catalogAction === 'convertVariants' ? 'Finds variants in the database with missing Color or Size, re-fetches them from the Printify API, and updates the Color and Size columns.' :
+                catalogAction === 'convertImageVariants' ? 'Converts image variant data from the Options JSON field into structured Color and Size columns for existing image variant records.' :
+                catalogAction === 'matchImages' ? 'Scrapes Printify blueprint pages for Provider Info colors, then lets you manually match colors to each blueprint image and publish the blueprint.' :
+                catalogAction === 'getVariantOptions' ? 'Returns all distinct top-level option keys from the Options JSON across every PrintifyBlueprintVariants record, plus the maximum number of keys found in any single record.' :
+                catalogAction === 'loadVariantOptions' ? 'Scans all records in PrintifyBlueprintVariants and populates the missing option columns (Depth, Design, Finish, etc.) from the corresponding keys in the Options JSON.' :
+                'Select an action to see its description.'
+              } />
+              {catalogAction === 'matchImages' ? (
+                <Button onClick={handleMatchImagesToVariants} disabled={scraperRunning}>
+                  {scraperRunning ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Icon name="progress_activity" spin className="w-4 h-4" />
+                      Running...
+                    </span>
+                  ) : (
+                    'Refresh Catalog'
+                  )}
+                </Button>
+              ) : (
+                <Button onClick={handleRefreshCatalog} disabled={refreshing}>
+                  {refreshing ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Icon name="progress_activity" spin className="w-4 h-4" />
+                      Refreshing...
+                    </span>
+                  ) : (
+                    'Refresh Catalog'
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </div>
 
         <div className="space-y-4">
+
+          {variantOptionKeys && variantOptionKeys.length > 0 && (
+            <div className="text-center">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Distinct Variant Option Keys (max {maxOptionKeys ?? 0} per variant)
+              </h4>
+              <ul className="inline-block text-left list-disc list-inside text-sm text-gray-600 dark:text-gray-400">
+                {variantOptionKeys.map((item, i) => (
+                  <li key={i}>
+                    <span className="capitalize">{item.key}</span>
+                    {
+                    //<span className="text-gray-500 dark:text-gray-500 ml-1">(max: {item.maxCount})</span>
+                    }
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {convertProgress && (
+            <div className="space-y-2">
+              <div className="text-xs text-gray-600 dark:text-gray-400">
+                {convertProgress.current} of {convertProgress.total} variants converted
+              </div>
+              <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary-600 rounded-full transition-all duration-200"
+                  style={{
+                    width: `${Math.round((convertProgress.current / Math.max(convertProgress.total, 1)) * 100)}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
           {progress && (
             <div className="space-y-2">
@@ -427,8 +825,218 @@ export default function DashboardServices() {
               )}
             </div>
           )}
+
+          {/* Printify Scraper UI */}
+          {catalogAction === 'matchImages' && (scraperRunning || scraperStatus) && (
+            <div className="space-y-3 mt-4">
+              {/* Progress bar */}
+              {scraperProgress && (
+                <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary-600 rounded-full transition-all duration-200"
+                    style={{
+                      width: `${Math.round((scraperProgress.processed / Math.max(scraperProgress.total, 1)) * 100)}%`,
+                    }}
+                  />
+                </div>
+              )}
+              {scraperProgress && (
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Blueprint {scraperProgress.processed}/{scraperProgress.total}
+                </div>
+              )}
+
+              {/* Status message (below progress bar, centered) */}
+              {scraperStatus && (
+                <div className="text-sm text-gray-700 dark:text-gray-300 text-center">
+                  {scraperStatus}
+                </div>
+              )}
+
+              {/* Error message with Skip button */}
+              {scraperError && (
+                <div className="border border-red-300 dark:border-red-700 rounded-lg p-4 bg-red-50 dark:bg-red-900/30">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-red-700 dark:text-red-300 mb-1">
+                        {scraperError.title}
+                      </h4>
+                      <p className="text-sm text-red-600 dark:text-red-400">
+                        {scraperError.message}
+                      </p>
+                      {scraperError.url && (
+                        <a href={scraperError.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 dark:text-blue-400 hover:underline mt-1 inline-block">
+                          View on Printify
+                        </a>
+                      )}
+                    </div>
+                    <Button color="gray" onClick={handleSkipBlueprint}>
+                      Skip
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Panel: image + color checkboxes + Apply button */}
+              {scraperPanel && (
+                <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-900">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                      {scraperPanel.blueprintTitle}
+                    </h3>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleViewBlueprint}
+                        className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        View Blueprint
+                      </button>
+                      {scraperPanel.printifyUrl && (
+                        <a href={scraperPanel.printifyUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
+                          View on Printify
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    {/* Image */}
+                    <div className="shrink-0">
+                      <img
+                        src={scraperPanel.imageBase64}
+                        alt={`Blueprint ${scraperPanel.blueprintId} - Image ${scraperPanel.imageIndex}`}
+                        width={250}
+                        height={250}
+                        className="rounded-lg border border-gray-300 dark:border-gray-600"
+                      />
+                    </div>
+
+                    {/* Color list with checkboxes */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          Select Colors for Image {scraperPanel.imageIndex + 1}
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={handleSelectAllNone}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          {allColorsSelected ? 'Select None' : 'Select All'}
+                        </button>
+                      </div>
+                      <List className="max-h-none overflow-visible">
+                        {groupedColors.map((group, i) => {
+                          const matchedVariant = scraperPanel.variantColors?.includes(group.name);
+                          return (
+                            <Item key={i} hover>
+                              <input
+                                type="checkbox"
+                                checked={!!selectedColors[group.name]}
+                                onChange={() => handleColorToggle(group.name)}
+                                className="w-4 h-4 mr-3 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                              />
+                              {group.hexes.length > 0 && (
+                                <div className="flex items-center gap-1 mr-3 shrink-0">
+                                  {group.hexes.map((hex, hi) => (
+                                    <span
+                                      key={hi}
+                                      className="w-5 h-5 rounded-full border border-gray-300 dark:border-gray-600"
+                                      style={{ backgroundColor: hex }}
+                                      title={hex}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                              <span className="text-sm text-gray-700 dark:text-gray-300">
+                                {group.name}
+                                {matchedVariant && (
+                                  <span className="ml-2 text-xs text-green-600 dark:text-green-400">(variant exists)</span>
+                                )}
+                              </span>
+                            </Item>
+                          );
+                        })}
+                      </List>
+                      <div className="mt-3 flex flex-wrap items-end gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Type
+                          </label>
+                          <select
+                            className="w-auto inline-block rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 mb-3"
+                            value={selectedType}
+                            onChange={(e) => setSelectedType(e.target.value)}
+                          >
+                            {TYPE_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Position
+                          </label>
+                          <select
+                            className="w-auto inline-block rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 mb-3"
+                            value={selectedPosition}
+                            onChange={(e) => setSelectedPosition(e.target.value)}
+                          >
+                            <option value="0">None</option>
+                            <option value="1">Front</option>
+                            <option value="2">Back</option>
+                            <option value="3">Top</option>
+                            <option value="4">Bottom</option>
+                            <option value="5">Left Side</option>
+                            <option value="6">Right Side</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {currentImageRef.current?.imageIndex > 0 && (
+                          <ButtonOutline onClick={handleBackVariants} color="gray">
+                            Back
+                          </ButtonOutline>
+                        )}
+                        <ButtonOutline onClick={() => handleApplyVariants(false)} color="blue">
+                          Apply Variants
+                        </ButtonOutline>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 w-full">
+                    <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Blueprint Images ({scraperPanel.imageCount})
+                    </h5>
+                    <CarouselElements
+                      elements={blueprintImageCarouselElements}
+                      className="w-full"
+                      gap={16}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+      {showPreview && (
+        <ProductImagePreview
+          show={showPreview}
+          images={previewImages}
+          alt={scraperPanel?.blueprintTitle || 'Blueprint Image'}
+          defaultIndex={previewIndex}
+          onClose={handleCloseImagePreview}
+        />
+      )}
+      {configureBlueprintId && (
+        <ConfigurePrintifyBlueprint
+          show={!!configureBlueprintId}
+          blueprint={{ id: configureBlueprintId }}
+          onClose={handleConfigureClose}
+          onSave={handleConfigureClose}
+        />
+      )}
     </div>
   );
 }

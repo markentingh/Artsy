@@ -970,7 +970,7 @@ namespace Artsy.API.Controllers
 
                 await _mockupRepository.DeleteByPrintifyProductIdAsync(printifyProductEntityId);
 
-                var httpClient = _httpClientFactory.CreateClient();
+                var httpClient = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
                 foreach (var img in productDetails.Images)
                 {
                     if (string.IsNullOrWhiteSpace(img.Src)) continue;

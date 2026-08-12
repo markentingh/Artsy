@@ -21,6 +21,7 @@
     <ProjectReference Include="..\Artsy.AI\Artsy.AI.csproj" />
     <ProjectReference Include="..\Artsy.Auth\Artsy.Auth.csproj" />
     <ProjectReference Include="..\Artsy.Data\Artsy.Data.csproj" />
+    <ProjectReference Include="..\Artsy.PrintifyScraper\Artsy.PrintifyScraper.csproj" />
   </ItemGroup>
 
 </Project>

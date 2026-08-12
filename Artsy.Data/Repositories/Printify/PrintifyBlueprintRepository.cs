@@ -34,7 +34,7 @@ namespace Artsy.Data.Repositories
             return await _dbConnection.ExecuteScalarAsync<int>(sql, new { kw = $"%{kw}%", br, published });
         }
 
-        public async Task<IEnumerable<PrintifyBlueprint>> SearchAsync(string keyword, string brand, int start, int length, bool? published = null)
+        public async Task<IEnumerable<PrintifyBlueprint>> SearchAsync(string keyword, string brand, int start, int length, bool? published = null, string? sort = null)
         {
             var kw = keyword?.Trim().ToLowerInvariant() ?? "";
             var br = brand?.Trim().ToLowerInvariant() ?? "";
@@ -45,7 +45,13 @@ namespace Artsy.Data.Repositories
                 sql += @" AND LOWER(""Title"") LIKE @kw";
             if (!string.IsNullOrWhiteSpace(br) && br != "all")
                 sql += @" AND LOWER(""Brand"") = @br";
-            sql += @" ORDER BY ""DateUpdated"" DESC LIMIT @length OFFSET @start";
+            var orderBy = sort?.ToLowerInvariant() switch
+            {
+                "newest" => @"""DateCreated"" DESC",
+                "oldest" => @"""DateCreated"" ASC",
+                _ => @"""DateUpdated"" DESC"
+            };
+            sql += $" ORDER BY {orderBy} LIMIT @length OFFSET @start";
             return await _dbConnection.QueryAsync<PrintifyBlueprint>(sql, new { kw = $"%{kw}%", br, start, length, published });
         }
 
@@ -66,8 +72,8 @@ namespace Artsy.Data.Repositories
         public async Task UpsertAsync(PrintifyBlueprint blueprint)
         {
             const string query = @"
-                INSERT INTO public.""PrintifyBlueprints"" (""BlueprintId"", ""Title"", ""Description"", ""Brand"", ""Model"", ""ImageCount"", ""DateCreated"", ""DateUpdated"")
-                VALUES (@BlueprintId, @Title, @Description, @Brand, @Model, @ImageCount, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                INSERT INTO public.""PrintifyBlueprints"" (""BlueprintId"", ""Title"", ""Description"", ""Brand"", ""Model"", ""ImageCount"", ""Status"", ""DateCreated"", ""DateUpdated"")
+                VALUES (@BlueprintId, @Title, @Description, @Brand, @Model, @ImageCount, @Status, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT (""BlueprintId"")
                 DO UPDATE SET
                     ""Title"" = @Title,
@@ -75,6 +81,7 @@ namespace Artsy.Data.Repositories
                     ""Brand"" = @Brand,
                     ""Model"" = @Model,
                     ""ImageCount"" = @ImageCount,
+                    ""Status"" = @Status,
                     ""DateUpdated"" = CURRENT_TIMESTAMP";
             await _dbConnection.ExecuteAsync(query, blueprint);
         }
@@ -82,8 +89,8 @@ namespace Artsy.Data.Repositories
         public async Task UpsertBatchAsync(IEnumerable<PrintifyBlueprint> blueprints)
         {
             const string query = @"
-                INSERT INTO public.""PrintifyBlueprints"" (""BlueprintId"", ""Title"", ""Description"", ""Brand"", ""Model"", ""ImageCount"", ""DateCreated"", ""DateUpdated"")
-                VALUES (@BlueprintId, @Title, @Description, @Brand, @Model, @ImageCount, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                INSERT INTO public.""PrintifyBlueprints"" (""BlueprintId"", ""Title"", ""Description"", ""Brand"", ""Model"", ""ImageCount"", ""Status"", ""DateCreated"", ""DateUpdated"")
+                VALUES (@BlueprintId, @Title, @Description, @Brand, @Model, @ImageCount, @Status, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT (""BlueprintId"")
                 DO UPDATE SET
                     ""Title"" = @Title,
@@ -91,6 +98,7 @@ namespace Artsy.Data.Repositories
                     ""Brand"" = @Brand,
                     ""Model"" = @Model,
                     ""ImageCount"" = @ImageCount,
+                    ""Status"" = @Status,
                     ""DateUpdated"" = CURRENT_TIMESTAMP";
             await _dbConnection.ExecuteAsync(query, blueprints);
         }
@@ -105,6 +113,12 @@ namespace Artsy.Data.Repositories
         {
             const string query = @"SELECT ""BlueprintId"" FROM public.""PrintifyBlueprints""";
             return await _dbConnection.QueryAsync<int>(query);
+        }
+
+        public async Task<IEnumerable<(int BlueprintId, int ImageCount, int ImagesDownloaded, DateTime DateCreated)>> GetAllBlueprintsImageInfoAsync()
+        {
+            const string query = @"SELECT ""BlueprintId"", ""ImageCount"", ""ImagesDownloaded"", ""DateCreated"" FROM public.""PrintifyBlueprints""";
+            return await _dbConnection.QueryAsync<(int BlueprintId, int ImageCount, int ImagesDownloaded, DateTime DateCreated)>(query);
         }
 
         public async Task DeleteAllAsync()
@@ -123,6 +137,26 @@ namespace Artsy.Data.Repositories
         {
             const string query = @"UPDATE public.""PrintifyBlueprints"" SET ""ImagePrompt"" = @imagePrompt, ""DateUpdated"" = CURRENT_TIMESTAMP WHERE ""BlueprintId"" = @blueprintId";
             await _dbConnection.ExecuteAsync(query, new { blueprintId, imagePrompt });
+        }
+
+        public async Task UpdateImagesDownloadedAsync(int blueprintId, int imagesDownloaded)
+        {
+            const string query = @"UPDATE public.""PrintifyBlueprints"" SET ""ImagesDownloaded"" = @imagesDownloaded, ""DateUpdated"" = CURRENT_TIMESTAMP WHERE ""BlueprintId"" = @blueprintId";
+            await _dbConnection.ExecuteAsync(query, new { blueprintId, imagesDownloaded });
+        }
+
+        public async Task UpdateStatusAsync(int blueprintId, int status)
+        {
+            const string query = @"UPDATE public.""PrintifyBlueprints"" SET ""Status"" = @status, ""DateUpdated"" = CURRENT_TIMESTAMP WHERE ""BlueprintId"" = @blueprintId";
+            await _dbConnection.ExecuteAsync(query, new { blueprintId, status });
+        }
+
+        public async Task SetMissingStatusAsync(IEnumerable<int> missingBlueprintIds, int status)
+        {
+            var ids = missingBlueprintIds.ToArray();
+            if (ids.Length == 0) return;
+            const string query = @"UPDATE public.""PrintifyBlueprints"" SET ""Status"" = @status, ""DateUpdated"" = CURRENT_TIMESTAMP WHERE ""BlueprintId"" = ANY(@missingBlueprintIds)";
+            await _dbConnection.ExecuteAsync(query, new { missingBlueprintIds = ids, status });
         }
     }
 }

@@ -18,6 +18,7 @@ export default function Sidebar() {
     ...(isAdmin ? [
       { path: '/dashboard/printify', label: 'Printify' },
       { path: '/dashboard/openai', label: 'OpenAI' },
+      { path: '/dashboard/services', label: 'Services' },
       { path: '/dashboard/billing', label: 'Billing' },
       { path: '/dashboard/users', label: 'Users' }
     ] : [])

@@ -185,6 +185,8 @@ export default function DashboardPrintify() {
             options={[
               { value: 'all', label: 'All Blueprints' },
               { value: 'unpublished', label: 'Unpublished Only' },
+              { value: 'newest', label: 'Newest First' },
+              { value: 'oldest', label: 'Oldest First' },
             ]}
             value={publishFilter}
             onChange={handlePublishFilterChange}

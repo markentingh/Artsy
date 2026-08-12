@@ -8,7 +8,9 @@ namespace Artsy.Data.Entities
         public string Brand { get; set; } = "";
         public string Model { get; set; } = "";
         public int ImageCount { get; set; }
+        public int ImagesDownloaded { get; set; }
         public bool Published { get; set; }
+        public int Status { get; set; } = 1;
         public string ImagePrompt { get; set; } = "";
         public DateTime DateCreated { get; set; }
         public DateTime DateUpdated { get; set; }
