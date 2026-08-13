@@ -64,6 +64,11 @@ export default defineConfig(({ mode }) => {
                     target,
                     secure: false,
                     ws: true
+                },
+                '^/hangfire': {
+                    target,
+                    secure: false,
+                    ws: true
                 }
             },
             port: port,

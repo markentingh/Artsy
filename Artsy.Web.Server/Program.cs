@@ -5,6 +5,10 @@ using Artsy.API.Services;
 using Artsy.Auth.Services;
 using Artsy.Data.Interfaces;
 using Artsy.PrintifyScraper.Services;
+using Hangfire;
+using Hangfire.Dashboard;
+using Hangfire.PostgreSql;
+using Artsy.Web.Server.Authorization;
 using Microsoft.AspNetCore.StaticFiles;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -57,8 +61,13 @@ builder.Services.AddScoped<Artsy.API.Services.IImageService, Artsy.API.Services.
 builder.Services.AddScoped<Artsy.API.Services.IOpacityService, Artsy.API.Services.OpacityService>();
 builder.Services.AddScoped<Artsy.API.Services.ITrendResearchService, Artsy.API.Services.TrendResearchService>();
 builder.Services.AddScoped<Artsy.API.Services.IPrintifyService, Artsy.API.Services.PrintifyService>();
+builder.Services.AddScoped<Artsy.API.Services.IPrintifyOrders, Artsy.API.Services.PrintifyOrders>();
 builder.Services.AddScoped<Artsy.API.Services.IAITokenService, Artsy.API.Services.AITokenService>();
 builder.Services.AddSingleton<IPrintifyScraperService, PrintifyScraperService>();
+
+var dbConnectionString = builder.Configuration["ConnectionStrings:Database"] ?? "";
+builder.Services.AddHangfire(config => config.UsePostgreSqlStorage(dbConnectionString));
+builder.Services.AddHangfireServer();
 
 builder.Services.AddSwaggerGen(e =>
 {
@@ -66,6 +75,16 @@ builder.Services.AddSwaggerGen(e =>
 });
 
 var app = builder.Build();
+
+try
+{
+    RecurringJob.AddOrUpdate<Artsy.API.Services.IPrintifyOrders>("printify-orders-sync", x => x.CheckAndRunAllAsync(), "*/10 * * * *");
+    Console.WriteLine("Scheduled Printify orders sync every 10 minutes.");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Warning: Failed to schedule Printify orders sync: {ex.Message}");
+}
 
 if (!app.Environment.IsDevelopment())
 {
@@ -101,6 +120,11 @@ app.Use(async (context, next) =>
 });
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new HangfireAdminAuthorizationFilter() }
+});
 
 try
 {

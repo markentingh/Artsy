@@ -1,8 +1,10 @@
 using Artsy.Data.Interfaces;
 using Artsy.Data.Interfaces.Auth;
+using Artsy.Data.Interfaces.Orders;
 using Artsy.Data.Interfaces.Projects;
 using Artsy.Data.Repositories;
 using Artsy.Data.Repositories.Auth;
+using Artsy.Data.Repositories.Orders;
 using Artsy.Data.Repositories.Projects;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -55,6 +57,8 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<ITrendRepository, TrendRepository>();
             builder.Services.AddTransient<IProjectCollectionInstagramPostRepository, ProjectCollectionInstagramPostRepository>();
             builder.Services.AddTransient<IProjectCollectionInstagramPostImageRepository, ProjectCollectionInstagramPostImageRepository>();
+            builder.Services.AddTransient<IOrderRepository, OrderRepository>();
+            builder.Services.AddTransient<IHangfireOrderRepository, HangfireOrderRepository>();
             builder.Services.AddTransient<ICustomImageRepository, CustomImageRepository>();
             builder.Services.AddTransient<IProductRepository, ProductRepository>();
             builder.Services.AddTransient<ISubscriptionRepository, SubscriptionRepository>();

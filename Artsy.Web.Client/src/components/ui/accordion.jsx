@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Icon from '@/components/ui/icon';
 
-export function Accordion({ items, inModal = false, className = '' }) {
+export function Accordion({ items, inModal = false, className = '', defaultExpandedIndex = -1 }) {
   const bgClass = inModal
     ? 'bg-gray-100 dark:bg-gray-700/50'
     : 'bg-gray-50 dark:bg-gray-800';
@@ -21,6 +21,7 @@ export function Accordion({ items, inModal = false, className = '' }) {
               action={item.action}
               bgClass={bgClass}
               hoverClass={hoverClass}
+              initialExpanded={i === defaultExpandedIndex}
             />
           ))}
         </div>
@@ -29,8 +30,8 @@ export function Accordion({ items, inModal = false, className = '' }) {
   );
 }
 
-function AccordionItem({ title, content, action, bgClass, hoverClass }) {
-  const [expanded, setExpanded] = useState(false);
+function AccordionItem({ title, content, action, bgClass, hoverClass, initialExpanded = false }) {
+  const [expanded, setExpanded] = useState(initialExpanded);
   const hasContent = content && (Array.isArray(content) ? content.length > 0 : true);
 
   return (

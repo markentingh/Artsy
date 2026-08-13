@@ -2,22 +2,46 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useSession } from '@/context/session';
 import { Telegram } from '@/api/admin/telegram';
 import { Printify } from '@/api/admin/printify';
+import { PrintifyImageMatch } from '@/api/admin/printifyImageMatch';
 import { createPrintifyScraperHubConnection } from '@/api/admin/printifyScraper';
 import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';
 import Button from '@/components/ui/button';
 import ButtonOutline from '@/components/ui/button-outline';
 import List, { Item } from '@/components/ui/list';
+import { Accordion } from '@/components/ui/accordion';
 import Tooltip from '@/components/ui/tooltip';
 import CarouselElements from '@/components/ui/carousel-elements';
 import ProductImagePreview from '@/app/dashboard/project/components/ProductImagePreview';
 import ConfigurePrintifyBlueprint from '@/app/dashboard/printify/components/ConfigurePrintifyBlueprint';
 import { TYPE_OPTIONS } from '@/context/printifyBlueprint';
 
+function groupColors(colors) {
+  const map = new Map();
+  for (const c of colors) {
+    if (!map.has(c.name)) map.set(c.name, new Set());
+    if (c.hex) map.get(c.name).add(c.hex);
+  }
+  return Array.from(map.entries())
+    .map(([name, hexes]) => ({ name, hexes: Array.from(hexes) }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+}
+
+function slugify(text) {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/\+/g, 'plus')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 export default function DashboardServices() {
   const session = useSession();
   const { getWebhookInfo, setWebhook } = Telegram(session);
-  const { getCatalogCount, refreshCatalog, fetchPrintProviders, fetchVariants, fetchShipping, downloadCatalogImage, downloadBlueprintImages, convertVariants, convertImageVariants, getBlueprintImageUrl, getBlueprintImages, getVariantOptionKeys, loadVariantOptions } = Printify(session);
+  const { getCatalogCount, refreshCatalog, fetchPrintProviders, fetchVariants, fetchShipping, downloadCatalogImage, downloadBlueprintImages, convertVariants, convertImageVariants, getVariantOptionKeys, loadVariantOptions, getBlueprintImages, getBlueprintImageUrl } = Printify(session);
+  const { getUnpublishedBlueprints, getBlueprintImages: getMatchBlueprintImages, applyVariants, publishBlueprint } = PrintifyImageMatch(session);
 
   const [webhookUrl, setWebhookUrl] = useState('');
   const [maxConnections, setMaxConnections] = useState(0);
@@ -52,7 +76,6 @@ export default function DashboardServices() {
   const [configureBlueprintId, setConfigureBlueprintId] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(0);
-  const currentImageRef = useRef(null);
 
   const fetchWebhookInfo = async () => {
     try {
@@ -341,6 +364,10 @@ export default function DashboardServices() {
 
   // --- Printify Scraper ---
 
+  const matchQueueRef = useRef([]);
+  const matchQueueIndexRef = useRef(0);
+  const matchImagesRef = useRef([]);
+
   const setupScraperHub = useCallback(async () => {
     if (scraperHubRef.current) return scraperHubRef.current;
 
@@ -348,81 +375,8 @@ export default function DashboardServices() {
 
     connection.on('PrintifyScraperProgress', (event) => {
       console.log('[PrintifyScraperHub] Progress:', event);
-      const { stage, data } = event;
-      const msg = data?.message || '';
-
-      if (stage === 'init') {
-        setScraperProgress({ total: data.total, processed: 0 });
-        setScraperStatus(msg);
-        setScraperError(null);
-      } else if (stage === 'blueprint-start') {
-        setScraperProgress(prev => ({ ...prev, processed: data.processed, total: data.total }));
-        setScraperStatus(msg);
-        setScraperPanel(null);
-        setScraperError(null);
-      } else if (stage === 'scraping') {
-        setScraperStatus(msg);
-      } else if (stage === 'colors-extracted') {
-        setScraperStatus(msg);
-      } else if (stage === 'image-prompt') {
-        setScraperStatus(msg);
-        currentImageRef.current = { blueprintId: data.blueprintId, imageIndex: data.imageIndex };
-        const imageCountMatch = data.message?.match(/\/(\d+)/);
-        const imageCount = data.imageCount || (imageCountMatch ? parseInt(imageCountMatch[1], 10) : 0);
-        const allColors = (data.providers || []).flatMap(p => p.colors || []);
-        let defaultColors = {};
-        if (allColors.length === 1 && allColors[0]?.name) {
-          defaultColors = { [allColors[0].name]: true };
-        } else if (data.variantColors?.length === 1) {
-          const match = allColors.find(c => c.name === data.variantColors[0]);
-          if (match?.name) defaultColors = { [match.name]: true };
-        }
-        setSelectedColors(defaultColors);
-        setSelectedType(String(data.type || 0));
-        setSelectedPosition(String(data.position || 1));
-        setScraperPanel({
-          blueprintId: data.blueprintId,
-          blueprintTitle: data.blueprintTitle,
-          printifyUrl: data.printifyUrl,
-          imageIndex: data.imageIndex,
-          imageCount,
-          imageBase64: data.imageBase64,
-          type: data.type,
-          position: data.position,
-          providers: data.providers,
-          variantColors: data.variantColors,
-        });
-      } else if (stage === 'image-complete') {
-        setScraperStatus(msg);
-        setScraperPanel(null);
-      } else if (stage === 'image-skip') {
-        setScraperStatus(msg);
-      } else if (stage === 'blueprint-complete') {
-        setScraperStatus(msg);
-        setScraperPanel(null);
-      } else if (stage === 'blueprint-skip') {
-        setScraperStatus(msg);
-        setScraperPanel(null);
-        setScraperError(null);
-      } else if (stage === 'blueprint-error') {
-        setScraperStatus(msg);
-        setScraperPanel(null);
-        setScraperError({ blueprintId: data.blueprintId, title: data.blueprintTitle, message: data.message, url: data.url });
-      } else if (stage === 'complete') {
-        setScraperStatus(msg);
-        setScraperPanel(null);
-      }
-    });
-
-    connection.on('PrintifyScraperComplete', (response) => {
-      console.log('[PrintifyScraperHub] Complete:', response);
-      setScraperRunning(false);
-      if (response.success) {
-        setScraperStatus(response.message || 'Complete!');
-      } else {
-        setScraperStatus(`Error: ${response.message}`);
-        setMessage({ type: 'error', text: response.message || 'Scraper failed' });
-      }
+      const { data } = event;
+      if (data?.message) setScraperStatus(data.message);
     });
 
     await connection.start();
@@ -430,20 +384,113 @@ export default function DashboardServices() {
     return connection;
   }, [session.token]);
 
+  const loadMatchBlueprint = async (queueIndex) => {
+    const queue = matchQueueRef.current;
+    if (queueIndex >= queue.length) {
+      setScraperRunning(false);
+      setScraperStatus('Complete!');
+      setScraperPanel(null);
+      setScraperError(null);
+      setMessage({ type: 'success', text: `Done! Processed all ${queue.length} blueprints.` });
+      return;
+    }
+    matchQueueIndexRef.current = queueIndex;
+    const bp = queue[queueIndex];
+    setScraperProgress({ processed: queueIndex + 1, total: queue.length });
+    setScraperStatus(`Processing blueprint ${queueIndex + 1}/${queue.length}: ${bp.title}`);
+    setScraperError(null);
+
+    try {
+      const imgResp = await getMatchBlueprintImages(bp.id);
+      if (!imgResp.data.success) throw new Error(imgResp.data.message || 'Failed to load blueprint images');
+      matchImagesRef.current = imgResp.data.data || [];
+
+      const connection = await setupScraperHub();
+      const colorResp = await connection.invoke('GetProviderColors', bp.id);
+      await connection.stop();
+      scraperHubRef.current = null;
+      if (!colorResp?.success) throw new Error(colorResp?.message || 'No colors found');
+
+      advanceToImage(0, colorResp.data.providers);
+    } catch (error) {
+      setScraperStatus(`Error: ${error?.message || 'Failed to load blueprint'}`);
+      setScraperError({ blueprintId: bp.id, title: bp.title, message: error?.message || 'Failed to load blueprint' });
+    }
+  };
+
+  const advanceToImage = (imageIndex, providers) => {
+    const bp = matchQueueRef.current[matchQueueIndexRef.current];
+    if (!bp) return;
+    if (imageIndex < 0) imageIndex = 0;
+    if (imageIndex >= bp.imageCount) {
+      setScraperPanel(null);
+      setScraperStatus('Publishing blueprint...');
+      publishBlueprint(bp.id).then((resp) => {
+        if (resp.data?.success) {
+          loadMatchBlueprint(matchQueueIndexRef.current + 1);
+        } else {
+          setScraperStatus(`Error publishing: ${resp.data?.message || 'Unknown error'}`);
+          setScraperError({ blueprintId: bp.id, title: bp.title, message: resp.data?.message || 'Failed to publish blueprint' });
+        }
+      }).catch((err) => {
+        setScraperStatus(`Error: ${err?.message || 'Failed to publish blueprint'}`);
+        setScraperError({ blueprintId: bp.id, title: bp.title, message: err?.message || 'Failed to publish blueprint' });
+      });
+      return;
+    }
+
+    const images = matchImagesRef.current;
+    const img = images.find((i) => i.imageIndex === imageIndex) || { imageIndex, type: 0, position: 1, variantColors: [] };
+    const allColors = (providers || []).flatMap((p) => p.colors || []);
+    let defaultColors = {};
+    if (allColors.length === 1 && allColors[0]?.name) {
+      defaultColors = { [allColors[0].name]: true };
+    } else if (img.variantColors?.length === 1) {
+      const match = allColors.find((c) => c.name === img.variantColors[0]);
+      if (match?.name) defaultColors = { [match.name]: true };
+    }
+    setSelectedColors(defaultColors);
+    setSelectedType(String(img.type || 0));
+    setSelectedPosition(String(img.position || 1));
+    setScraperPanel({
+      blueprintId: bp.id,
+      blueprintTitle: bp.title,
+      printifyUrl: `https://printify.com/app/products/${bp.id}/${slugify(bp.brand || '')}/${slugify(bp.title || '')}`,
+      imageIndex,
+      imageCount: bp.imageCount,
+      imageBase64: getBlueprintImageUrl(bp.id, imageIndex),
+      type: img.type || 0,
+      position: img.position || 1,
+      providers,
+      variantColors: img.variantColors || [],
+    });
+    setScraperError(null);
+  };
+
   const handleMatchImagesToVariants = async () => {
     setScraperRunning(true);
-    setScraperStatus('Starting...');
+    setScraperStatus('Loading unpublished blueprints...');
     setScraperProgress(null);
     setScraperPanel(null);
+    setScraperError(null);
     setMessage(null);
 
     try {
-      const connection = await setupScraperHub();
-      await connection.invoke('StartMatching');
+      const resp = await getUnpublishedBlueprints();
+      if (!resp.data.success) throw new Error(resp.data.message);
+      const queue = resp.data.data || [];
+      matchQueueRef.current = queue;
+      if (queue.length === 0) {
+        setScraperRunning(false);
+        setScraperStatus('No unpublished blueprints found.');
+        setMessage({ type: 'success', text: 'No unpublished blueprints found.' });
+        return;
+      }
+      await loadMatchBlueprint(0);
     } catch (error) {
       setScraperRunning(false);
-      setScraperStatus(`Error: ${error?.message || 'Failed to start scraper'}`);
-      setMessage({ type: 'error', text: error?.message || 'Failed to start scraper' });
+      setScraperStatus(`Error: ${error?.message || 'Failed to start matching'}`);
+      setMessage({ type: 'error', text: error?.message || 'Failed to start matching' });
     }
   };
 
@@ -456,16 +503,44 @@ export default function DashboardServices() {
     [scraperPanel?.providers]
   );
 
-  const groupedColors = useMemo(() => {
-    const map = new Map();
-    for (const c of allColors) {
-      if (!map.has(c.name)) map.set(c.name, new Set());
-      if (c.hex) map.get(c.name).add(c.hex);
-    }
-    return Array.from(map.entries())
-      .map(([name, hexes]) => ({ name, hexes: Array.from(hexes) }))
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-  }, [allColors]);
+  const groupedColors = useMemo(() => groupColors(allColors), [allColors]);
+  const providerColorGroups = useMemo(() =>
+    (scraperPanel?.providers || []).map((p) => ({ title: p.name || `Provider ${p.printProviderId || ''}`, groups: groupColors(p.colors || []) })),
+    [scraperPanel?.providers]
+  );
+
+  const renderColorGroups = (groups) =>
+    groups.map((group, i) => {
+      const matchedVariant = scraperPanel.variantColors?.includes(group.name);
+      return (
+        <Item key={i} hover>
+          <input
+            type="checkbox"
+            checked={!!selectedColors[group.name]}
+            onChange={() => handleColorToggle(group.name)}
+            className="w-4 h-4 mr-3 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+          />
+          {group.hexes.length > 0 && (
+            <div className="flex items-center gap-1 mr-3 shrink-0">
+              {group.hexes.map((hex, hi) => (
+                <span
+                  key={hi}
+                  className="w-5 h-5 rounded-full border border-gray-300 dark:border-gray-600"
+                  style={{ backgroundColor: hex }}
+                  title={hex}
+                />
+              ))}
+            </div>
+          )}
+          <span className="text-sm text-gray-700 dark:text-gray-300">
+            {group.name}
+            {matchedVariant && (
+              <span className="ml-2 text-xs text-green-600 dark:text-green-400">(variant exists)</span>
+            )}
+          </span>
+        </Item>
+      );
+    });
 
   const allColorsSelected = useMemo(() =>
     allColors.length > 0 && allColors.every((c) => selectedColors[c.name]),
@@ -502,15 +577,33 @@ export default function DashboardServices() {
   };
 
   const handleApplyVariants = async (goBack = false) => {
-    if (!currentImageRef.current || !scraperHubRef.current) return;
-    const { blueprintId, imageIndex } = currentImageRef.current;
+    if (!scraperPanel) return;
+    const { blueprintId, imageIndex } = scraperPanel;
     const selected = Object.entries(selectedColors).filter(([_, v]) => v).map(([k]) => k);
     setScraperStatus(goBack ? 'Applying variants and going back...' : 'Applying variants...');
-    setScraperPanel(null);
     try {
-      await scraperHubRef.current.invoke('ApplyVariants', blueprintId, imageIndex, selected, parseInt(selectedPosition, 10), parseInt(selectedType, 10), goBack);
+      const resp = await applyVariants(blueprintId, imageIndex, {
+        selectedColors: selected,
+        position: parseInt(selectedPosition, 10),
+        type: parseInt(selectedType, 10),
+      });
+      if (!resp.data.success) throw new Error(resp.data.message || 'Failed to apply variants');
+      if (goBack && imageIndex > 0) {
+        advanceToImage(imageIndex - 1, scraperPanel.providers);
+      } else {
+        const next = imageIndex + 1;
+        if (next >= scraperPanel.imageCount) {
+          setScraperPanel(null);
+          setScraperStatus('Publishing blueprint...');
+          await publishBlueprint(blueprintId);
+          await loadMatchBlueprint(matchQueueIndexRef.current + 1);
+        } else {
+          advanceToImage(next, scraperPanel.providers);
+        }
+      }
     } catch (error) {
       setScraperStatus(`Error applying variants: ${error?.message}`);
+      setMessage({ type: 'error', text: error?.message || 'Failed to apply variants' });
     }
   };
 
@@ -519,15 +612,11 @@ export default function DashboardServices() {
   };
 
   const handleSkipBlueprint = async () => {
-    if (!scraperError || !scraperHubRef.current) return;
-    const { blueprintId } = scraperError;
-    setScraperStatus('Skipping blueprint...');
+    const bp = scraperError || (scraperPanel ? { blueprintId: scraperPanel.blueprintId, title: scraperPanel.blueprintTitle } : null);
+    if (!bp) return;
+    setScraperStatus(`Skipping ${bp.title || 'blueprint'}...`);
     setScraperError(null);
-    try {
-      await scraperHubRef.current.invoke('SkipBlueprint', blueprintId);
-    } catch (error) {
-      setScraperStatus(`Error skipping: ${error?.message}`);
-    }
+    loadMatchBlueprint(matchQueueIndexRef.current + 1);
   };
 
   const handleEdit = () => {
@@ -677,10 +766,10 @@ export default function DashboardServices() {
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Printify</h2>
           <div className="flex items-center gap-4">
+            <h2 className="text-xl font-semibold">Printify</h2>
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="pl-5 text-sm font-medium text-gray-700 dark:text-gray-300">
                 Cached Blueprints
               </label>
               {catalogLoading ? (
@@ -691,6 +780,8 @@ export default function DashboardServices() {
                 </span>
               )}
             </div>
+          </div>
+          <div className="flex items-center gap-4">
             {catalogAction === 'refresh' && (
               <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
                 <input
@@ -728,29 +819,31 @@ export default function DashboardServices() {
                 catalogAction === 'loadVariantOptions' ? 'Scans all records in PrintifyBlueprintVariants and populates the missing option columns (Depth, Design, Finish, etc.) from the corresponding keys in the Options JSON.' :
                 'Select an action to see its description.'
               } />
-              {catalogAction === 'matchImages' ? (
-                <Button onClick={handleMatchImagesToVariants} disabled={scraperRunning}>
-                  {scraperRunning ? (
-                    <span className="inline-flex items-center gap-2">
-                      <Icon name="progress_activity" spin className="w-4 h-4" />
-                      Running...
-                    </span>
-                  ) : (
-                    'Refresh Catalog'
-                  )}
-                </Button>
-              ) : (
-                <Button onClick={handleRefreshCatalog} disabled={refreshing}>
-                  {refreshing ? (
-                    <span className="inline-flex items-center gap-2">
-                      <Icon name="progress_activity" spin className="w-4 h-4" />
-                      Refreshing...
-                    </span>
-                  ) : (
-                    'Refresh Catalog'
-                  )}
-                </Button>
-              )}
+              <div className="pl-10">
+                {catalogAction === 'matchImages' ? (
+                  <Button onClick={handleMatchImagesToVariants} disabled={scraperRunning}>
+                    {scraperRunning ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Icon name="progress_activity" spin className="w-4 h-4" />
+                        Running...
+                      </span>
+                    ) : (
+                      'Run Command'
+                    )}
+                  </Button>
+                ) : (
+                  <Button onClick={handleRefreshCatalog} disabled={refreshing}>
+                    {refreshing ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Icon name="progress_activity" spin className="w-4 h-4" />
+                        Refreshing...
+                      </span>
+                    ) : (
+                      'Run Command'
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -925,39 +1018,23 @@ export default function DashboardServices() {
                           {allColorsSelected ? 'Select None' : 'Select All'}
                         </button>
                       </div>
-                      <List className="max-h-none overflow-visible">
-                        {groupedColors.map((group, i) => {
-                          const matchedVariant = scraperPanel.variantColors?.includes(group.name);
-                          return (
-                            <Item key={i} hover>
-                              <input
-                                type="checkbox"
-                                checked={!!selectedColors[group.name]}
-                                onChange={() => handleColorToggle(group.name)}
-                                className="w-4 h-4 mr-3 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                              />
-                              {group.hexes.length > 0 && (
-                                <div className="flex items-center gap-1 mr-3 shrink-0">
-                                  {group.hexes.map((hex, hi) => (
-                                    <span
-                                      key={hi}
-                                      className="w-5 h-5 rounded-full border border-gray-300 dark:border-gray-600"
-                                      style={{ backgroundColor: hex }}
-                                      title={hex}
-                                    />
-                                  ))}
-                                </div>
-                              )}
-                              <span className="text-sm text-gray-700 dark:text-gray-300">
-                                {group.name}
-                                {matchedVariant && (
-                                  <span className="ml-2 text-xs text-green-600 dark:text-green-400">(variant exists)</span>
-                                )}
-                              </span>
-                            </Item>
-                          );
-                        })}
-                      </List>
+                      {scraperPanel.providers.length > 1 ? (
+                        <Accordion
+                          items={providerColorGroups.map((p) => ({
+                            title: p.title,
+                            content: (
+                              <List className="max-h-none overflow-visible">
+                                {renderColorGroups(p.groups)}
+                              </List>
+                            ),
+                          }))}
+                          defaultExpandedIndex={0}
+                        />
+                      ) : (
+                        <List className="max-h-none overflow-visible">
+                          {renderColorGroups(groupedColors)}
+                        </List>
+                      )}
                       <div className="mt-3 flex flex-wrap items-end gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -993,7 +1070,7 @@ export default function DashboardServices() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {currentImageRef.current?.imageIndex > 0 && (
+                        {scraperPanel.imageIndex > 0 && (
                           <ButtonOutline onClick={handleBackVariants} color="gray">
                             Back
                           </ButtonOutline>

@@ -201,8 +201,11 @@ export default function PublishProductsStep() {
               imageHeight="8rem"
             />
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-8 text-center mx-auto" style={{ maxWidth: '550px' }}>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 text-center mx-auto" style={{ maxWidth: '550px' }}>
             <a href={downloadUrl} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 underline">Download</a> all mockup images above and manually upload them to your products on Printify since their API does not currently support mockup uploads.
+          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-8 text-center mx-auto" style={{ maxWidth: '550px' }}>
+            You can set up a <a href="https://help.printify.com/hc/en-us/articles/29856933892241-How-do-I-set-up-product-personalization" target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 underline">manual personalization</a> for each of your products to allow your customers to describe how they want to change the image, which will generate a new AI image for their order.
           </p>
         </>
       )}

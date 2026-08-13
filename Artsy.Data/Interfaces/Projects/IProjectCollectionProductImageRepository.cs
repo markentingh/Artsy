@@ -10,6 +10,7 @@ namespace Artsy.Data.Interfaces.Projects
         Task<IEnumerable<ProjectCollectionProductImage>> GetByCollectionIdAsync(Guid collectionId);
         Task<IEnumerable<ProjectCollectionProductImage>> GetAllByCollectionIdAsync(Guid collectionId);
         Task<IEnumerable<ProjectCollectionProductImage>> GetByCollectionAndBlueprintIdAsync(Guid collectionId, Guid projectBlueprintId);
+        Task<IEnumerable<ProjectCollectionProductImage>> GetByPrintifyProductIdAsync(string printifyProductId);
         Task<ProjectCollectionProductImage> CreateAsync(ProjectCollectionProductImage image);
         Task UpdateAsync(ProjectCollectionProductImage image);
         Task SetInactiveAsync(Guid collectionId, Guid projectBlueprintId, Guid productImageId);

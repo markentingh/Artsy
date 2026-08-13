@@ -1,7 +1,7 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-export default function BarChart({ data, formatValue, height = 200, barColor = '#003cbf', barHoverColor = '#0050ff', secondaryColor = '#e91e63', secondaryHoverColor = '#ff4081', className = '', showXAxisLabels = true }) {
+export default function BarChart({ data, formatValue, height = 200, barColor = '#003cbf', barHoverColor = '#0050ff', secondaryColor = '#e91e63', secondaryHoverColor = '#ff4081', primaryLabel = 'Artwork Cost', secondaryLabel = 'Upscale Cost', className = '', showXAxisLabels = true }) {
   const [hovered, setHovered] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ left: 0, top: 0 });
   const containerRef = useRef(null);
@@ -129,8 +129,8 @@ export default function BarChart({ data, formatValue, height = 200, barColor = '
             <div className="font-medium">{data[hovered].title || data[hovered].label}</div>
             {data[hovered].upscaleCost !== undefined ? (
               <>
-                <div>Artwork Cost: {formatValue ? formatValue(data[hovered].value - data[hovered].upscaleCost) : (data[hovered].value - data[hovered].upscaleCost)}</div>
-                <div>Upscale Cost: {formatValue ? formatValue(data[hovered].upscaleCost) : data[hovered].upscaleCost}</div>
+                <div>{primaryLabel}: {formatValue ? formatValue(data[hovered].value - data[hovered].upscaleCost) : (data[hovered].value - data[hovered].upscaleCost)}</div>
+                <div>{secondaryLabel}: {formatValue ? formatValue(data[hovered].upscaleCost) : data[hovered].upscaleCost}</div>
               </>
             ) : (
               <div>{formatValue ? formatValue(data[hovered].value) : data[hovered].value}</div>

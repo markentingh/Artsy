@@ -57,6 +57,18 @@ namespace Artsy.Data.Repositories.Projects
             return await _dbConnection.QueryAsync<ProjectCollectionProductImage>(query, new { collectionId, projectBlueprintId });
         }
 
+        public async Task<IEnumerable<ProjectCollectionProductImage>> GetByPrintifyProductIdAsync(string printifyProductId)
+        {
+            const string query = @"
+                SELECT pcpi.*
+                FROM public.""ProjectCollectionPrintifyProducts"" pcpp
+                JOIN public.""ProjectCollectionProducts"" pcp ON pcp.""Id"" = pcpp.""ProductId""
+                JOIN public.""ProjectCollectionProductImages"" pcpi ON pcpi.""CollectionId"" = pcpp.""CollectionId"" AND pcpi.""ProjectBlueprintId"" = pcp.""ProjectBlueprintId""
+                WHERE pcpp.""PrintifyProductId"" = @printifyProductId AND pcpp.""Status"" = 1 AND pcpi.""Active"" = TRUE
+                ORDER BY pcpi.""ProductImageId""";
+            return await _dbConnection.QueryAsync<ProjectCollectionProductImage>(query, new { printifyProductId });
+        }
+
         public async Task<ProjectCollectionProductImage> CreateAsync(ProjectCollectionProductImage image)
         {
             image.Id = Guid.NewGuid();

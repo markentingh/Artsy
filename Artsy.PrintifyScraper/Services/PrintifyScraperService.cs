@@ -92,7 +92,31 @@ namespace Artsy.PrintifyScraper.Services
                     await page.GotoAsync(url, new PageGotoOptions { Timeout = 30000, WaitUntil = WaitUntilState.NetworkIdle });
                     progress?.Report("Page loaded, looking for print providers...");
 
-                    // Wait for print provider containers
+                    // Wait for print providers container
+                    var providersContainer = page.Locator("pfa-blueprint-print-providers");
+                    try
+                    {
+                        await providersContainer.First.WaitForAsync(new LocatorWaitForOptions { Timeout = 15000 });
+                    }
+                    catch
+                    {
+                        throw new Exception("No print providers section found on the page.");
+                    }
+
+                    var chooseManuallyButton = page.Locator("pfy-chip[data-testid='manualProviderToggleOption'] button").First;
+                    if (await chooseManuallyButton.CountAsync() > 0)
+                    {
+                        try
+                        {
+                            await chooseManuallyButton.ClickAsync();
+                            await page.WaitForTimeoutAsync(1000);
+                        }
+                        catch
+                        {
+                            progress?.Report("Warning: Could not click Choose manually.");
+                        }
+                    }
+
                     var providerContainers = page.Locator("pfa-blueprint-print-provider");
                     try
                     {
@@ -162,11 +186,17 @@ namespace Artsy.PrintifyScraper.Services
                             progress?.Report($"Warning: Provider Info modal did not appear for {providerName}.");
                             continue;
                         }
-                        await page.WaitForTimeoutAsync(1000);
+                        
 
                         progress?.Report($"Extracting colors from {providerName}...");
 
-                        var colorItems = await page.Locator("li[data-testid='color']").AllAsync();
+                        IReadOnlyList<ILocator> colorItems = new List<ILocator>();
+                        for (int attempt = 0; attempt < 15; attempt++)
+                        {
+                            colorItems = await page.Locator("pfy-modal-dialog-content pfa-product-variants li[data-testid='color']").AllAsync();
+                            if (colorItems.Count > 0) { break; }
+                            await page.WaitForTimeoutAsync(100);
+                        }
                         var colors = new List<ProviderColor>();
 
                         foreach (var item in colorItems)
@@ -238,7 +268,6 @@ namespace Artsy.PrintifyScraper.Services
                                 await page.Keyboard.PressAsync("Escape");
                         }
                         catch { /* ignore close errors */ }
-                        await page.WaitForTimeoutAsync(500);
                     }
 
                     progress?.Report($"Found {providerInfos.Count} print provider(s).");
