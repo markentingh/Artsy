@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.Processing;
 using Artsy.API.Models;
 using Artsy.API.Models.Collections;
@@ -152,7 +154,7 @@ namespace Artsy.API.Controllers
 
                 var cropSettings = await GetCropSettingsForArtworkAsync(collection.ProjectId, artwork.ItemId);
                 if (cropSettings != null)
-                    imgBytes = CropImage(imgBytes, cropSettings.Value.Width, cropSettings.Value.Height, cropSettings.Value.CropX, cropSettings.Value.CropY, artwork.Opacity);
+                    imgBytes = ProcessImage(imgBytes, cropSettings.Value.Width, cropSettings.Value.Height, cropSettings.Value.CropX, cropSettings.Value.CropY, artwork.Opacity);
 
                 var base64 = Convert.ToBase64String(imgBytes);
                 var fileName = artwork.Opacity ? $"{artwork.Id}.png" : $"{artwork.Id}.jpg";
@@ -193,6 +195,14 @@ namespace Artsy.API.Controllers
                 catch { }
             }
             return null;
+        }
+
+        private static byte[] ProcessImage(byte[] imgBytes, int targetWidth, int targetHeight, string cropX, string cropY, bool preservePng = false)
+        {
+            if (string.Equals(cropX, "fit", StringComparison.OrdinalIgnoreCase))
+                return FitImage(imgBytes, targetWidth, targetHeight, cropY, preservePng);
+
+            return CropImage(imgBytes, targetWidth, targetHeight, cropX, cropY, preservePng);
         }
 
         private static byte[] CropImage(byte[] imgBytes, int targetWidth, int targetHeight, string cropX, string cropY, bool preservePng = false)
@@ -240,6 +250,36 @@ namespace Artsy.API.Controllers
                 image.Save(ms, new SixLabors.ImageSharp.Formats.Png.PngEncoder());
             else
                 image.Save(ms, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder());
+            return ms.ToArray();
+        }
+
+        private static byte[] FitImage(byte[] imgBytes, int targetWidth, int targetHeight, string cropY, bool preservePng = false)
+        {
+            using var image = Image.Load(imgBytes);
+            var srcW = image.Width;
+            var srcH = image.Height;
+            var targetRatio = (double)targetWidth / targetHeight;
+            var srcRatio = (double)srcW / srcH;
+
+            int newW, newH;
+            if (srcRatio > targetRatio)
+            {
+                newW = targetWidth;
+                newH = (int)(targetWidth / srcRatio);
+            }
+            else
+            {
+                newH = targetHeight;
+                newW = (int)(targetHeight * srcRatio);
+            }
+
+            image.Mutate(ctx => ctx.Resize(newW, newH));
+
+            using var ms = new MemoryStream();
+            if (preservePng)
+                image.Save(ms, new PngEncoder());
+            else
+                image.Save(ms, new JpegEncoder());
             return ms.ToArray();
         }
 
@@ -367,6 +407,30 @@ namespace Artsy.API.Controllers
                                 artworkUsedInPlacements.Add(art.Id);
 
                                 var position = (placement.Position ?? "").ToLower();
+
+                                double x = 0.5, y = 0.5, scale = 1;
+                                if (string.Equals(placement.CropX, "fit", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    var (tw, th) = placement.GetDimensions();
+                                    if (tw > 0 && th > 0 && art.Width > 0 && art.Height > 0)
+                                    {
+                                        var targetRatio = (double)tw / th;
+                                        var srcRatio = (double)art.Width / art.Height;
+                                        int fitH;
+                                        if (srcRatio > targetRatio)
+                                            fitH = (int)(tw / srcRatio);
+                                        else
+                                            fitH = th;
+                                        var cropY = (placement.CropY ?? "").ToLower();
+                                        y = cropY switch
+                                        {
+                                            "top" => (double)fitH / (2 * th),
+                                            "bottom" => 1 - ((double)fitH / (2 * th)),
+                                            _ => 0.5,
+                                        };
+                                    }
+                                }
+
                                 printAreas.Add(new PrintifyPrintAreaRequest
                                 {
                                     VariantIds = variantIds,
@@ -380,9 +444,9 @@ namespace Artsy.API.Controllers
                                                 new PrintifyPlaceholderImageRequest
                                                 {
                                                     Id = art.PrintifyImageId,
-                                                    X = 0.5,
-                                                    Y = 0.5,
-                                                    Scale = 1,
+                                                    X = x,
+                                                    Y = y,
+                                                    Scale = scale,
                                                     Angle = 0,
                                                 }
                                             },

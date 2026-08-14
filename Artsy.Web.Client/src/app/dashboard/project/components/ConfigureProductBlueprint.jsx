@@ -22,6 +22,7 @@ function ConfigureProductBlueprintInner() {
     saving,
     message,
     setMessage,
+    saveMessage,
     isEditing,
     onClose,
     handleSave,
@@ -117,7 +118,12 @@ function ConfigureProductBlueprintInner() {
       )}
 
       <div className="buttons flex justify-end gap-2 mt-4">
-        <ButtonOutline className="cancel" onClick={onClose}>
+        {saveMessage && (
+          <span className="text-sm text-green-600 dark:text-green-400 mr-2 transition-opacity duration-500 self-center">
+            {saveMessage}
+          </span>
+        )}
+        <ButtonOutline className="cancel" onClick={onClose} color="gray">
           Cancel
         </ButtonOutline>
         <ButtonOutline onClick={handleSave} disabled={saving || loading}>

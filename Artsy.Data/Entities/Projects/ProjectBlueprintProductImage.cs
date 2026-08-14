@@ -9,6 +9,7 @@ namespace Artsy.Data.Entities.Projects
         public string VariantColor { get; set; } = "";
         public int Status { get; set; } = 1;
         public string Prompt { get; set; } = "";
+        public Guid? ImageId { get; set; }
         public DateTime DateCreated { get; set; }
         public DateTime DateUpdated { get; set; }
     }

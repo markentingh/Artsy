@@ -59,6 +59,11 @@ namespace Artsy.API.Controllers
                                 thumbnails.Add($"/api/projects/item/{i.Id}/reference/{r.Id}?thumb=true");
                     }
 
+                    if (artworkByItem.TryGetValue(i.Id, out var artwork))
+                    {
+                        // no-op - keeps the compiler from warning about assigned variable
+                    }
+
                     result.Add(new ProjectItemListItem
                     {
                         Id = i.Id,
@@ -68,7 +73,8 @@ namespace Artsy.API.Controllers
                         SocialMedia = i.SocialMedia,
                         ProductCount = i.ProductCount,
                         QuestionCount = i.QuestionCount,
-                        ArtworkType = artworkByItem.TryGetValue(i.Id, out var artwork) ? artwork.ArtworkType : "ai",
+                        ArtworkType = artwork?.ArtworkType ?? "ai",
+                        OpacityJson = artwork?.OpacityJson,
                         Thumbnails = thumbnails
                     });
                 }

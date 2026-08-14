@@ -272,7 +272,7 @@ namespace Artsy.API.Controllers
                 {
                     var firstColor = opacitySettings.ChromaKeys[0];
                     var hexColor = $"#{firstColor.R:X2}{firstColor.G:X2}{firstColor.B:X2}";
-                    finalPrompt += $" the background for this image must be a solid color using {hexColor} hex color so that we can apply a chroma key to the image later";
+                    finalPrompt += $" the background for this image must be a completely flat, uniform, solid color using {hexColor} hex color with no gradients, textures, shadows, or objects, filling the entire background area, so that we can apply a chroma key to the image later";
                 }
 
                 modelRequest.Prompt = finalPrompt;
@@ -395,7 +395,7 @@ namespace Artsy.API.Controllers
                         Height = height,
                         Quality = genQuality,
                         PreviousResponseId = previousResponseId,
-                        UseResponsesApi = true
+                        UseResponsesApi = false
                     };
 
                     var inputImageDimensions = new List<(int width, int height)>();
@@ -422,11 +422,11 @@ namespace Artsy.API.Controllers
                     // Apply opacity mask (chroma key) processing if configured
                     if (opacitySettings != null && opacitySettings.ChromaKeys.Count > 0)
                     {
-                        // Save the original AI-generated image as _orig.jpg (no thumb for orig)
-                        await _imageService.SaveProjectCollectionArtworkOrigAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, genResult.ImageBytes);
-
                         // Apply chroma keys to create transparent PNG
                         var pngBytes = await _opacityService.ApplyChromaKeysAsync(genResult.ImageBytes, opacitySettings);
+
+                        // Save the chroma-only PNG before the overlay is applied
+                        await _imageService.SaveProjectCollectionArtworkChromaAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, pngBytes);
 
                         // Apply overlay color if set (tints all non-transparent pixels)
                         if (opacitySettings.Overlay != null && !string.IsNullOrWhiteSpace(opacitySettings.Overlay.Color))
@@ -468,10 +468,10 @@ namespace Artsy.API.Controllers
                                 }
                                 catch { /* ignore background resolution errors, fall back to color or black */ }
                             }
-                            else if (opacitySettings.Background.Type == "color" && !string.IsNullOrWhiteSpace(opacitySettings.Background.Color))
-                            {
+
+                            // Fall back to the configured background color if no image was resolved
+                            if (bgBytes == null && !string.IsNullOrWhiteSpace(opacitySettings.Background.Color))
                                 bgColor = opacitySettings.Background.Color;
-                            }
                         }
 
                         // Composite PNG over background to create JPG with background
@@ -569,8 +569,15 @@ namespace Artsy.API.Controllers
 
                 if (artwork.Opacity)
                 {
-                    // For opacity artworks, save upscaled result as PNG (preserves transparency)
-                    await _imageService.SaveProjectCollectionArtworkFullSizePngAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id, upscaledBytes);
+                    // The upscaler returns the original background, so re-apply chroma/overlay to get a transparent PNG
+                    var itemArtworkList = await _projectItemArtworkRepository.GetByItemIdAsync(request.ItemId);
+                    var itemArtwork = itemArtworkList.FirstOrDefault();
+                    var opacitySettings = _opacityService.ParseOpacityJson(itemArtwork?.OpacityJson) ?? new OpacitySettings();
+                    var pngBytes = await _opacityService.ApplyChromaKeysAsync(upscaledBytes, opacitySettings);
+                    if (!string.IsNullOrWhiteSpace(opacitySettings.Overlay?.Color))
+                        pngBytes = await _opacityService.ApplyOverlayAsync(pngBytes, opacitySettings.Overlay.Color);
+
+                    await _imageService.SaveProjectCollectionArtworkFullSizePngAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id, pngBytes);
                 }
                 else
                 {
@@ -1440,10 +1447,16 @@ namespace Artsy.API.Controllers
                     if (printifyProduct != null)
                     {
                         var mockups = (await _mockupRepository.GetByPrintifyProductIdAsync(printifyProduct.Id)).ToList();
-                        var defaultMockups = mockups.Where(m => m.IsDefault).Take(2).ToList();
-                        var selectedMockups = defaultMockups.Count > 0
-                            ? defaultMockups
-                            : mockups.Take(2).ToList();
+                        var selectedMockups = mockups
+                            .Where(m => request.MockupImageIds != null && request.MockupImageIds.Contains(m.Id))
+                            .ToList();
+                        if (selectedMockups.Count == 0)
+                        {
+                            var defaultMockups = mockups.Where(m => m.IsDefault).Take(2).ToList();
+                            selectedMockups = defaultMockups.Count > 0
+                                ? defaultMockups
+                                : mockups.Take(2).ToList();
+                        }
 
                         foreach (var mockup in selectedMockups)
                         {
@@ -1610,10 +1623,16 @@ namespace Artsy.API.Controllers
                     if (printifyProduct != null)
                     {
                         var mockups = (await _mockupRepository.GetByPrintifyProductIdAsync(printifyProduct.Id)).ToList();
-                        var defaultMockups = mockups.Where(m => m.IsDefault).Take(2).ToList();
-                        var selectedMockups = defaultMockups.Count > 0
-                            ? defaultMockups
-                            : mockups.Take(2).ToList();
+                        var selectedMockups = mockups
+                            .Where(m => request.MockupImageIds != null && request.MockupImageIds.Contains(m.Id))
+                            .ToList();
+                        if (selectedMockups.Count == 0)
+                        {
+                            var defaultMockups = mockups.Where(m => m.IsDefault).Take(2).ToList();
+                            selectedMockups = defaultMockups.Count > 0
+                                ? defaultMockups
+                                : mockups.Take(2).ToList();
+                        }
 
                         foreach (var mockup in selectedMockups)
                         {
@@ -1629,27 +1648,35 @@ namespace Artsy.API.Controllers
                         }
                     }
 
-                    // Fallback: if no mockup images were found, use the Printify blueprint image for the variant color
+                    // Fallback: if no mockup images were found, use the ProjectBlueprintProductImages reference image
                     if (printifyImageCount == 0 && !string.IsNullOrWhiteSpace(request.VariantColor))
                     {
                         var bpImages = (await _printifyBlueprintImageRepository.GetByBlueprintIdAsync(printifyBlueprintId)).ToList();
                         if (bpImages.Count > 0)
                         {
-                            var bpImageIds = bpImages.Select(img => img.Id).ToList();
-                            var variants = (await _printifyBlueprintImageVariantRepository.GetByBlueprintImageIdsAsync(bpImageIds)).ToList();
-                            // Find the image whose variant color matches
-                            var matchingVariant = variants.FirstOrDefault(v =>
-                                v.VariantColor.Equals(request.VariantColor, StringComparison.OrdinalIgnoreCase));
-                            if (matchingVariant != null)
+                            var blueprintProductImages = (await _projectBlueprintProductImageRepository.GetByProjectBlueprintIdAsync(request.ProjectBlueprintId)).ToList();
+                            var selected = blueprintProductImages
+                                .FirstOrDefault(pbi =>
+                                    pbi.VariantColor.Equals(request.VariantColor, StringComparison.OrdinalIgnoreCase) &&
+                                    pbi.ImageId.HasValue);
+                            if (selected == null)
                             {
-                                var matchingImage = bpImages.First(img => img.Id == matchingVariant.BlueprintImageId);
-                                var imgBytes = await _imageService.GetPrintifyCatalogImageAsync(printifyBlueprintId, matchingImage.ImageIndex, false);
-                                if (imgBytes != null && imgBytes.Length > 0)
+                                selected = blueprintProductImages
+                                    .FirstOrDefault(pbi => pbi.ImageId.HasValue);
+                            }
+                            if (selected != null)
+                            {
+                                var matchingImage = bpImages.FirstOrDefault(img => img.Id == selected.ImageId.GetValueOrDefault());
+                                if (matchingImage != null)
                                 {
-                                    inputImages.Add(imgBytes);
-                                    inputImageRefs.Add(new { type = "blueprint", id = matchingImage.Id.ToString() });
-                                    printifyImageCount++;
-                                    printifyImagePositions.Add(GetPositionLabel(matchingImage.Position));
+                                    var imgBytes = await _imageService.GetPrintifyCatalogImageAsync(printifyBlueprintId, matchingImage.ImageIndex, false);
+                                    if (imgBytes != null && imgBytes.Length > 0)
+                                    {
+                                        inputImages.Add(imgBytes);
+                                        inputImageRefs.Add(new { type = "blueprint", id = matchingImage.Id.ToString() });
+                                        printifyImageCount++;
+                                        printifyImagePositions.Add(GetPositionLabel(matchingImage.Position));
+                                    }
                                 }
                             }
                         }
@@ -1725,7 +1752,7 @@ namespace Artsy.API.Controllers
                     Height = 2048,
                     Quality = "medium",
                     PreviousResponseId = previousResponseId,
-                    UseResponsesApi = true
+                    UseResponsesApi = false
                 };
 
                 var productImageInputDimensions = new List<(int width, int height)>();
@@ -1941,7 +1968,8 @@ namespace Artsy.API.Controllers
                         title = img.Title,
                         variantColor = img.VariantColor,
                         status = img.Status,
-                        prompt = img.Prompt
+                        prompt = img.Prompt,
+                        imageId = img.ImageId
                     })
                 });
             }
@@ -1983,7 +2011,8 @@ namespace Artsy.API.Controllers
                         title = img.Title,
                         variantColor = img.VariantColor,
                         status = img.Status,
-                        prompt = img.Prompt
+                        prompt = img.Prompt,
+                        imageId = img.ImageId
                     })
                 });
             }
@@ -2013,7 +2042,8 @@ namespace Artsy.API.Controllers
                     Title = request.Title,
                     VariantColor = request.VariantColor,
                     Status = 1,
-                    Prompt = request.Prompt
+                    Prompt = request.Prompt,
+                    ImageId = request.ImageId
                 });
 
                 return Json(new ApiResponse
@@ -2026,7 +2056,8 @@ namespace Artsy.API.Controllers
                         title = image.Title,
                         variantColor = image.VariantColor,
                         status = image.Status,
-                        prompt = image.Prompt
+                        prompt = image.Prompt,
+                        imageId = image.ImageId
                     }
                 });
             }
@@ -2052,6 +2083,7 @@ namespace Artsy.API.Controllers
                 image.Title = request.Title;
                 image.VariantColor = request.VariantColor;
                 image.Prompt = request.Prompt;
+                image.ImageId = request.ImageId;
                 await _projectBlueprintProductImageRepository.UpdateAsync(image);
 
                 return Json(new ApiResponse { success = true });

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useCollection } from '@/context/collection';
 import { useSession } from '@/context/session';
-import { Projects } from '@/api/user/projects';
+import { PrintifyProducts } from '@/api/user/printifyProducts';
 import ButtonOutline from '@/components/ui/button-outline';
 import Button from '@/components/ui/button';
 import List, { Item } from '@/components/ui/list';
@@ -21,7 +21,7 @@ export default function CreateProducts() {
     ensureCollection, loadMockups,
   } = useCollection();
 
-  const printifyApi = Projects(session);
+  const printifyProductsApi = PrintifyProducts(session);
 
   const [uploading, setUploading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -175,7 +175,7 @@ export default function CreateProducts() {
       setArtworkUploadState(prev => ({ ...prev, [art.id]: { status: 'uploading' } }));
 
       try {
-        const response = await printifyApi.uploadPrintifyArtworkImage({
+        const response = await printifyProductsApi.uploadArtworkImage({
           collectionId,
           artworkId: art.id,
         });
@@ -193,7 +193,7 @@ export default function CreateProducts() {
     }
 
     setUploading(false);
-  }, [collectionId, project, activeArtworkImages, artworkUploadState, printifyApi, setMessage]);
+  }, [collectionId, project, activeArtworkImages, artworkUploadState, printifyProductsApi, setMessage]);
 
   const allImagesUploaded = useMemo(() => {
     const artworkDone = activeArtworkImages.length > 0 && activeArtworkImages.every(art => artworkUploadState[art.id]?.status === 'done');
@@ -224,7 +224,7 @@ export default function CreateProducts() {
 
       try {
         if (existingPp && existingPp.printifyProductId) {
-          const response = await printifyApi.downloadPrintifyMockups({
+          const response = await printifyProductsApi.downloadMockups({
             collectionId,
             projectBlueprintId: bp.id,
           });
@@ -238,7 +238,7 @@ export default function CreateProducts() {
             setMessage({ type: 'error', text: response.data.message || `Failed to download mockups for ${bp.name}` });
           }
         } else {
-          const response = await printifyApi.createPrintifyProduct({
+          const response = await printifyProductsApi.create({
             collectionId,
             projectBlueprintId: bp.id,
           });
@@ -260,14 +260,14 @@ export default function CreateProducts() {
     await loadMockups(collectionId);
 
     try {
-      const ppRes = await printifyApi.getPrintifyProductsByCollection(collectionId);
+      const ppRes = await printifyProductsApi.getByCollection(collectionId);
       if (ppRes.data.success) {
         setPrintifyProducts(ppRes.data.data || []);
       }
     } catch { /* ignore */ }
 
     setCreating(false);
-  }, [collectionId, project, activeBlueprints, variantCountByBlueprint, printifyProducts, printifyApi, setMessage, setPrintifyProducts, loadMockups]);
+  }, [collectionId, project, activeBlueprints, variantCountByBlueprint, printifyProducts, printifyProductsApi, setMessage, setPrintifyProducts, loadMockups]);
 
   const handleNext = useCallback(async () => {
     const colId = collectionId || await ensureCollection();
@@ -337,7 +337,7 @@ export default function CreateProducts() {
       projectBlueprintId: bp.id,
       active: activeMap[bp.id] !== false,
     }));
-    await printifyApi.updateCollectionProductsActive({ collectionId, products });
+    await api.updateCollectionProductsActive({ collectionId, products });
 
     if (allImagesUploaded) {
       await handleCreateProducts();
@@ -345,7 +345,7 @@ export default function CreateProducts() {
       await handleUploadImages();
       await handleCreateProducts();
     }
-  }, [collectionId, blueprintsWithImages, activeMap, printifyApi, allImagesUploaded, handleUploadImages, handleCreateProducts]);
+  }, [collectionId, blueprintsWithImages, activeMap, api, allImagesUploaded, handleUploadImages, handleCreateProducts]);
 
   const allPreviewImages = useMemo(() => {
     return [

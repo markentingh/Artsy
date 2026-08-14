@@ -81,7 +81,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const fileInputRef = useRef(null);
 
   // Opacity Mask state — single stateful object
-  const [opacitySettings, setOpacitySettings] = useState({ chromakeys: [], fuziness: 1, background: null, overlay: null });
+  const [opacitySettings, setOpacitySettings] = useState({ chromakeys: [], fuziness: 60, background: null, overlay: null });
   const [loadedOpacityJson, setLoadedOpacityJson] = useState('null');
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [pendingColor, setPendingColor] = useState('#00ff00');
@@ -154,7 +154,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setDeleteReferenceTarget(null);
     setShowArtworkSelector(false);
     setActiveTab('info');
-    setOpacitySettings({ chromakeys: [], fuziness: 1, background: null, overlay: null });
+    setOpacitySettings({ chromakeys: [], fuziness: 60, background: null, overlay: null });
     setLoadedOpacityJson('null');
     setShowColorPicker(false);
     setPendingColor('#00ff00');
@@ -199,7 +199,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
             if (opacityJson) {
               const parsed = JSON.parse(opacityJson);
               const loadedKeys = parsed.chromakeys || [];
-              const loadedFuzz = parsed.fuziness ?? 1;
+              const loadedFuzz = parsed.fuziness ?? 60;
               const loadedBg = parsed.background || null;
               const loadedOverlay = parsed.overlay || null;
               const settings = { chromakeys: loadedKeys, fuziness: loadedFuzz, background: loadedBg, overlay: loadedOverlay };
@@ -234,7 +234,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
               }
             }
           } catch {
-            setOpacitySettings({ chromakeys: [], fuziness: 1, background: null, overlay: null });
+            setOpacitySettings({ chromakeys: [], fuziness: 60, background: null, overlay: null });
             setLoadedOpacityJson('null');
             setOpacityBgPreview(null);
             setPendingBgColor('#000000');

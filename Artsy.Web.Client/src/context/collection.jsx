@@ -155,22 +155,31 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   }, [blueprints]);
 
   const currentItem = aiItems[currentItemIndex];
+  const creatingCollectionRef = useRef(null);
 
   const ensureCollection = useCallback(async () => {
     if (collectionId) return collectionId;
-    try {
-      const colRes = await api.createCollection({ projectId, title: `Collection ${new Date().toISOString().split('T')[0]}` });
-      if (colRes.data.success) {
-        setCollectionId(colRes.data.data.id);
-        return colRes.data.data.id;
-      } else {
-        setMessage({ type: 'error', text: colRes.data.message || 'Failed to create collection' });
+    if (creatingCollectionRef.current) return creatingCollectionRef.current;
+
+    const promise = (async () => {
+      try {
+        const colRes = await api.createCollection({ projectId, title: `Collection ${new Date().toISOString().split('T')[0]}` });
+        if (colRes.data.success) {
+          setCollectionId(colRes.data.data.id);
+          return colRes.data.data.id;
+        } else {
+          setMessage({ type: 'error', text: colRes.data.message || 'Failed to create collection' });
+          return null;
+        }
+      } catch (error) {
+        setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to create collection' });
         return null;
       }
-    } catch (error) {
-      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to create collection' });
-      return null;
-    }
+    })();
+
+    creatingCollectionRef.current = promise;
+    promise.finally(() => { creatingCollectionRef.current = null; });
+    return promise;
   }, [collectionId, projectId, api]);
 
   const buildProjectAnswers = useCallback(() => {
@@ -323,9 +332,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         setStep(STEPS.ARTWORK_QUESTIONS);
       } else {
         setPreviewImageData(null);
-        setStep(STEPS.ARTWORK_PREVIEW);
-        const colId = await ensureCollection();
-        if (colId) await doGeneratePreview(colId);
+        setStep(STEPS.ARTWORK_QUESTIONS);
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load artwork data' });

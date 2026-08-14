@@ -120,6 +120,51 @@ namespace Artsy.API.Services
             var maxDistance = fuzziness;
             if (maxDistance <= 0) maxDistance = 1f;
 
+            // Offset all chroma keys by the color drift of the actual background
+            // versus the first configured chroma key. The background is sampled from
+            // the four corners, and the corner color closest to the first key is used
+            // so the drift is computed from the real background, not a subject pixel.
+            var chromaKeys = new List<(byte R, byte G, byte B)>(settings.ChromaKeys);
+            if (chromaKeys.Count > 0)
+            {
+                var first = chromaKeys[0];
+                var corners = new (int X, int Y)[]
+                {
+                    (0, 0),
+                    (image.Width - 1, 0),
+                    (0, image.Height - 1),
+                    (image.Width - 1, image.Height - 1),
+                };
+                (byte R, byte G, byte B)? background = null;
+                float minDistance = float.MaxValue;
+                foreach (var (cx, cy) in corners)
+                {
+                    var cornerPixel = image[cx, cy];
+                    var dr = (int)cornerPixel.R - first.R;
+                    var dg = (int)cornerPixel.G - first.G;
+                    var db = (int)cornerPixel.B - first.B;
+                    var distance = MathF.Sqrt(dr * dr + dg * dg + db * db);
+                    if (distance < minDistance)
+                    {
+                        minDistance = distance;
+                        background = (cornerPixel.R, cornerPixel.G, cornerPixel.B);
+                    }
+                }
+
+                if (background.HasValue)
+                {
+                    var (br, bg, bb) = background.Value;
+                    var driftR = br - first.R;
+                    var driftG = bg - first.G;
+                    var driftB = bb - first.B;
+                    for (int i = 0; i < chromaKeys.Count; i++)
+                    {
+                        var key = chromaKeys[i];
+                        chromaKeys[i] = (ClampByte(key.R + driftR), ClampByte(key.G + driftG), ClampByte(key.B + driftB));
+                    }
+                }
+            }
+
             for (int y = 0; y < image.Height; y++)
             {
                 for (int x = 0; x < image.Width; x++)
@@ -127,7 +172,7 @@ namespace Artsy.API.Services
                     var pixel = image[x, y];
                     float bestMatch = 0;
 
-                    foreach (var (cr, cg, cb) in settings.ChromaKeys)
+                    foreach (var (cr, cg, cb) in chromaKeys)
                     {
                         var dr = pixel.R - cr;
                         var dg = pixel.G - cg;
@@ -151,7 +196,7 @@ namespace Artsy.API.Services
             }
 
             using var stream = new MemoryStream();
-            await image.SaveAsync(stream, new PngEncoder());
+            await image.SaveAsync(stream, new PngEncoder { ColorType = PngColorType.RgbWithAlpha });
             return stream.ToArray();
         }
 
@@ -213,7 +258,7 @@ namespace Artsy.API.Services
             }
 
             using var stream = new MemoryStream();
-            await image.SaveAsync(stream, new PngEncoder());
+            await image.SaveAsync(stream, new PngEncoder { ColorType = PngColorType.RgbWithAlpha });
             return stream.ToArray();
         }
 
@@ -229,5 +274,7 @@ namespace Artsy.API.Services
             }
             return (0, 0, 0);
         }
+
+        private static byte ClampByte(int value) => (byte)Math.Max(0, Math.Min(255, value));
     }
 }

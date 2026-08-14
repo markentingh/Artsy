@@ -44,8 +44,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             image.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectBlueprintProductImages"" (""Id"", ""ProjectId"", ""ProjectBlueprintId"", ""Title"", ""VariantColor"", ""Status"", ""Prompt"", ""DateCreated"", ""DateUpdated"")
-                VALUES (@Id, @ProjectId, @ProjectBlueprintId, @Title, @VariantColor, @Status, @Prompt, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                INSERT INTO public.""ProjectBlueprintProductImages"" (""Id"", ""ProjectId"", ""ProjectBlueprintId"", ""Title"", ""VariantColor"", ""Status"", ""Prompt"", ""ImageId"", ""DateCreated"", ""DateUpdated"")
+                VALUES (@Id, @ProjectId, @ProjectBlueprintId, @Title, @VariantColor, @Status, @Prompt, @ImageId, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectBlueprintProductImage>(query, image);
         }
@@ -54,7 +54,7 @@ namespace Artsy.Data.Repositories.Projects
         {
             const string query = @"
                 UPDATE public.""ProjectBlueprintProductImages""
-                SET ""Title"" = @Title, ""VariantColor"" = @VariantColor, ""Prompt"" = @Prompt, ""DateUpdated"" = CURRENT_TIMESTAMP
+                SET ""Title"" = @Title, ""VariantColor"" = @VariantColor, ""Prompt"" = @Prompt, ""ImageId"" = @ImageId, ""DateUpdated"" = CURRENT_TIMESTAMP
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, image);
         }

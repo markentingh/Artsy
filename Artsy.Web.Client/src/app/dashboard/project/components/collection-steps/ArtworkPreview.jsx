@@ -94,6 +94,8 @@ export default function ArtworkPreview() {
               <Carousel
                 images={carouselImages}
                 alt="Artwork preview"
+                singleImage
+                infiniteScroll
                 imageClassName="!max-h-none w-full h-[512px] object-contain"
                 onImageClick={(src) => setArtworkPreview({ images: carouselImages, src })}
               />

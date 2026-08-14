@@ -7,9 +7,12 @@ CREATE TABLE IF NOT EXISTS public."ProjectBlueprintProductImages"
     "VariantColor" VARCHAR(32) NOT NULL DEFAULT '',
     "Status" INT NOT NULL DEFAULT 1,
     "Prompt" TEXT NOT NULL DEFAULT '',
+    "ImageId" UUID NULL,
     "DateCreated" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "DateUpdated" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE public."ProjectBlueprintProductImages" ADD COLUMN IF NOT EXISTS "ImageId" UUID NULL;
 
 CREATE INDEX IF NOT EXISTS "IX_ProjectBlueprintProductImages_ProjectBlueprintId"
     ON public."ProjectBlueprintProductImages" ("ProjectBlueprintId");

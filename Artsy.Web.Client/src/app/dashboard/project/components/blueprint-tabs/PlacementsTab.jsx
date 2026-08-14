@@ -36,6 +36,7 @@ export default function PlacementsTab() {
     { value: 'left', label: 'Left' },
     { value: 'center', label: 'Center' },
     { value: 'right', label: 'Right' },
+    { value: 'fit', label: 'Fit' },
   ];
 
   const cropYOptions = [
@@ -75,6 +76,10 @@ export default function PlacementsTab() {
     if (!w || !h) return null;
 
     const targetRatio = w / h;
+    if (cropX === 'fit') {
+      cropX = 'center';
+      cropY = 'center';
+    }
     cropX = cropX || 'center';
     cropY = cropY || 'center';
 
@@ -100,6 +105,22 @@ export default function PlacementsTab() {
         style={{ left, top, width: overlayWidth, height: overlayHeight, boxShadow: '0 0 0 1px rgba(0,0,0,0.3)' }}
       />
     );
+  };
+
+  const computeFitStyle = (dimensions, cropX, cropY) => {
+    if (cropX !== 'fit') return undefined;
+    const dims = dimensions || '';
+    const parts = dims.split('x');
+    if (parts.length !== 2) return undefined;
+    const w = parseInt(parts[0], 10);
+    const h = parseInt(parts[1], 10);
+    if (!w || !h) return undefined;
+    const targetRatio = w / h;
+    const yPos = cropY === 'top' ? 'top' : cropY === 'bottom' ? 'bottom' : 'center';
+    const objectPosition = `center ${yPos}`;
+    if (targetRatio > 1) return { width: '100%', height: `${(1 / targetRatio) * 100}%`, objectFit: 'contain', objectPosition };
+    if (targetRatio < 1) return { width: `${targetRatio * 100}%`, height: '100%', objectFit: 'contain', objectPosition };
+    return { width: '100%', height: '100%', objectFit: 'contain', objectPosition };
   };
 
   if (allPlaceholders.length === 0) {
@@ -130,14 +151,15 @@ export default function PlacementsTab() {
           const selectedDim = settings.dimensions || dimOptions[0]?.value || '';
           return (
             <div key={ph.position} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
-              <div className="w-full aspect-square mb-2 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
+              <div className="relative w-full aspect-square mb-2 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
                 {carouselImages.length > 0 ? (
                   <Carousel
                     images={carouselImages}
                     alt={formatPosition(ph.position)}
                     singleImage
                     infiniteScroll
-                    imageClassName="!max-h-none w-full h-full object-cover"
+                    imageClassName={settings.cropX === 'fit' ? '!max-h-none object-contain' : '!max-h-none w-full h-full object-cover'}
+                    imageStyle={computeFitStyle(selectedDim, settings.cropX, settings.cropY)}
                     overlayRender={() => computeCropOverlay(selectedDim, settings.cropX, settings.cropY)}
                   />
                 ) : (

@@ -3,6 +3,7 @@ import Modal from '@/components/ui/modal';
 import Select from '@/components/forms/select';
 import TextArea from '@/components/forms/textarea';
 import Input from '@/components/forms/input';
+import Button from '@/components/ui/button';
 import ButtonOutline from '@/components/ui/button-outline';
 import ButtonIcon from '@/components/ui/button-icon';
 import Icon from '@/components/ui/icon';
@@ -20,8 +21,11 @@ export default function ProductImagesTab() {
   const {
     projectId,
     projectBlueprintId,
+    blueprint,
     productBlueprintImages,
     setProductBlueprintImages,
+    blueprintImages,
+    getBlueprintImageUrl,
     variantColorOptions,
     selectedVariants,
     variants,
@@ -34,9 +38,13 @@ export default function ProductImagesTab() {
   const [newProductImageTitle, setNewProductImageTitle] = useState('');
   const [newProductImageColor, setNewProductImageColor] = useState('');
   const [newProductImagePrompt, setNewProductImagePrompt] = useState('');
+  const [newProductImageImageId, setNewProductImageImageId] = useState(null);
   const [deleteProductImageTarget, setDeleteProductImageTarget] = useState(null);
   const [editingTitleId, setEditingTitleId] = useState(null);
   const [editingTitleValue, setEditingTitleValue] = useState('');
+  const [showImageSelector, setShowImageSelector] = useState(false);
+  const [imageSelectorColor, setImageSelectorColor] = useState('');
+  const [imageSelectorCallback, setImageSelectorCallback] = useState(null);
 
   const missingColors = useMemo(() => {
     if (selectedVariants.length === 0) return [];
@@ -52,10 +60,30 @@ export default function ProductImagesTab() {
     return [...selectedColors].filter(c => !existingColors.has(c.toLowerCase()));
   }, [selectedVariants, variants, productBlueprintImages]);
 
+  const filteredBlueprintImages = useMemo(() => {
+    if (!imageSelectorColor) return [];
+    return blueprintImages.filter(img => (img.variantColors || []).includes(imageSelectorColor));
+  }, [blueprintImages, imageSelectorColor]);
+
+  const openImageSelector = (color, callback) => {
+    setImageSelectorColor(color);
+    setImageSelectorCallback(() => callback);
+    setShowImageSelector(true);
+  };
+
+  const handleSelectImage = (image) => {
+    setShowImageSelector(false);
+    if (imageSelectorCallback) {
+      imageSelectorCallback(image);
+    }
+    setImageSelectorCallback(null);
+  };
+
   const handleCreateMissingImage = (color) => {
     setNewProductImageColor(color);
     setNewProductImageTitle(`${color} Product Image`);
     setNewProductImagePrompt('');
+    setNewProductImageImageId(null);
     setShowAddProductImage(true);
   };
 
@@ -80,6 +108,7 @@ export default function ProductImagesTab() {
         title: newProductImageTitle.trim(),
         variantColor: newProductImageColor,
         prompt: newProductImagePrompt.trim(),
+        imageId: newProductImageImageId,
       });
       if (resp.data.success) {
         setProductBlueprintImages(prev => [...prev, resp.data.data]);
@@ -87,6 +116,7 @@ export default function ProductImagesTab() {
         setNewProductImageTitle('');
         setNewProductImageColor('');
         setNewProductImagePrompt('');
+        setNewProductImageImageId(null);
       } else {
         setMessage({ type: 'error', text: resp.data.message || 'Failed to create product image.' });
       }
@@ -123,7 +153,13 @@ export default function ProductImagesTab() {
     const img = productBlueprintImages.find(i => i.id === id);
     if (!img) return;
     try {
-      await updateProductBlueprintImage({ id, title: img.title, variantColor: img.variantColor, prompt: img.prompt });
+      await updateProductBlueprintImage({
+        id,
+        title: img.title,
+        variantColor: img.variantColor,
+        prompt: img.prompt,
+        imageId: img.imageId || null,
+      });
     } catch { /* ignore */ }
   };
 
@@ -143,7 +179,13 @@ export default function ProductImagesTab() {
     setProductBlueprintImages(prev => prev.map(i => i.id === id ? { ...i, title: newTitle } : i));
     setEditingTitleId(null);
     try {
-      await updateProductBlueprintImage({ id, title: newTitle, variantColor: img.variantColor, prompt: img.prompt });
+      await updateProductBlueprintImage({
+        id,
+        title: newTitle,
+        variantColor: img.variantColor,
+        prompt: img.prompt,
+        imageId: img.imageId || null,
+      });
     } catch { /* ignore */ }
   };
 
@@ -151,6 +193,8 @@ export default function ProductImagesTab() {
     setEditingTitleId(null);
     setEditingTitleValue('');
   };
+
+  const newProductImageReference = blueprintImages.find(bi => bi.id === newProductImageImageId);
 
   return (
     <div>
@@ -217,14 +261,80 @@ export default function ProductImagesTab() {
                 />
               </div>
             </div>
-            <TextArea
-              name={`product-image-prompt-${img.id}`}
-              value={img.prompt || ''}
-              onChange={(e) => handleProductImagePromptChange(img.id, e.target.value)}
-              onBlur={() => handleProductImagePromptBlur(img.id)}
-              placeholder="Describe how the product should be displayed..."
-              rows={4}
-            />
+            <div className="flex gap-4 items-start">
+              <div className="flex-1">
+                <TextArea
+                  name={`product-image-prompt-${img.id}`}
+                  value={img.prompt || ''}
+                  onChange={(e) => handleProductImagePromptChange(img.id, e.target.value)}
+                  onBlur={() => handleProductImagePromptBlur(img.id)}
+                  placeholder="Describe how the product should be displayed..."
+                  rows={4}
+                />
+              </div>
+              <div className="flex flex-col items-center shrink-0">
+                <div
+                  className="relative group"
+                  style={{ width: 150, height: 150 }}
+                >
+                  {(() => {
+                    const referenceImage = blueprintImages.find(bi => bi.id === img.imageId);
+                    return referenceImage && blueprint ? (
+                      <>
+                        <img
+                          src={getBlueprintImageUrl(blueprint.id, referenceImage.imageIndex, true)}
+                          alt="Reference"
+                          className="w-full h-full object-cover rounded-lg border border-gray-300 dark:border-gray-600"
+                        />
+                        <ButtonIcon
+                          name="close"
+                          color="red"
+                          title="Remove reference image"
+                          className="absolute top-1 right-1 z-10 opacity-0 group-hover:opacity-100 transition"
+                          onClick={() => {
+                            setProductBlueprintImages(prev =>
+                              prev.map(i => i.id === img.id ? { ...i, imageId: null } : i)
+                            );
+                            updateProductBlueprintImage({
+                              id: img.id,
+                              title: img.title,
+                              variantColor: img.variantColor,
+                              prompt: img.prompt,
+                              imageId: null,
+                            }).catch(() => { });
+                          }}
+                        />
+                      </>
+                    ) : (
+                      <div
+                        className="w-full h-full rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center text-center p-2"
+                      >
+                        <span className="text-sm text-gray-500 dark:text-gray-400">No Reference Image</span>
+                      </div>
+                    );
+                  })()}
+                  <div className="absolute inset-0 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition bg-black/40">
+                    <Button
+                      size="small"
+                      onClick={() => openImageSelector(img.variantColor, (image) => {
+                        setProductBlueprintImages(prev =>
+                          prev.map(i => i.id === img.id ? { ...i, imageId: image.id } : i)
+                        );
+                        updateProductBlueprintImage({
+                          id: img.id,
+                          title: img.title,
+                          variantColor: img.variantColor,
+                          prompt: img.prompt,
+                          imageId: image.id,
+                        }).catch(() => { });
+                      })}
+                    >
+                      Select Image
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -267,9 +377,38 @@ export default function ProductImagesTab() {
             name="newProductImageColor"
             options={variantColorOptions}
             value={newProductImageColor}
-            onChange={(e) => setNewProductImageColor(e.target.value)}
+            onChange={(e) => {
+              setNewProductImageColor(e.target.value);
+              setNewProductImageImageId(null);
+            }}
             placeholder="Select a variant color"
           />
+          {newProductImageColor && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium">Reference Image</label>
+                <ButtonOutline
+                  size="small"
+                  onClick={() => openImageSelector(newProductImageColor, (image) => {
+                    setNewProductImageImageId(image.id);
+                  })}
+                >
+                  Select Image
+                </ButtonOutline>
+              </div>
+              {newProductImageReference ? (
+                <img
+                  src={getBlueprintImageUrl(blueprint.id, newProductImageReference.imageIndex, true)}
+                  alt="Reference"
+                  className="w-[250px] h-[250px] object-cover rounded-lg border border-gray-300 dark:border-gray-600"
+                />
+              ) : (
+                <div className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                  Select a mockup image to use as a reference when generating your product image with AI
+                </div>
+              )}
+            </div>
+          )}
           <div className="mb-4">
             <label className="block text-sm font-medium mb-1">Prompt</label>
             <TextArea
@@ -286,6 +425,40 @@ export default function ProductImagesTab() {
             </ButtonOutline>
             <ButtonOutline onClick={handleAddProductImage} disabled={saving}>
               {saving ? 'Saving...' : 'Add'}
+            </ButtonOutline>
+          </div>
+        </Modal>
+      )}
+
+      {showImageSelector && (
+        <Modal
+          title="Select Reference Image"
+          onClose={() => setShowImageSelector(false)}
+          top
+          className="min-w-[50em] max-w-full"
+        >
+          {filteredBlueprintImages.length > 0 ? (
+            <div className="grid grid-cols-[repeat(auto-fill,200px)] gap-4 max-h-[60vh] overflow-y-auto">
+              {filteredBlueprintImages.map((img) => (
+                <div
+                  key={img.id}
+                  className="border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden cursor-pointer hover:border-primary-500 hover:ring-2 hover:ring-primary-500 transition"
+                  onClick={() => handleSelectImage(img)}
+                >
+                  <img
+                    src={getBlueprintImageUrl(blueprint.id, img.imageIndex, true)}
+                    alt=""
+                    className="w-[200px] h-[200px] object-cover"
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No reference images available for this variant color.</p>
+          )}
+          <div className="buttons flex justify-end gap-2 mt-4">
+            <ButtonOutline color="gray" onClick={() => setShowImageSelector(false)}>
+              Cancel
             </ButtonOutline>
           </div>
         </Modal>

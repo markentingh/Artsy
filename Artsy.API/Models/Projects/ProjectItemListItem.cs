@@ -10,6 +10,7 @@ namespace Artsy.API.Models.Projects
         public int ProductCount { get; set; }
         public int QuestionCount { get; set; }
         public string? ArtworkType { get; set; }
+        public string? OpacityJson { get; set; }
         public List<string> Thumbnails { get; set; } = new();
     }
 }

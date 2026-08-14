@@ -18,6 +18,9 @@ namespace Artsy.API.Models.Projects
 
         [JsonPropertyName("prompt")]
         public string Prompt { get; set; } = "";
+
+        [JsonPropertyName("imageId")]
+        public Guid? ImageId { get; set; }
     }
 
     public class UpdateProductBlueprintImageRequest
@@ -33,6 +36,9 @@ namespace Artsy.API.Models.Projects
 
         [JsonPropertyName("prompt")]
         public string Prompt { get; set; } = "";
+
+        [JsonPropertyName("imageId")]
+        public Guid? ImageId { get; set; }
     }
 
     public class DeleteProductBlueprintImageRequest

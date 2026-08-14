@@ -32,8 +32,9 @@ namespace Artsy.API.Services
         Task<bool> GenerateProjectCollectionArtworkPngThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
         Task SaveProjectCollectionArtworkFullSizePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData);
         Task<byte[]> GetProjectCollectionArtworkFullSizePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
-        Task SaveProjectCollectionArtworkOrigAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData);
-        Task<byte[]> GetProjectCollectionArtworkOrigAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
+
+        Task SaveProjectCollectionArtworkChromaAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkChromaAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
         Task SaveProjectCollectionArtworkJpgWithBgAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData);
         Task<byte[]> GetProjectCollectionArtworkJpgWithBgAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
         Task<byte[]> GetProjectCollectionArtworkJpgWithBgThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
@@ -49,6 +50,7 @@ namespace Artsy.API.Services
         Task<byte[]> GetImageGenerationAsync(Guid projectId, Guid? itemId, Guid? collectionId, Guid? blueprintId, string filename);
         Task<(int width, int height)?> GetImageDimensionsAsync(byte[] imageBytes);
         Task<byte[]> ResizeImageAsync(byte[] imageData, int maxWidth);
+        Task<byte[]> ResizeImageMaxAsync(byte[] imageData, int maxSize);
         Task<byte[]> ResizeAndCropForInstagramAsync(byte[] imageData);
         Task SaveCustomImageAsync(Guid appUserId, Guid imageId, string extension, byte[] imageData);
         Task<byte[]> GetCustomImageAsync(Guid appUserId, Guid imageId, string extension, bool thumb = false);
@@ -636,9 +638,9 @@ namespace Artsy.API.Services
             return await GetFromFileSystemAsync(relativePath);
         }
 
-        public async Task SaveProjectCollectionArtworkOrigAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData)
+        public async Task SaveProjectCollectionArtworkChromaAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageData)
         {
-            var fileName = $"{artworkId}_orig.jpg";
+            var fileName = $"{artworkId}_chroma.png";
             var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
 
             if (_activeStorage == "azure")
@@ -650,9 +652,9 @@ namespace Artsy.API.Services
             await SaveToFileSystemAsync(relativePath, imageData);
         }
 
-        public async Task<byte[]> GetProjectCollectionArtworkOrigAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId)
+        public async Task<byte[]> GetProjectCollectionArtworkChromaAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId)
         {
-            var fileName = $"{artworkId}_orig.jpg";
+            var fileName = $"{artworkId}_chroma.png";
             var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
 
             if (_activeStorage == "azure")
@@ -921,6 +923,33 @@ namespace Artsy.API.Services
 
                 var height = (int)Math.Round(image.Height * (maxWidth / (double)image.Width));
                 image.Mutate(x => x.Resize(maxWidth, height));
+                using var stream = new MemoryStream();
+                image.SaveAsJpeg(stream, new JpegEncoder { Quality = 90 });
+                return stream.ToArray();
+            }
+            catch
+            {
+                return imageData;
+            }
+        }
+
+        public async Task<byte[]> ResizeImageMaxAsync(byte[] imageData, int maxSize)
+        {
+            if (imageData == null || imageData.Length == 0)
+                return imageData;
+
+            try
+            {
+                using var image = Image.Load(imageData);
+                var maxDimension = Math.Max(image.Width, image.Height);
+                if (maxDimension <= maxSize)
+                    return imageData;
+
+                var scale = maxSize / (double)maxDimension;
+                var width = (int)Math.Round(image.Width * scale);
+                var height = (int)Math.Round(image.Height * scale);
+                image.Mutate(x => x.Resize(width, height));
+
                 using var stream = new MemoryStream();
                 image.SaveAsJpeg(stream, new JpegEncoder { Quality = 90 });
                 return stream.ToArray();

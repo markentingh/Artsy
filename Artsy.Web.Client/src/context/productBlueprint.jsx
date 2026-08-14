@@ -36,6 +36,7 @@ export function ProductBlueprintProvider({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
+  const [saveMessage, setSaveMessage] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
@@ -404,7 +405,7 @@ export function ProductBlueprintProvider({
 
     const changedPrompts = productBlueprintImages.filter(img => {
       const initial = initialProductBlueprintImages.current.find(i => i.id === img.id);
-      return !initial || (initial.prompt || '') !== (img.prompt || '');
+      return !initial || (initial.prompt || '') !== (img.prompt || '') || (initial.imageId || null) !== (img.imageId || null);
     });
 
     const name = productName || detail?.title || blueprint.title;
@@ -449,6 +450,7 @@ export function ProductBlueprintProvider({
             title: img.title,
             variantColor: img.variantColor,
             prompt: img.prompt || '',
+            imageId: img.imageId || null,
           }));
         }
 
@@ -485,6 +487,8 @@ export function ProductBlueprintProvider({
       if (onSave) {
         onSave({ blueprintId: blueprint.id, name });
       }
+      setSaveMessage('Changes saved successfully');
+      setTimeout(() => setSaveMessage(null), 5000);
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save blueprint' });
     } finally {
@@ -535,6 +539,7 @@ export function ProductBlueprintProvider({
     setSaving,
     message,
     setMessage,
+    saveMessage,
     previewImage,
     setPreviewImage,
     previewIndex,

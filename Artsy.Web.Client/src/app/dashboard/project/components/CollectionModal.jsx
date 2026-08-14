@@ -161,6 +161,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
   } = useCollection();
 
   const [aiItemsLoaded, setAiItemsLoaded] = useState(false);
+  const [itemReferences, setItemReferences] = useState([]);
 
   useEffect(() => {
     if (!show || !projectId) return;
@@ -171,15 +172,48 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
   }, [show, projectId]);
 
   useEffect(() => {
+    if (!show || !projectId) return;
+    api.getAllItemReferences(projectId)
+      .then(res => {
+        const refs = res.data?.success ? res.data.data || [] : [];
+        setItemReferences(refs.map(r => ({
+          ...r,
+          itemId: r.itemId ?? r.ItemId,
+          artworkId: r.artworkId ?? r.ArtworkId,
+        })));
+      })
+      .catch(() => setItemReferences([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show, projectId]);
+
+  useEffect(() => {
     if (!items || items.length === 0) return;
+
+    // Include any AI artwork that is referenced by another artwork
+    const referencedArtworkIds = new Set();
+    for (const ref of itemReferences) {
+      if (ref.artworkId) referencedArtworkIds.add(String(ref.artworkId));
+    }
+
+    // Also include any AI artwork used as an opacity background by another artwork
+    for (const item of items) {
+      if (!item.opacityJson) continue;
+      try {
+        const parsed = JSON.parse(item.opacityJson);
+        if (parsed?.background?.type === 'artwork' && parsed.background.id) {
+          referencedArtworkIds.add(String(parsed.background.id));
+        }
+      } catch { /* ignore malformed opacity json */ }
+    }
+
     const ai = items.filter(i =>
       i.artworkType !== 'custom' &&
-      (blueprintItemIds.has(String(i.id)) || i.socialMedia)
+      (blueprintItemIds.has(String(i.id)) || i.socialMedia || referencedArtworkIds.has(String(i.id)))
     );
     setAiItems(ai);
     setAiItemsLoaded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, blueprintItemIds]);
+  }, [items, blueprintItemIds, itemReferences]);
 
   useEffect(() => {
     if (!resumeStep) return;

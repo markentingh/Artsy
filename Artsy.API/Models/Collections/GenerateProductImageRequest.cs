@@ -30,6 +30,9 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("productName")]
         public string? ProductName { get; set; }
+
+        [JsonPropertyName("mockupImageIds")]
+        public List<Guid> MockupImageIds { get; set; } = new List<Guid>();
     }
 
     public class AcceptProductImageRequest

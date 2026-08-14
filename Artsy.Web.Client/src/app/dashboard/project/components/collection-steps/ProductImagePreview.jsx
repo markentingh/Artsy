@@ -40,6 +40,7 @@ export default function ProductImagePreview() {
         variantColor: comboArg.variantColor || '',
         requestedChanges: changes,
         productName: cp?.name || undefined,
+        mockupImageIds: comboArg.selectedMockupImageIds || [],
       });
       if (res.data.success) {
         setCurrentProductImage(res.data.data);

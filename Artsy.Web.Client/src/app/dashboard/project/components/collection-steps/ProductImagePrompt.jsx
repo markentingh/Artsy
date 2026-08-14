@@ -74,20 +74,33 @@ export default function ProductImagePrompt() {
     }
   }, [collectionId, mockups.length, loadMockups]);
 
-  const mockupImages = useMemo(() => {
+  const comboMockups = useMemo(() => {
     if (!combo) return [];
-    // If mockups exist for this product, use them
-    if (printifyProducts.length && mockups.length) {
-      const pp = printifyProducts.find(p => p.projectBlueprintId === combo.projectBlueprintId);
-      if (pp) {
-        const imgs = mockups.filter(m => m.printifyProductId === pp.id).map(m => m.imageUrl);
-        if (imgs.length > 0) return imgs;
-      }
-    }
-    // Fallback: use the Printify blueprint image for the variant color
-    if (combo.printifyImageUrl) return [combo.printifyImageUrl];
-    return [];
+    const pp = printifyProducts.find(p => p.projectBlueprintId === combo.projectBlueprintId);
+    return mockups.filter(m => m.printifyProductId === pp?.id);
   }, [combo, printifyProducts, mockups]);
+
+  useEffect(() => {
+    if (!combo || comboMockups.length === 0 || combo.selectedMockupImageIds !== undefined) return;
+    const allIds = comboMockups.map(m => m.id);
+    setSelectedProductCombos(prev => prev.map((c, i) =>
+      i === currentProductComboIndex ? { ...c, selectedMockupImageIds: allIds } : c
+    ));
+  }, [combo, comboMockups, currentProductComboIndex, setSelectedProductCombos]);
+
+  const toggleMockup = useCallback((mockupId) => {
+    if (!combo) return;
+    setSelectedProductCombos(prev => prev.map((c, i) => {
+      if (i !== currentProductComboIndex) return c;
+      const ids = new Set(c.selectedMockupImageIds || []);
+      if (ids.has(mockupId)) {
+        ids.delete(mockupId);
+      } else {
+        ids.add(mockupId);
+      }
+      return { ...c, selectedMockupImageIds: Array.from(ids) };
+    }));
+  }, [combo, currentProductComboIndex, setSelectedProductCombos]);
 
   const modelOptions = useMemo(() => imageModels.map(m => ({ value: m.id, label: m.name })), [imageModels]);
 
@@ -135,22 +148,20 @@ export default function ProductImagePrompt() {
 
   const allImages = useMemo(() => {
     const productImg = existingProductImage ? [`${existingProductImage}?thumb=true`] : [];
-    return [...productImg, ...mockupImages, ...artworkImages.map(a => a.thumbUrl)];
-  }, [existingProductImage, mockupImages, artworkImages]);
+    return [...productImg, ...artworkImages.map(a => a.thumbUrl)];
+  }, [existingProductImage, artworkImages]);
 
   const allFullSizeImages = useMemo(() => {
     const productImg = existingProductImage ? [existingProductImage] : [];
-    const mockupFull = mockupImages.map(url => url.replace(/([?&])thumb=true&?/, '$1').replace(/[?&]$/, ''));
-    return [...productImg, ...mockupFull, ...artworkImages.map(a => a.url)];
-  }, [existingProductImage, mockupImages, artworkImages]);
+    return [...productImg, ...artworkImages.map(a => a.url)];
+  }, [existingProductImage, artworkImages]);
 
   const handleImageError = useCallback(async (index) => {
     if (retryRef.current[index]) return;
     retryRef.current[index] = true;
 
     const productImgCount = existingProductImage ? 1 : 0;
-    const mockupImgCount = mockupImages.length;
-    const artworkIndex = index - productImgCount - mockupImgCount;
+    const artworkIndex = index - productImgCount;
     const artwork = artworkImages[artworkIndex];
     if (!artwork || !collectionId) {
       setThumbFailed(prev => ({ ...prev, [index]: true }));
@@ -168,7 +179,7 @@ export default function ProductImagePrompt() {
     } catch {
       setThumbFailed(prev => ({ ...prev, [index]: true }));
     }
-  }, [artworkImages, existingProductImage, mockupImages, collectionId, api, refreshTokens]);
+  }, [artworkImages, existingProductImage, collectionId, api, refreshTokens]);
 
   const { displayImages, fullSizeImages } = useMemo(() => {
     const thumbs = [];
@@ -200,6 +211,7 @@ export default function ProductImagePrompt() {
           prompt: productImagePrompt,
           variantColor: combo.variantColor || '',
           modelId: selectedProductImageModel?.id,
+          mockupImageIds: combo.selectedMockupImageIds || [],
         });
         if (res.data.success) {
           setTokenEstimate(res.data.data);
@@ -213,7 +225,7 @@ export default function ProductImagePrompt() {
       }
     }, 2000);
     return () => { if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current); };
-  }, [combo, collectionId, projectId, api, productImagePrompt, selectedProductImageModel]);
+  }, [combo, collectionId, projectId, api, productImagePrompt, selectedProductImageModel, comboMockups]);
 
   const handleNext = useCallback(() => {
     if (!productName.trim()) {
@@ -271,6 +283,35 @@ export default function ProductImagePrompt() {
           {!productName.trim() && (
             <p className="text-sm text-red-600 dark:text-red-400 mt-2">Product title is required.</p>
           )}
+        </div>
+      )}
+
+      {combo && comboMockups.length > 0 && (
+        <div className="mb-4 w-full">
+          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Mockup Images as References for AI</h4>
+          <div className="grid grid-cols-[repeat(auto-fill,150px)] gap-3">
+            {comboMockups.map((m) => {
+              const checked = (combo?.selectedMockupImageIds || []).includes(m.id);
+              return (
+                <div
+                  key={m.id}
+                  className="relative w-[150px] h-[150px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600"
+                >
+                  <img
+                    src={m.imageUrl}
+                    alt="Mockup"
+                    className="w-full h-full object-cover"
+                  />
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleMockup(m.id)}
+                    className="absolute top-2 left-2 z-10 w-5 h-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

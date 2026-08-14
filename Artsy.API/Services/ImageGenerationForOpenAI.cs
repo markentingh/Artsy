@@ -26,6 +26,7 @@ namespace Artsy.API.Services
     {
         readonly IHttpClientFactory _httpClientFactory;
         readonly ImageGenerationOptions _options;
+        readonly IImageService _imageService;
 
         public string ModelKey => "openai";
 
@@ -34,16 +35,25 @@ namespace Artsy.API.Services
             return new ImageTokensForOpenAI(model.CPMITTokens, model.CPMIITokens, model.CPMOTokens);
         }
 
-        public ImageGenerationForOpenAI(IHttpClientFactory httpClientFactory, IOptions<ImageGenerationOptions> options)
+        public ImageGenerationForOpenAI(IHttpClientFactory httpClientFactory, IOptions<ImageGenerationOptions> options, IImageService imageService)
         {
             _httpClientFactory = httpClientFactory;
             _options = options.Value;
+            _imageService = imageService;
         }
 
         public async Task<ImageGenerationResult> GenerateAsync(ImageGenerationRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.Prompt))
                 throw new ArgumentException("Prompt is required.", nameof(request));
+
+            if (request.InputImages != null && request.InputImages.Count > 0)
+            {
+                var resized = new List<byte[]>(request.InputImages.Count);
+                foreach (var img in request.InputImages)
+                    resized.Add(await _imageService.ResizeImageMaxAsync(img, 1024));
+                request.InputImages = resized;
+            }
 
             if (request.UseResponsesApi)
                 return await GenerateViaResponsesApiAsync(request);
