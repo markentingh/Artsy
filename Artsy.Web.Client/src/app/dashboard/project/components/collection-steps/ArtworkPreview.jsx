@@ -15,7 +15,7 @@ export default function ArtworkPreview() {
     collectionId, ensureCollection,
     doGeneratePreview, advanceToNextItem,
     setCollectionArtwork,
-    api, onClose, onSaved, setArtworkPreview, setStep, STEPS,
+    api, onClose, onSaved, setArtworkPreview, setStep, STEPS, goBack,
   } = useCollection();
 
   const hasOpacity = currentArtwork?.opacity === true;
@@ -139,6 +139,7 @@ export default function ArtworkPreview() {
             Regenerate
           </ButtonOutline>
         )}
+        <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
       </div>
     </div>

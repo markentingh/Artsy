@@ -63,9 +63,6 @@ namespace Artsy.API.Models.Printify
 
         [JsonPropertyName("print_areas")]
         public List<PrintifyPrintAreaRequest> PrintAreas { get; set; } = new();
-
-        [JsonPropertyName("images")]
-        public List<PrintifyProductImageRequest> Images { get; set; } = new();
     }
 
     public class PrintifyProductImageRequest
@@ -131,6 +128,7 @@ namespace Artsy.API.Models.Printify
         public double Angle { get; set; } = 0;
 
         [JsonPropertyName("pattern")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public PrintifyPatternRequest? Pattern { get; set; }
     }
 

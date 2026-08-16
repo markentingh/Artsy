@@ -951,7 +951,11 @@ namespace Artsy.API.Services
                 image.Mutate(x => x.Resize(width, height));
 
                 using var stream = new MemoryStream();
-                image.SaveAsJpeg(stream, new JpegEncoder { Quality = 90 });
+                var format = Image.DetectFormat(imageData);
+                if (format is PngFormat)
+                    image.SaveAsPng(stream);
+                else
+                    image.SaveAsJpeg(stream, new JpegEncoder { Quality = 90 });
                 return stream.ToArray();
             }
             catch
@@ -965,34 +969,26 @@ namespace Artsy.API.Services
             if (imageData == null || imageData.Length == 0)
                 return imageData;
 
-            try
+            using var image = Image.Load(imageData);
+
+            var resizeWidth = 1350;
+            var resizeHeight = (int)Math.Round(image.Height * (1350 / (double)image.Width));
+            if (resizeHeight < 1350)
             {
-                using var image = Image.Load(imageData);
-
-                var size = Math.Min(image.Width, image.Height);
-                var resizeWidth = 1350;
-                var resizeHeight = (int)Math.Round(image.Height * (1350 / (double)image.Width));
-                if (resizeHeight < 1350)
-                {
-                    resizeHeight = 1350;
-                    resizeWidth = (int)Math.Round(image.Width * (1350 / (double)image.Height));
-                }
-                image.Mutate(x => x.Resize(resizeWidth, resizeHeight));
-
-                var cropX = (resizeWidth - 1080) / 2;
-                var cropY = (resizeHeight - 1350) / 2;
-                if (cropX < 0) cropX = 0;
-                if (cropY < 0) cropY = 0;
-                image.Mutate(x => x.Crop(new Rectangle(cropX, cropY, 1080, 1350)));
-
-                using var stream = new MemoryStream();
-                image.SaveAsJpeg(stream, new JpegEncoder { Quality = 90 });
-                return stream.ToArray();
+                resizeHeight = 1350;
+                resizeWidth = (int)Math.Round(image.Width * (1350 / (double)image.Height));
             }
-            catch
-            {
-                return imageData;
-            }
+            image.Mutate(x => x.Resize(resizeWidth, resizeHeight));
+
+            var cropX = (resizeWidth - 1080) / 2;
+            var cropY = (resizeHeight - 1350) / 2;
+            if (cropX < 0) cropX = 0;
+            if (cropY < 0) cropY = 0;
+            image.Mutate(x => x.Crop(new Rectangle(cropX, cropY, 1080, 1350)));
+
+            using var stream = new MemoryStream();
+            image.SaveAsJpeg(stream, new JpegEncoder { Quality = 90 });
+            return stream.ToArray();
         }
 
         public async Task SaveCustomImageAsync(Guid appUserId, Guid imageId, string extension, byte[] imageData)

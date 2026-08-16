@@ -9,6 +9,7 @@ const PrintifyProducts = (args) => Api({ ...args }).endpoints(({ api }) => {
     update: (request) => api.post(`${apiPath}/update`, request),
     publish: (request) => api.post(`${apiPath}/publish`, request),
     unpublish: (request) => api.post(`${apiPath}/unpublish`, request),
+    archiveUpload: (request) => api.post(`${apiPath}/archive-upload`, request),
     delete: (request) => api.post(`${apiPath}/delete`, request),
     getByCollection: (collectionId) => api.get(`${apiPath}/get-by-collection?collectionId=${collectionId}`),
     getMockups: (collectionId) => api.get(`${apiPath}/get-mockups?collectionId=${collectionId}`),

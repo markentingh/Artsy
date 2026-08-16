@@ -11,8 +11,10 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionPrintifyProducts"
     "Published" BOOLEAN NOT NULL DEFAULT FALSE,
     "Status" INT NOT NULL DEFAULT 1,
     "RequestJson" TEXT NOT NULL DEFAULT '',
+    "ResponseJson" TEXT NOT NULL DEFAULT '',
     "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ALTER TABLE public."ProjectCollectionPrintifyProducts" ADD COLUMN IF NOT EXISTS "RequestJson" TEXT NOT NULL DEFAULT '';
+ALTER TABLE public."ProjectCollectionPrintifyProducts" ADD COLUMN IF NOT EXISTS "ResponseJson" TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS "IX_ProjectCollectionPrintifyProducts_CollectionId_Status" ON public."ProjectCollectionPrintifyProducts" ("CollectionId", "Status");
 CREATE INDEX IF NOT EXISTS "IX_ProjectCollectionPrintifyProducts_ProductId_Status" ON public."ProjectCollectionPrintifyProducts" ("ProductId", "Status");

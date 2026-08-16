@@ -13,6 +13,7 @@ namespace Artsy.Data.Entities.Projects
         public bool Published { get; set; }
         public int Status { get; set; } = 1;
         public string RequestJson { get; set; } = "";
+        public string ResponseJson { get; set; } = "";
         public DateTime Created { get; set; }
     }
 }

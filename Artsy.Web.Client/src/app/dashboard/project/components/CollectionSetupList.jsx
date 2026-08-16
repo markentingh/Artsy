@@ -9,6 +9,7 @@ export default function CollectionSetupList() {
   const {
     aiItems, collectionArtwork, step, STEPS, maxStepIndex,
     allProductImages, selectedProductCombos, productBlueprintImages, project,
+    upscaleComplete,
     collectionId, api, setStep, setCollectionArtwork,
     setAllProductImages,
     currentProductComboIndex,
@@ -27,8 +28,9 @@ export default function CollectionSetupList() {
   const acceptedArtwork = aiArtworks.filter(a => a.accepted).length;
   const allArtworksUpscaled = aiBlueprintItems.length > 0 && aiBlueprintItems.every(item => {
     const art = collectionArtwork.find(a => String(a.itemId) === String(item.id));
-    return art && art.accepted && art.fullSize;
+    return !art || (art.accepted && art.fullSize);
   });
+  const upscaleDone = allArtworksUpscaled || upscaleComplete;
 
   const allProductCombos = productBlueprintImages.map(pbi => ({
     productImageId: pbi.id,
@@ -66,10 +68,10 @@ export default function CollectionSetupList() {
   };
 
   const isComplete = (itemStep) => {
-    if (maxStepIdx <= checkIdx[itemStep]) return false;
     if (itemStep === STEPS.CREATE_PRODUCTS) {
       return mockups.length > 0 && printifyProducts.some(pp => pp.mockupsDownloaded);
     }
+    if (maxStepIdx <= checkIdx[itemStep]) return false;
     return true;
   };
 
@@ -227,9 +229,9 @@ export default function CollectionSetupList() {
       content: artworkContent,
     },
     {
-      title: renderTitle('Upscale Artworks to 4K', allArtworksUpscaled, null, isCurrent(STEPS.READY_TO_GENERATE)),
+      title: renderTitle('Upscale Artworks to 4K', upscaleDone, null, isCurrent(STEPS.READY_TO_GENERATE)),
       content: null,
-      action: !allArtworksUpscaled && totalArtwork > 0 && acceptedArtwork === totalArtwork && aiArtworks.filter(a => a.accepted).some(a => !a.fullSize) ? (
+      action: !upscaleDone && aiArtworks.filter(a => a.accepted).some(a => !a.fullSize) ? (
         <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.READY_TO_GENERATE)}>
           Review
         </ButtonOutline>

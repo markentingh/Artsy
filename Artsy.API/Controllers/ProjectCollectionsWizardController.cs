@@ -333,10 +333,21 @@ namespace Artsy.API.Controllers
                             var refCollectionArtwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(request.CollectionId, reference.ArtworkId.Value);
                             if (refCollectionArtwork != null)
                             {
-                                imageBytes = await _imageService.GetProjectCollectionArtworkImageAsync(reference.ProjectId, request.CollectionId, reference.ArtworkId.Value, refCollectionArtwork.Id);
-                                if (imageBytes == null || imageBytes.Length == 0)
+                                if (refCollectionArtwork.Opacity)
                                 {
-                                    imageBytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(reference.ProjectId, request.CollectionId, reference.ArtworkId.Value, refCollectionArtwork.Id);
+                                    imageBytes = await _imageService.GetProjectCollectionArtworkPngAsync(reference.ProjectId, request.CollectionId, reference.ArtworkId.Value, refCollectionArtwork.Id);
+                                    if (imageBytes == null || imageBytes.Length == 0)
+                                    {
+                                        imageBytes = await _imageService.GetProjectCollectionArtworkFullSizePngAsync(reference.ProjectId, request.CollectionId, reference.ArtworkId.Value, refCollectionArtwork.Id);
+                                    }
+                                }
+                                else
+                                {
+                                    imageBytes = await _imageService.GetProjectCollectionArtworkImageAsync(reference.ProjectId, request.CollectionId, reference.ArtworkId.Value, refCollectionArtwork.Id);
+                                    if (imageBytes == null || imageBytes.Length == 0)
+                                    {
+                                        imageBytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(reference.ProjectId, request.CollectionId, reference.ArtworkId.Value, refCollectionArtwork.Id);
+                                    }
                                 }
                             }
                         }
@@ -486,6 +497,7 @@ namespace Artsy.API.Controllers
                     if (request.IsFullSize)
                         created.FullSize = true;
                     await _projectCollectionArtworkRepository.UpdateAsync(created);
+                    await _projectCollectionArtworkRepository.SetPrintifyImageIdAsync(created.Id, "");
 
                     await _projectImageGenerationRepository.CreateAsync(new ProjectImageGeneration
                     {
@@ -915,38 +927,36 @@ namespace Artsy.API.Controllers
                 if (project == null)
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
-                // When opacity is enabled, serve PNG (transparent) by default, or JPG with background if requested
-                if (artwork.Opacity)
+                // When a JPG with background is requested, try it first (regardless of opacity), then fall back
+                if (jpgWithBg)
                 {
-                    if (jpgWithBg)
-                    {
-                        byte[]? bgBytes;
-                        if (thumb)
-                            bgBytes = await _imageService.GetProjectCollectionArtworkJpgWithBgThumbAsync(artwork.ProjectId, collectionId, itemId, artworkId);
-                        else
-                            bgBytes = await _imageService.GetProjectCollectionArtworkJpgWithBgAsync(artwork.ProjectId, collectionId, itemId, artworkId);
-                        if (bgBytes == null || bgBytes.Length == 0)
-                            return NotFound();
+                    byte[]? bgBytes;
+                    if (thumb)
+                        bgBytes = await _imageService.GetProjectCollectionArtworkJpgWithBgThumbAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                    else
+                        bgBytes = await _imageService.GetProjectCollectionArtworkJpgWithBgAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                    if (bgBytes != null && bgBytes.Length > 0)
                         return File(bgBytes, "image/jpeg");
+                }
+
+                // When opacity is enabled, serve PNG (transparent) by default
+                if (artwork.Opacity && !jpgWithBg)
+                {
+                    byte[]? pngBytes;
+                    if (thumb)
+                        pngBytes = await _imageService.GetProjectCollectionArtworkPngThumbAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                    else if (fullSize)
+                    {
+                        pngBytes = await _imageService.GetProjectCollectionArtworkFullSizePngAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                        // Fall back to regular PNG if full-size doesn't exist
+                        if (pngBytes == null || pngBytes.Length == 0)
+                            pngBytes = await _imageService.GetProjectCollectionArtworkPngAsync(artwork.ProjectId, collectionId, itemId, artworkId);
                     }
                     else
-                    {
-                        byte[]? pngBytes;
-                        if (thumb)
-                            pngBytes = await _imageService.GetProjectCollectionArtworkPngThumbAsync(artwork.ProjectId, collectionId, itemId, artworkId);
-                        else if (fullSize)
-                        {
-                            pngBytes = await _imageService.GetProjectCollectionArtworkFullSizePngAsync(artwork.ProjectId, collectionId, itemId, artworkId);
-                            // Fall back to regular PNG if full-size doesn't exist
-                            if (pngBytes == null || pngBytes.Length == 0)
-                                pngBytes = await _imageService.GetProjectCollectionArtworkPngAsync(artwork.ProjectId, collectionId, itemId, artworkId);
-                        }
-                        else
-                            pngBytes = await _imageService.GetProjectCollectionArtworkPngAsync(artwork.ProjectId, collectionId, itemId, artworkId);
-                        if (pngBytes == null || pngBytes.Length == 0)
-                            return NotFound();
-                        return File(pngBytes, "image/png");
-                    }
+                        pngBytes = await _imageService.GetProjectCollectionArtworkPngAsync(artwork.ProjectId, collectionId, itemId, artworkId);
+                    if (pngBytes == null || pngBytes.Length == 0)
+                        return NotFound();
+                    return File(pngBytes, "image/png");
                 }
 
                 byte[]? bytes;
@@ -1386,7 +1396,23 @@ namespace Artsy.API.Controllers
                             var pArtwork = collectionArtwork.FirstOrDefault(a => a.ItemId == pItemId && a.Active);
                             if (pArtwork == null) continue;
 
-                            var pImgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, pItemId, pArtwork.Id);
+                            byte[]? pImgBytes = null;
+                            if (pArtwork.Opacity)
+                            {
+                                pImgBytes = await _imageService.GetProjectCollectionArtworkPngAsync(request.ProjectId, request.CollectionId, pItemId, pArtwork.Id);
+                                if (pImgBytes == null || pImgBytes.Length == 0)
+                                {
+                                    pImgBytes = await _imageService.GetProjectCollectionArtworkFullSizePngAsync(request.ProjectId, request.CollectionId, pItemId, pArtwork.Id);
+                                }
+                            }
+                            else
+                            {
+                                pImgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, pItemId, pArtwork.Id);
+                                if (pImgBytes == null || pImgBytes.Length == 0)
+                                {
+                                    pImgBytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(request.ProjectId, request.CollectionId, pItemId, pArtwork.Id);
+                                }
+                            }
                             if (pImgBytes == null || pImgBytes.Length == 0) continue;
 
                             placementArtworks.Add((placement.Position ?? "", pItemId, pArtwork.Id, pImgBytes));
@@ -1584,7 +1610,23 @@ namespace Artsy.API.Controllers
                             var pArtwork = collectionArtwork.FirstOrDefault(a => a.ItemId == pItemId && a.Active);
                             if (pArtwork == null) continue;
 
-                            var pImgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, pItemId, pArtwork.Id);
+                            byte[]? pImgBytes = null;
+                            if (pArtwork.Opacity)
+                            {
+                                pImgBytes = await _imageService.GetProjectCollectionArtworkPngAsync(request.ProjectId, request.CollectionId, pItemId, pArtwork.Id);
+                                if (pImgBytes == null || pImgBytes.Length == 0)
+                                {
+                                    pImgBytes = await _imageService.GetProjectCollectionArtworkFullSizePngAsync(request.ProjectId, request.CollectionId, pItemId, pArtwork.Id);
+                                }
+                            }
+                            else
+                            {
+                                pImgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, pItemId, pArtwork.Id);
+                                if (pImgBytes == null || pImgBytes.Length == 0)
+                                {
+                                    pImgBytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(request.ProjectId, request.CollectionId, pItemId, pArtwork.Id);
+                                }
+                            }
                             if (pImgBytes == null || pImgBytes.Length == 0) continue;
 
                             placementArtworks.Add((placement.Position ?? "", pItemId, pArtwork.Id, pImgBytes));
@@ -1735,7 +1777,7 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Image generation service not available." });
 
                 var existing = await _projectCollectionProductImageRepository.GetByCollectionBlueprintProductImageIdAsync(
-                    request.CollectionId, request.ProjectBlueprintId, request.ProductImageId);
+                    request.CollectionId, request.ProjectBlueprintId, request.ProductImageId, activeOnly: false);
 
                 string? previousResponseId = null;
                 if (existing != null && !string.IsNullOrWhiteSpace(existing.ResponseId) && !string.IsNullOrWhiteSpace(request.RequestedChanges))
@@ -1800,6 +1842,7 @@ namespace Artsy.API.Controllers
                 }
 
                 await _imageService.SaveProjectCollectionProductImageAsync(request.ProjectId, request.CollectionId, productImage.Id, genResult.ImageBytes);
+                await _imageService.GenerateProjectCollectionProductImageThumbAsync(request.ProjectId, request.CollectionId, productImage.Id);
 
                 // Update product name if provided
                 if (!string.IsNullOrWhiteSpace(request.ProductName))
@@ -1841,7 +1884,8 @@ namespace Artsy.API.Controllers
                         projectBlueprintId = productImage.ProjectBlueprintId,
                         productImageId = productImage.ProductImageId,
                         imageUrl = $"/api/projects/collection/{request.CollectionId}/product-image/{productImage.Id}?thumb=true",
-                        accepted = productImage.Accepted
+                        accepted = productImage.Accepted,
+                        active = productImage.Active
                     }
                 });
             }
@@ -1958,18 +2002,31 @@ namespace Artsy.API.Controllers
             try
             {
                 var images = await _projectBlueprintProductImageRepository.GetByProjectBlueprintIdAsync(projectBlueprintId);
+                var blueprint = await _projectBlueprintRepository.GetByIdAsync(projectBlueprintId);
+                var variants = (blueprint != null && blueprint.BlueprintId > 0)
+                    ? (await _variantRepository.GetByBlueprintIdAsync(blueprint.BlueprintId)).ToList()
+                    : new List<PrintifyBlueprintVariant>();
+                var variantIdsByColor = variants
+                    .GroupBy(v => v.Color, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.Select(v => v.VariantId).ToList(), StringComparer.OrdinalIgnoreCase);
+
                 return Json(new ApiResponse
                 {
                     success = true,
-                    data = images.Select(img => new
+                    data = images.Select(img =>
                     {
-                        id = img.Id,
-                        projectBlueprintId = img.ProjectBlueprintId,
-                        title = img.Title,
-                        variantColor = img.VariantColor,
-                        status = img.Status,
-                        prompt = img.Prompt,
-                        imageId = img.ImageId
+                        variantIdsByColor.TryGetValue(img.VariantColor, out var variantIds);
+                        return new
+                        {
+                            id = img.Id,
+                            projectBlueprintId = img.ProjectBlueprintId,
+                            title = img.Title,
+                            variantColor = img.VariantColor,
+                            variantIds = variantIds ?? new List<int>(),
+                            status = img.Status,
+                            prompt = img.Prompt,
+                            imageId = img.ImageId
+                        };
                     })
                 });
             }
@@ -1998,21 +2055,39 @@ namespace Artsy.API.Controllers
                 var blueprints = await _projectBlueprintRepository.GetByProjectIdAsync(projectId);
                 var blueprintIds = blueprints.Select(b => b.Id).ToList();
                 var blueprintNameMap = blueprints.ToDictionary(b => b.Id, b => b.Name);
+                var blueprintMap = blueprints.ToDictionary(b => b.Id);
                 var images = await _projectBlueprintProductImageRepository.GetByBlueprintIdsAsync(blueprintIds);
+
+                var printifyBlueprintIds = blueprints.Select(b => b.BlueprintId).Where(id => id > 0).Distinct().ToList();
+                var allVariants = printifyBlueprintIds.Count > 0
+                    ? (await _variantRepository.GetByBlueprintIdsAsync(printifyBlueprintIds)).ToList()
+                    : new List<PrintifyBlueprintVariant>();
+                var variantsByBlueprint = allVariants.GroupBy(v => v.BlueprintId).ToDictionary(g => g.Key, g => g.ToList());
 
                 return Json(new ApiResponse
                 {
                     success = true,
-                    data = images.Select(img => new
+                    data = images.Select(img =>
                     {
-                        id = img.Id,
-                        projectBlueprintId = img.ProjectBlueprintId,
-                        blueprintName = blueprintNameMap.TryGetValue(img.ProjectBlueprintId, out var name) ? name : "",
-                        title = img.Title,
-                        variantColor = img.VariantColor,
-                        status = img.Status,
-                        prompt = img.Prompt,
-                        imageId = img.ImageId
+                        var bp = blueprintMap.TryGetValue(img.ProjectBlueprintId, out var b) ? b : null;
+                        var bpId = bp?.BlueprintId ?? 0;
+                        var variants = variantsByBlueprint.TryGetValue(bpId, out var vs) ? vs : new List<PrintifyBlueprintVariant>();
+                        var variantIds = variants
+                            .Where(v => string.Equals(v.Color, img.VariantColor, StringComparison.OrdinalIgnoreCase))
+                            .Select(v => v.VariantId)
+                            .ToList();
+                        return new
+                        {
+                            id = img.Id,
+                            projectBlueprintId = img.ProjectBlueprintId,
+                            blueprintName = blueprintNameMap.TryGetValue(img.ProjectBlueprintId, out var name) ? name : "",
+                            title = img.Title,
+                            variantColor = img.VariantColor,
+                            variantIds,
+                            status = img.Status,
+                            prompt = img.Prompt,
+                            imageId = img.ImageId
+                        };
                     })
                 });
             }

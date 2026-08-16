@@ -3,7 +3,6 @@ import { useCollection } from '@/context/collection';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import ButtonOutline from '@/components/ui/button-outline';
-import Button from '@/components/ui/button';
 import List, { Item } from '@/components/ui/list';
 import Checked from '@/components/ui/checked';
 import Icon from '@/components/ui/icon';
@@ -14,9 +13,9 @@ export default function PublishProductsStep() {
   const {
     project, blueprints, allProductImages, collectionId,
     productImageVariants, STEPS, setStep,
-    setMessage, printifyProducts,
+    setMessage, printifyProducts, goBack,
     collectionArtwork, api, onClose,
-    collectionProducts,
+    collectionProducts, setArtworkPreview,
   } = useCollection();
 
   const printifyApi = Projects(session);
@@ -128,15 +127,41 @@ export default function PublishProductsStep() {
     return new Set(printifyProducts.map(pp => pp.projectBlueprintId));
   }, [printifyProducts]);
 
+  const placementItemIds = useMemo(() => {
+    const used = new Set();
+    const blueprintIds = new Set((allProductImages || []).map(img => img.projectBlueprintId));
+    for (const bp of blueprints || []) {
+      if (!blueprintIds.has(bp.id) || !bp.placementJson) continue;
+      try {
+        const placements = typeof bp.placementJson === 'string' ? JSON.parse(bp.placementJson) : bp.placementJson;
+        for (const p of placements || []) {
+          const id = p.source === 'item' ? p.itemId : p.source === 'custom' ? p.customItemId : null;
+          if (id) used.add(String(id));
+        }
+      } catch { /* ignore invalid json */ }
+    }
+    return used;
+  }, [allProductImages, blueprints]);
+
   const allImages = useMemo(() => {
     const productImgs = (allProductImages || [])
       .filter(img => img.accepted && img.active)
       .map(img => img.imageUrl);
     const artworkImgs = (collectionArtwork || [])
-      .filter(a => a.accepted && a.active)
+      .filter(a => a.accepted && a.active && placementItemIds.has(String(a.itemId)))
       .map(a => api.getCollectionArtworkThumbUrl(collectionId, a.itemId, a.id));
     return [...productImgs, ...artworkImgs];
-  }, [allProductImages, collectionArtwork, collectionId, api]);
+  }, [allProductImages, collectionArtwork, collectionId, api, placementItemIds]);
+
+  const allFullImages = useMemo(() => {
+    const productImgs = (allProductImages || [])
+      .filter(img => img.accepted && img.active)
+      .map(img => (img.imageUrl || '').replace('?thumb=true', ''));
+    const artworkImgs = (collectionArtwork || [])
+      .filter(a => a.accepted && a.active && placementItemIds.has(String(a.itemId)))
+      .map(a => api.getCollectionArtworkImageUrl(collectionId, a.itemId, a.id, false));
+    return [...productImgs, ...artworkImgs];
+  }, [allProductImages, collectionArtwork, collectionId, api, placementItemIds]);
 
   const apiBase = import.meta.env.VITE_API_URL || '';
   const downloadUrl = collectionId ? `${apiBase}/printify/image/download/${collectionId}` : null;
@@ -199,6 +224,7 @@ export default function PublishProductsStep() {
               alt="Collection images"
               imageWidth="8rem"
               imageHeight="8rem"
+              onImageClick={(_src, index) => setArtworkPreview({ images: allFullImages, _idx: index, alt: 'Collection images' })}
             />
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 text-center mx-auto" style={{ maxWidth: '550px' }}>
@@ -217,11 +243,12 @@ export default function PublishProductsStep() {
         </div>
       )}
       <div className="buttons flex justify-end gap-2 mt-auto">
+        <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         {allPublished ? (
-          <Button onClick={handleNext}>Next</Button>
+          <ButtonOutline onClick={handleNext}>Next</ButtonOutline>
         ) : (
-          <Button onClick={handlePublishProducts} disabled={publishing || !project?.printifyStoreId || printifyProducts.length === 0}>
+          <ButtonOutline onClick={handlePublishProducts} disabled={publishing || !project?.printifyStoreId || printifyProducts.length === 0}>
             {publishing ? (
               <>
                 <Icon name="progress_activity" spin className="w-4 h-4 inline mr-1" />
@@ -230,7 +257,7 @@ export default function PublishProductsStep() {
             ) : (
               'Publish Products'
             )}
-          </Button>
+          </ButtonOutline>
         )}
       </div>
     </div>

@@ -187,8 +187,8 @@ namespace Artsy.API.Services
 
                     if (bestMatch > 0)
                     {
-                        // Opacity strength is 2x the color match — pixels in the inner half of the range go fully transparent
-                        var opacityStrength = Math.Min(1f, bestMatch * 2f);
+                        // Opacity strength is 4x the color match — pixels in the inner quarter of the range go fully transparent
+                        var opacityStrength = Math.Min(1f, bestMatch * 4f);
                         var newAlpha = (byte)Math.Round(pixel.A * (1f - opacityStrength));
                         image[x, y] = new Rgba32(pixel.R, pixel.G, pixel.B, newAlpha);
                     }

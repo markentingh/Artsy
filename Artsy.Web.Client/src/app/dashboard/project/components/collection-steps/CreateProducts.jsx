@@ -2,20 +2,21 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useCollection } from '@/context/collection';
 import { useSession } from '@/context/session';
 import { PrintifyProducts } from '@/api/user/printifyProducts';
-import ButtonOutline from '@/components/ui/button-outline';
 import Button from '@/components/ui/button';
+import ButtonOutline from '@/components/ui/button-outline';
 import List, { Item } from '@/components/ui/list';
 import Checked from '@/components/ui/checked';
 import Icon from '@/components/ui/icon';
 import Tooltip from '@/components/ui/tooltip';
+import ConfirmModal from '@/components/ui/confirm-modal';
 
 export default function CreateProducts() {
   const session = useSession();
   const {
     project, blueprints, blueprintItemIds, allProductImages, collectionId, api,
-    STEPS, setStep,
+    STEPS, setStep, onClose, goBack,
     setMessage, setArtworkPreview,
-    collectionArtwork, printifyProducts, setPrintifyProducts,
+    collectionArtwork, setCollectionArtwork, printifyProducts, setPrintifyProducts,
     setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex,
     setProductBlueprintImages, setProductImagePrompt, loadImageModels,
     ensureCollection, loadMockups,
@@ -28,6 +29,9 @@ export default function CreateProducts() {
   const [downloadingMockups, setDownloadingMockups] = useState(false);
   const [artworkUploadState, setArtworkUploadState] = useState({});
   const [activeMap, setActiveMap] = useState({});
+  const [deletingProduct, setDeletingProduct] = useState({});
+  const [productToDelete, setProductToDelete] = useState(null);
+  const [archivingUpload, setArchivingUpload] = useState({});
 
   const createdBlueprints = useMemo(() => {
     const map = {};
@@ -318,6 +322,7 @@ export default function CreateProducts() {
           blueprintName: pbi.blueprintName,
           title: pbi.title,
           variantColor: pbi.variantColor,
+          variantIds: pbi.variantIds || [],
           prompt: pbi.prompt || '',
         }));
         setSelectedProductCombos(combos);
@@ -346,6 +351,64 @@ export default function CreateProducts() {
       await handleCreateProducts();
     }
   }, [collectionId, blueprintsWithImages, activeMap, api, allImagesUploaded, handleUploadImages, handleCreateProducts]);
+
+  const handleDeleteProduct = useCallback(async (pp) => {
+    if (!pp?.productId || !collectionId) return;
+    setProductToDelete(null);
+    setDeletingProduct(prev => ({ ...prev, [pp.id]: true }));
+    try {
+      const response = await printifyProductsApi.delete({ collectionId, productId: pp.productId });
+      if (response.data.success) {
+        setPrintifyProducts(prev => prev.filter(p => p.id !== pp.id));
+      } else {
+        setMessage({ type: 'error', text: response.data.message || 'Failed to delete product' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to delete product' });
+    } finally {
+      setDeletingProduct(prev => ({ ...prev, [pp.id]: false }));
+    }
+  }, [collectionId, printifyProductsApi, setMessage, setPrintifyProducts]);
+
+  const handleArchiveUpload = useCallback(async (art) => {
+    if (!collectionId || !art?.id || archivingUpload[art.id]) return;
+    setArchivingUpload(prev => ({ ...prev, [art.id]: true }));
+    try {
+      const response = await printifyProductsApi.archiveUpload({
+        collectionId,
+        artworkId: art.id,
+      });
+      if (response.data.success) {
+        setCollectionArtwork(prev => prev.map(a =>
+          a.id === art.id ? { ...a, printifyImageId: '' } : a
+        ));
+        setArtworkUploadState(prev => {
+          const next = { ...prev };
+          delete next[art.id];
+          return next;
+        });
+
+        const itemId = String(art.itemId);
+        const relatedBlueprints = blueprintsWithImages.filter(bp => {
+          if (!bp.placementJson) return false;
+          try {
+            const placements = typeof bp.placementJson === 'string' ? JSON.parse(bp.placementJson) : bp.placementJson;
+            return (placements || []).some(p => p.source === 'item' && String(p.itemId) === itemId);
+          } catch { return false; }
+        });
+        for (const bp of relatedBlueprints) {
+          const pp = printifyProducts.find(p => p.projectBlueprintId === bp.id);
+          if (pp) await handleDeleteProduct(pp);
+        }
+      } else {
+        setMessage({ type: 'error', text: response.data.message || 'Failed to archive image' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to archive image' });
+    } finally {
+      setArchivingUpload(prev => ({ ...prev, [art.id]: false }));
+    }
+  }, [collectionId, printifyProductsApi, setMessage, setCollectionArtwork, archivingUpload, blueprintsWithImages, printifyProducts, handleDeleteProduct]);
 
   const allPreviewImages = useMemo(() => {
     return [
@@ -384,7 +447,7 @@ export default function CreateProducts() {
               return (
                 <div
                   key={art.id}
-                  className={`relative w-[120px] h-[120px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 ${isArtworkActive ? 'cursor-pointer' : 'opacity-40 cursor-not-allowed'}`}
+                  className={`group relative w-[120px] h-[120px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 ${isArtworkActive ? 'cursor-pointer' : 'opacity-40 cursor-not-allowed'}`}
                   onClick={isArtworkActive ? () => handleImageClick(art) : undefined}
                 >
                   <img
@@ -407,6 +470,23 @@ export default function CreateProducts() {
                       <Icon name="error" className="w-8 h-8 text-red-500" />
                     </div>
                   )}
+                  {isDone && (
+                    <div className="hidden group-hover:flex absolute bottom-1 left-1 right-1 justify-center z-10">
+                      <Button
+                        size="small"
+                        color="red"
+                        disabled={archivingUpload[art.id]}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleArchiveUpload(art);
+                        }}
+                      >
+                        {archivingUpload[art.id] ? (
+                          <Icon name="progress_activity" spin className="w-4 h-4 inline" />
+                        ) : 'Delete'}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -421,6 +501,7 @@ export default function CreateProducts() {
             const variantCount = variantCountByBlueprint[bp.id] || 0;
             const isCreated = createdBlueprints[bp.id] || false;
             const isActive = activeMap[bp.id] !== false;
+            const pp = printifyProducts.find(p => p.projectBlueprintId === bp.id);
             return (
               <Item key={bp.id}>
                 <div className="flex items-center w-full">
@@ -438,6 +519,24 @@ export default function CreateProducts() {
                     <span className="text-xs text-gray-500 dark:text-gray-400">
                       {variantCount} {variantCount === 1 ? 'variant' : 'variants'}
                     </span>
+                    {isCreated && pp && (
+                      <>
+                        <ButtonOutline
+                          size="small"
+                          onClick={() => window.open(`https://printify.com/app/product-details/${pp.printifyProductId}`, '_blank', 'noopener noreferrer')}
+                        >
+                          View on Printify
+                        </ButtonOutline>
+                        <ButtonOutline
+                          size="small"
+                          color="red"
+                          onClick={() => setProductToDelete(pp)}
+                          disabled={deletingProduct[pp.id]}
+                        >
+                          Delete
+                        </ButtonOutline>
+                      </>
+                    )}
                     <Checked checked={isCreated} />
                   </div>
                 </div>
@@ -451,7 +550,9 @@ export default function CreateProducts() {
         {!allCreated && (
           <Tooltip text="This will upload the selected images to Printify, then create new products for your store on Printify. This will not publish products to your connected store on Printify." className="pr-8" />
         )}
-        <Button
+        <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
+        <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+        <ButtonOutline
           onClick={allCreated ? handleNext : handleStart}
           disabled={uploading || creating || !project?.printifyStoreId || activeBlueprints.length === 0}
         >
@@ -472,8 +573,17 @@ export default function CreateProducts() {
           ) : (
             'Upload & Create Products'
           )}
-        </Button>
+        </ButtonOutline>
       </div>
+
+      <ConfirmModal
+        show={!!productToDelete}
+        title="Delete Product"
+        message={`Do you really want to delete the product ${productToDelete?.blueprintName || ''}? This will delete it from your Printify shop.`}
+        confirmLabel="Delete"
+        onConfirm={() => productToDelete && handleDeleteProduct(productToDelete)}
+        onClose={() => setProductToDelete(null)}
+      />
     </div>
   );
 }

@@ -85,8 +85,8 @@ namespace Artsy.API.Models.Projects
 
     public class OpenAIImageReference
     {
-        [JsonPropertyName("image")]
-        public string? Image { get; set; }
+        [JsonPropertyName("image_url")]
+        public string? ImageUrl { get; set; }
 
         [JsonPropertyName("detail")]
         public string? Detail { get; set; }

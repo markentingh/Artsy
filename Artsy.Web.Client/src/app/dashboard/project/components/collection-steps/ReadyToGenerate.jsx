@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef, useMemo } from 'react';
+import React, { useCallback, useState, useRef, useMemo, useEffect } from 'react';
 import { useCollection } from '@/context/collection';
 import { useDashboard } from '@/context/dashboard';
 import ButtonOutline from '@/components/ui/button-outline';
@@ -17,7 +17,7 @@ export default function ReadyToGenerate() {
     projectId, cancelRef, STEPS,
     upscaleComplete, setUpscaleComplete,
     setStep, loadImageModels,
-    ensureCollection,
+    ensureCollection, goBack,
   } = useCollection();
   const { refreshTokens } = useDashboard();
 
@@ -69,6 +69,12 @@ export default function ReadyToGenerate() {
   }, [estimate, collectionArtwork]);
 
   const pendingTokens = pendingCount * 2;
+
+  useEffect(() => {
+    if (!isGeneratingAll && pendingCount === 0) {
+      setUpscaleComplete(true);
+    }
+  }, [isGeneratingAll, pendingCount, setUpscaleComplete]);
 
   const currentItemGenId = currentGeneratingItemId;
 
@@ -193,6 +199,7 @@ export default function ReadyToGenerate() {
             Upscaling complete! {generatedArtworks.length} artwork{generatedArtworks.length !== 1 ? 's' : ''} upscaled to full size.
           </p>
           <div className="buttons flex justify-end gap-2 mt-auto">
+            <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
             <ButtonOutline color="gray" className="cancel" onClick={onClose}>Close</ButtonOutline>
             <ButtonOutline onClick={handleNext}>Next</ButtonOutline>
           </div>
@@ -214,6 +221,7 @@ export default function ReadyToGenerate() {
             </>
           )}
           <div className="buttons flex justify-end gap-2 mt-auto">
+            <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
             <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
             {pendingCount > 0 && (
               <ButtonOutline onClick={handleGenerateArtworks}>Upscale Artworks</ButtonOutline>

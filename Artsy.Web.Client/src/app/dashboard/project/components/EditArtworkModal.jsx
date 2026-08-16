@@ -1148,8 +1148,8 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
             }
           }
           if (bestMatch > 0) {
-            // Opacity strength is 2x the color match — pixels in the inner half of the range go fully transparent
-            const opacityStrength = Math.min(1, bestMatch * 2);
+            // Opacity strength is 4x the color match — pixels in the inner quarter of the range go fully transparent
+            const opacityStrength = Math.min(1, bestMatch * 4);
             data[i + 3] = Math.round(a * (1 - opacityStrength));
           }
         }

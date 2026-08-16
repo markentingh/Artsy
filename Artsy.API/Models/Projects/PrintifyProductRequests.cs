@@ -46,4 +46,10 @@ namespace Artsy.API.Models.Projects
         public Guid CollectionId { get; set; }
         public Guid ProjectBlueprintId { get; set; }
     }
+
+    public class ArchiveUploadRequest
+    {
+        public Guid CollectionId { get; set; }
+        public Guid ArtworkId { get; set; }
+    }
 }

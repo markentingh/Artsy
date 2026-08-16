@@ -33,9 +33,10 @@ namespace Artsy.Data.Repositories.Projects
             return await _dbConnection.QueryAsync<ProjectCollectionProductImage>(query, new { projectIds, length });
         }
 
-        public async Task<ProjectCollectionProductImage?> GetByCollectionBlueprintProductImageIdAsync(Guid collectionId, Guid projectBlueprintId, Guid productImageId)
+        public async Task<ProjectCollectionProductImage?> GetByCollectionBlueprintProductImageIdAsync(Guid collectionId, Guid projectBlueprintId, Guid productImageId, bool activeOnly = true)
         {
-            const string query = @"SELECT * FROM public.""ProjectCollectionProductImages"" WHERE ""CollectionId"" = @collectionId AND ""ProjectBlueprintId"" = @projectBlueprintId AND ""ProductImageId"" = @productImageId AND ""Active"" = TRUE";
+            var activeFilter = activeOnly ? @" AND ""Active"" = TRUE" : "";
+            var query = $@"SELECT * FROM public.""ProjectCollectionProductImages"" WHERE ""CollectionId"" = @collectionId AND ""ProjectBlueprintId"" = @projectBlueprintId AND ""ProductImageId"" = @productImageId{activeFilter}";
             return await _dbConnection.QueryFirstOrDefaultAsync<ProjectCollectionProductImage>(query, new { collectionId, projectBlueprintId, productImageId });
         }
 
@@ -93,6 +94,12 @@ namespace Artsy.Data.Repositories.Projects
         {
             const string query = @"UPDATE public.""ProjectCollectionProductImages"" SET ""Active"" = FALSE WHERE ""CollectionId"" = @collectionId AND ""ProjectBlueprintId"" = @projectBlueprintId AND ""ProductImageId"" = @productImageId";
             await _dbConnection.ExecuteAsync(query, new { collectionId, projectBlueprintId, productImageId });
+        }
+
+        public async Task DeleteByCollectionAndBlueprintIdAsync(Guid collectionId, Guid projectBlueprintId)
+        {
+            const string query = @"DELETE FROM public.""ProjectCollectionProductImages"" WHERE ""CollectionId"" = @collectionId AND ""ProjectBlueprintId"" = @projectBlueprintId";
+            await _dbConnection.ExecuteAsync(query, new { collectionId, projectBlueprintId });
         }
 
         public async Task DeleteAsync(Guid id)

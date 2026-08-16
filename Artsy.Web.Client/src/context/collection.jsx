@@ -32,6 +32,19 @@ export const WIZARD_STEPS = [
   'Summary',
 ];
 
+const STEP_ORDER = [
+  STEPS.PROJECT_QUESTIONS,
+  STEPS.ARTWORK_QUESTIONS,
+  STEPS.ARTWORK_PREVIEW,
+  STEPS.READY_TO_GENERATE,
+  STEPS.CREATE_PRODUCTS,
+  STEPS.PRODUCT_IMAGE_PROMPT,
+  STEPS.PRODUCT_IMAGE_PREVIEW,
+  STEPS.PUBLISH_PRODUCTS,
+  STEPS.SOCIAL_MEDIA,
+  STEPS.SUMMARY,
+];
+
 const PLACEMENT_NAMES = [
   'Front', 'Back', 'Left Sleeve', 'Right Sleeve', 'Left', 'Right',
   'Top', 'Bottom', 'Inside', 'Outside',
@@ -258,6 +271,8 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         setPreviewImageData(url);
         setShowChanges(false);
         setRequestedChanges('');
+        setCollectionArtwork(prev => prev.filter(a => String(a.itemId) !== String(item.id)).concat(artwork));
+        fetchEstimate();
         refreshTokens();
         if (onSaved) onSaved();
       } else {
@@ -680,6 +695,20 @@ export function CollectionProvider({ children, projectId, project, collectionId:
           setCollectionArtwork(artworkList);
         }
 
+        let estimateData = null;
+        try {
+          const estRes = await api.estimateCollectionTokens({ projectId });
+          if (estRes.data.success) {
+            estimateData = estRes.data.data;
+            setEstimate(estimateData);
+          }
+        } catch { /* non-critical */ }
+
+        const pendingUpscale = (estimateData?.generations || []).filter(gen =>
+          !artworkList.some(a => String(a.itemId) === String(gen.itemId) && a.fullSize)
+        ).length;
+        setUpscaleComplete(pendingUpscale === 0);
+
         if (ppRes.data.success) {
           setPrintifyProducts(ppRes.data.data || []);
         }
@@ -751,6 +780,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
           blueprintName: pbi.blueprintName,
           title: pbi.title,
           variantColor: pbi.variantColor,
+          variantIds: pbi.variantIds || [],
         };
       }
       const existingImg = allProductImages.find(img =>
@@ -782,11 +812,67 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     setStep(targetStep);
   }, [aiItems, loadItemData, productBlueprintImages, allProductImages, selectedProductCombos, setProductImagePrompt, setSelectedProductCombos, setCurrentProductComboIndex, setStep, STEPS]);
 
+  const goBack = useCallback(() => {
+    setResumeStep(null);
+
+    if ((step === STEPS.ARTWORK_PREVIEW || step === STEPS.ARTWORK_QUESTIONS) && aiItems.length > 0) {
+      if (currentItemIndex > 0) {
+        loadItemData(currentItemIndex - 1);
+      } else {
+        setStep(STEPS.PROJECT_QUESTIONS);
+      }
+      return;
+    }
+
+    if ((step === STEPS.PRODUCT_IMAGE_PREVIEW || step === STEPS.PRODUCT_IMAGE_PROMPT) && selectedProductCombos.length > 0) {
+      if (currentProductComboIndex > 0) {
+        const prevIndex = currentProductComboIndex - 1;
+        const prevCombo = selectedProductCombos[prevIndex];
+        setCurrentProductComboIndex(prevIndex);
+        const existing = allProductImages.find(img =>
+          img.projectBlueprintId === prevCombo.projectBlueprintId &&
+          img.productImageId === prevCombo.productImageId
+        );
+        setProductImagePrompt(existing?.prompt || prevCombo.prompt || '');
+        setStep(STEPS.PRODUCT_IMAGE_PREVIEW);
+      } else {
+        setStep(STEPS.CREATE_PRODUCTS);
+      }
+      return;
+    }
+
+    const index = STEP_ORDER.indexOf(step);
+    if (index <= 0) return;
+
+    const prevStep = STEP_ORDER[index - 1];
+
+    if (prevStep === STEPS.ARTWORK_PREVIEW && aiItems.length > 0) {
+      const lastItem = aiItems[aiItems.length - 1];
+      reviewStep(STEPS.ARTWORK_PREVIEW, lastItem.id);
+      return;
+    }
+
+    if (prevStep === STEPS.PRODUCT_IMAGE_PREVIEW && selectedProductCombos.length > 0) {
+      const lastIndex = selectedProductCombos.length - 1;
+      const lastCombo = selectedProductCombos[lastIndex];
+      setCurrentProductComboIndex(lastIndex);
+      const existing = allProductImages.find(img =>
+        img.projectBlueprintId === lastCombo.projectBlueprintId &&
+        img.productImageId === lastCombo.productImageId
+      );
+      setProductImagePrompt(existing?.prompt || lastCombo.prompt || '');
+      setStep(STEPS.PRODUCT_IMAGE_PREVIEW);
+      return;
+    }
+
+    setStep(prevStep);
+  }, [step, currentItemIndex, currentProductComboIndex, aiItems, selectedProductCombos, allProductImages, loadItemData, reviewStep, setCurrentProductComboIndex, setProductImagePrompt, setStep, setResumeStep, STEPS]);
+
   const value = {
     // props
     projectId, project, collectionTitle, onClose, onSaved, api,
     // step
-    step, setStep, STEPS, wizardSteps, stepIndex, maxStepIndex,
+    step, setStep, STEPS, wizardSteps, stepIndex, maxStepIndex, goBack,
     // data
     projectQuestions, items, aiItems, setAiItems, blueprints, blueprintItemIds,
     currentItemIndex, setCurrentItemIndex, currentItem,

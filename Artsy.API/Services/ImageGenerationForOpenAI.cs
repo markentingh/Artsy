@@ -5,6 +5,8 @@ using System.Text.Json.Serialization;
 using Artsy.API.Models.Projects;
 using Artsy.Data.Entities;
 using Microsoft.Extensions.Options;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Png;
 
 namespace Artsy.API.Services
 {
@@ -76,6 +78,21 @@ namespace Artsy.API.Services
             var size = FindBestResolution($"{request.Width}x{request.Height}");
             var quality = string.IsNullOrWhiteSpace(request.Quality) ? "medium" : request.Quality;
 
+            var images = new List<OpenAIImageReference>();
+            if (request.InputImages != null && request.InputImages.Count > 0)
+            {
+                foreach (var img in request.InputImages)
+                {
+                    if (img != null && img.Length > 0)
+                    {
+                        images.Add(new OpenAIImageReference
+                        {
+                            ImageUrl = GetImageDataUrl(img)
+                        });
+                    }
+                }
+            }
+
             var jsonOptions = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
@@ -83,13 +100,14 @@ namespace Artsy.API.Services
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             };
 
-            var imageApiRequest = new
+            var imageApiRequest = new OpenAIImageRequest
             {
-                model,
-                prompt = request.Prompt,
-                n = 1,
-                size,
-                quality
+                Model = model,
+                Prompt = request.Prompt,
+                N = 1,
+                Size = size,
+                Quality = quality,
+                Images = images.Count > 0 ? images : null
             };
 
             var jsonContent = JsonSerializer.Serialize(imageApiRequest, jsonOptions);
@@ -144,36 +162,43 @@ namespace Artsy.API.Services
             var size = FindBestResolution($"{request.Width}x{request.Height}");
             var quality = string.IsNullOrWhiteSpace(request.Quality) ? "medium" : request.Quality;
 
-            using var multipart = new MultipartFormDataContent();
-
-            multipart.Add(new StringContent(model), "model");
-            multipart.Add(new StringContent(request.Prompt), "prompt");
-            multipart.Add(new StringContent(size), "size");
-            multipart.Add(new StringContent(quality), "quality");
-
-            var firstImage = request.InputImages[0];
-            var imageContent = new ByteArrayContent(firstImage);
-            imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
-            multipart.Add(imageContent, "image", "image.png");
-
-            if (request.InputMask != null && request.InputMask.Length > 0)
+            var images = new List<OpenAIImageReference>();
+            for (var i = 0; i < request.InputImages.Count; i++)
             {
-                var maskContent = new ByteArrayContent(request.InputMask);
-                maskContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
-                multipart.Add(maskContent, "mask", "mask.png");
+                var img = request.InputImages[i];
+                if (img != null && img.Length > 0)
+                {
+                    images.Add(new OpenAIImageReference
+                    {
+                        ImageUrl = GetImageDataUrl(img)
+                    });
+                }
             }
 
-            for (var i = 1; i < request.InputImages.Count; i++)
+            var jsonOptions = new JsonSerializerOptions
             {
-                var extraContent = new ByteArrayContent(request.InputImages[i]);
-                extraContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
-                multipart.Add(extraContent, $"image[{i}]", $"image_{i}.png");
-            }
+                PropertyNameCaseInsensitive = true,
+                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            };
+
+            var imageEditRequest = new OpenAIImageRequest
+            {
+                Model = model,
+                Prompt = request.Prompt,
+                N = 1,
+                Size = size,
+                Quality = quality,
+                Images = images
+            };
+
+            var jsonContent = JsonSerializer.Serialize(imageEditRequest, jsonOptions);
+            var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
             using var client = _httpClientFactory.CreateClient("ImageGeneration");
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, config.ImageEditEndpoint)
             {
-                Content = multipart
+                Content = content
             };
             httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ApiKey);
 
@@ -183,13 +208,6 @@ namespace Artsy.API.Services
 
             if (!response.IsSuccessStatusCode)
                 throw new InvalidOperationException($"Image edit failed: {response.StatusCode} - {responseContent}");
-
-            var jsonOptions = new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            };
 
             var generationResponse = JsonSerializer.Deserialize<OpenAIImageResponse>(responseContent, jsonOptions);
             if (generationResponse?.Data == null || generationResponse.Data.Count == 0)
@@ -266,7 +284,7 @@ namespace Artsy.API.Services
                         contentItems.Add(new OpenAIInputContent
                         {
                             Type = "input_image",
-                            ImageUrl = $"data:image/png;base64,{Convert.ToBase64String(imgBytes)}",
+                            ImageUrl = GetImageDataUrl(imgBytes),
                             Detail = "auto"
                         });
                     }
@@ -322,6 +340,16 @@ namespace Artsy.API.Services
                 InputTokens = genResponse.Usage?.InputTokens ?? 0,
                 OutputTokens = genResponse.Usage?.OutputTokens ?? 0
             };
+        }
+
+        static string GetImageDataUrl(byte[] imageData)
+        {
+            if (imageData == null || imageData.Length == 0)
+                return "";
+
+            var format = Image.DetectFormat(imageData);
+            var mime = format?.DefaultMimeType ?? "image/png";
+            return $"data:{mime};base64,{Convert.ToBase64String(imageData)}";
         }
 
         static readonly (int W, int H)[] SupportedResolutions =

@@ -5,6 +5,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.PixelFormats;
 using Artsy.API.Models;
 using Artsy.API.Models.Collections;
 using Artsy.API.Models.Printify;
@@ -156,15 +157,63 @@ namespace Artsy.API.Controllers
                 if (cropSettings != null)
                     imgBytes = ProcessImage(imgBytes, cropSettings.Value.Width, cropSettings.Value.Height, cropSettings.Value.CropX, cropSettings.Value.CropY, artwork.Opacity);
 
+                using (var processedImage = Image.Load(imgBytes))
+                {
+                    artwork.Width = processedImage.Width;
+                    artwork.Height = processedImage.Height;
+                }
+
                 var base64 = Convert.ToBase64String(imgBytes);
                 var fileName = artwork.Opacity ? $"{artwork.Id}.png" : $"{artwork.Id}.jpg";
                 var uploadResp = await _printifyService.UploadImageAsync(userId, fileName, base64);
-                if (uploadResp == null)
+                if (uploadResp == null || string.IsNullOrWhiteSpace(uploadResp.Id))
                     return Json(new ApiResponse { success = false, message = "Failed to upload artwork to Printify." });
 
                 await _artworkRepository.SetPrintifyImageIdAsync(artwork.Id, uploadResp.Id);
+                await _artworkRepository.UpdateAsync(artwork);
 
                 return Json(new ApiResponse { success = true, data = new { printifyImageId = uploadResp.Id } });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("archive-upload")]
+        public async Task<IActionResult> ArchiveUpload([FromBody] ArchiveUploadRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.CollectionId == Guid.Empty || request.ArtworkId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "CollectionId and ArtworkId are required." });
+
+            try
+            {
+                var collection = await _projectCollectionRepository.GetByIdAsync(request.CollectionId);
+                if (collection == null || collection.Status != 1)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var project = await _projectRepository.GetByIdAsync(collection.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var artwork = await _artworkRepository.GetByIdAsync(request.CollectionId, request.ArtworkId);
+                if (artwork == null)
+                    return Json(new ApiResponse { success = false, message = "Artwork not found." });
+
+                if (string.IsNullOrWhiteSpace(artwork.PrintifyImageId))
+                    return Json(new ApiResponse { success = false, message = "Artwork is not uploaded to Printify." });
+
+                var archived = await _printifyService.ArchiveImageAsync(userId, artwork.PrintifyImageId);
+                if (!archived)
+                    return Json(new ApiResponse { success = false, message = "Failed to archive image on Printify." });
+
+                await _artworkRepository.SetPrintifyImageIdAsync(artwork.Id, "");
+
+                return Json(new ApiResponse { success = true });
             }
             catch (Exception ex)
             {
@@ -199,8 +248,8 @@ namespace Artsy.API.Controllers
 
         private static byte[] ProcessImage(byte[] imgBytes, int targetWidth, int targetHeight, string cropX, string cropY, bool preservePng = false)
         {
-            if (string.Equals(cropX, "fit", StringComparison.OrdinalIgnoreCase))
-                return FitImage(imgBytes, targetWidth, targetHeight, cropY, preservePng);
+            if (preservePng || string.Equals(cropX, "fit", StringComparison.OrdinalIgnoreCase))
+                return FitImage(imgBytes, targetWidth, targetHeight, cropX, cropY, preservePng);
 
             return CropImage(imgBytes, targetWidth, targetHeight, cropX, cropY, preservePng);
         }
@@ -253,34 +302,124 @@ namespace Artsy.API.Controllers
             return ms.ToArray();
         }
 
-        private static byte[] FitImage(byte[] imgBytes, int targetWidth, int targetHeight, string cropY, bool preservePng = false)
+        private static Rectangle GetNonTransparentBounds(Image<Rgba32> image)
         {
-            using var image = Image.Load(imgBytes);
+            int left = 0;
+            int right = image.Width - 1;
+            int top = 0;
+            int bottom = image.Height - 1;
+
+            for (; top <= bottom; top++)
+            {
+                if (RowHasPixel(image, top, 0, image.Width - 1, true))
+                    break;
+            }
+
+            for (; bottom >= top; bottom--)
+            {
+                if (RowHasPixel(image, bottom, 0, image.Width - 1, true))
+                    break;
+            }
+
+            for (; left <= right; left++)
+            {
+                if (ColumnHasPixel(image, left, top, bottom))
+                    break;
+            }
+
+            for (; right >= left; right--)
+            {
+                if (ColumnHasPixel(image, right, top, bottom))
+                    break;
+            }
+
+            if (left > right || top > bottom)
+                return Rectangle.Empty;
+
+            return new Rectangle(left, top, right - left + 1, bottom - top + 1);
+        }
+
+        private static bool RowHasPixel(Image<Rgba32> image, int y, int xStart, int xEnd, bool horizontal)
+        {
+            for (int x = xStart; x <= xEnd; x++)
+            {
+                if (image[x, y].A > 0)
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool ColumnHasPixel(Image<Rgba32> image, int x, int yStart, int yEnd)
+        {
+            for (int y = yStart; y <= yEnd; y++)
+            {
+                if (image[x, y].A > 0)
+                    return true;
+            }
+            return false;
+        }
+
+        private static byte[] FitImage(byte[] imgBytes, int targetWidth, int targetHeight, string cropX, string cropY, bool preservePng = false)
+        {
+            using var image = Image.Load<Rgba32>(imgBytes);
+
+            if (preservePng)
+            {
+                var bounds = GetNonTransparentBounds(image);
+                if (!bounds.IsEmpty)
+                {
+                    image.Mutate(ctx => ctx.Crop(bounds));
+                }
+            }
+
             var srcW = image.Width;
             var srcH = image.Height;
-            var targetRatio = (double)targetWidth / targetHeight;
             var srcRatio = (double)srcW / srcH;
 
             int newW, newH;
-            if (srcRatio > targetRatio)
+            if (preservePng)
             {
-                newW = targetWidth;
-                newH = (int)(targetWidth / srcRatio);
+                // For transparent PNG artwork, scale to the full placement height and
+                // crop/letterbox horizontally so the image fits the print area height.
+                newH = targetHeight;
+                newW = (int)(targetHeight * srcRatio);
             }
             else
             {
-                newH = targetHeight;
-                newW = (int)(targetHeight * srcRatio);
+                var targetRatio = (double)targetWidth / targetHeight;
+                if (srcRatio > targetRatio)
+                {
+                    newW = targetWidth;
+                    newH = (int)(targetWidth / srcRatio);
+                }
+                else
+                {
+                    newH = targetHeight;
+                    newW = (int)(targetHeight * srcRatio);
+                }
             }
 
             image.Mutate(ctx => ctx.Resize(newW, newH));
 
-            using var ms = new MemoryStream();
             if (preservePng)
-                image.Save(ms, new PngEncoder());
-            else
-                image.Save(ms, new JpegEncoder());
-            return ms.ToArray();
+            {
+                using var canvas = new Image<Rgba32>(targetWidth, targetHeight);
+                int xOffset = cropX.ToLower() switch
+                {
+                    "left" => 0,
+                    "right" => targetWidth - newW,
+                    _ => (targetWidth - newW) / 2,
+                };
+                canvas.Mutate(ctx => ctx.DrawImage(image, new Point(xOffset, 0), 1f));
+
+                using var ms = new MemoryStream();
+                canvas.Save(ms, new PngEncoder());
+                return ms.ToArray();
+            }
+
+            using var ms2 = new MemoryStream();
+            image.Save(ms2, new JpegEncoder());
+            return ms2.ToArray();
         }
 
         [HttpPost("create")]
@@ -381,10 +520,6 @@ namespace Artsy.API.Controllers
                     .Where(a => a.Accepted && a.Active && !string.IsNullOrWhiteSpace(a.PrintifyImageId))
                     .ToList();
 
-                var productImages = (await _productImageRepository.GetByCollectionIdAsync(request.CollectionId))
-                    .Where(img => img.ProjectBlueprintId == bp.Id && img.Accepted && img.Active)
-                    .ToList();
-
                 var printAreas = new List<PrintifyPrintAreaRequest>();
                 var artworkUsedInPlacements = new HashSet<Guid>();
                 if (!string.IsNullOrWhiteSpace(bp.PlacementJson) && collectionArtwork.Count > 0)
@@ -409,18 +544,18 @@ namespace Artsy.API.Controllers
                                 var position = (placement.Position ?? "").ToLower();
 
                                 double x = 0.5, y = 0.5, scale = 1;
-                                if (string.Equals(placement.CropX, "fit", StringComparison.OrdinalIgnoreCase))
+                                if (art.Opacity || string.Equals(placement.CropX, "fit", StringComparison.OrdinalIgnoreCase))
                                 {
                                     var (tw, th) = placement.GetDimensions();
                                     if (tw > 0 && th > 0 && art.Width > 0 && art.Height > 0)
                                     {
                                         var targetRatio = (double)tw / th;
                                         var srcRatio = (double)art.Width / art.Height;
-                                        int fitH;
-                                        if (srcRatio > targetRatio)
-                                            fitH = (int)(tw / srcRatio);
-                                        else
-                                            fitH = th;
+                                        double fitScale = srcRatio > targetRatio
+                                            ? (double)tw / art.Width
+                                            : (double)th / art.Height;
+                                        fitScale = Math.Min(1, fitScale);
+                                        int fitH = (int)(art.Height * fitScale);
                                         var cropY = (placement.CropY ?? "").ToLower();
                                         y = cropY switch
                                         {
@@ -428,6 +563,7 @@ namespace Artsy.API.Controllers
                                             "bottom" => 1 - ((double)fitH / (2 * th)),
                                             _ => 0.5,
                                         };
+                                        scale = fitScale;
                                     }
                                 }
 
@@ -459,61 +595,6 @@ namespace Artsy.API.Controllers
                     catch { }
                 }
 
-                var blueprintImages = (await _printifyBlueprintImageRepository.GetByBlueprintIdAsync(bp.BlueprintId)).ToList();
-                var blueprintImageIds = blueprintImages.Select(bi => bi.Id).ToList();
-                var imageVariants = blueprintImageIds.Count > 0
-                    ? (await _printifyBlueprintImageVariantRepository.GetByBlueprintImageIdsAsync(blueprintImageIds)).ToList()
-                    : new List<PrintifyBlueprintImageVariant>();
-
-                var productImageIds = productImages.Select(pi => pi.ProductImageId).Where(id => id != Guid.Empty).ToList();
-                var blueprintProductImages = productImageIds.Count > 0
-                    ? (await _blueprintProductImageRepository.GetByBlueprintIdsAsync(new[] { bp.Id })).ToDictionary(bpi => bpi.Id)
-                    : new Dictionary<Guid, ProjectBlueprintProductImage>();
-
-                var positionByVariantColor = new Dictionary<string, int>();
-                foreach (var bi in blueprintImages)
-                {
-                    var variantsForImage = imageVariants.Where(v => v.BlueprintImageId == bi.Id);
-                    foreach (var v in variantsForImage)
-                    {
-                        positionByVariantColor[v.VariantColor] = bi.Position;
-                    }
-                }
-
-                var domain = ConnectionSettings.PrintifyImagesDomain;
-                if (!string.IsNullOrWhiteSpace(domain) && !domain.EndsWith("/"))
-                    domain += "/";
-
-                var images = new List<PrintifyProductImageRequest>();
-                foreach (var img in productImages)
-                {
-                    var position = "front";
-                    if (img.ProductImageId != Guid.Empty && blueprintProductImages.TryGetValue(img.ProductImageId, out var bpi))
-                    {
-                        if (positionByVariantColor.TryGetValue(bpi.VariantColor, out var pos))
-                            position = GetPositionLabel(pos);
-                    }
-
-                    images.Add(new PrintifyProductImageRequest
-                    {
-                        Src = $"{domain}printify/image/product/{img.Id}",
-                        VariantIds = variantIds,
-                        Position = position,
-                        IsDefault = false,
-                    });
-                }
-
-                foreach (var art in collectionArtwork.Where(a => artworkUsedInPlacements.Contains(a.Id)))
-                {
-                    images.Add(new PrintifyProductImageRequest
-                    {
-                        Src = $"{domain}printify/image/artwork/{art.Id}",
-                        VariantIds = variantIds,
-                        Position = "front",
-                        IsDefault = false,
-                    });
-                }
-
                 var description = bp.Description ?? "";
                 if (!string.IsNullOrWhiteSpace(description))
                     description += "\n\n";
@@ -528,7 +609,6 @@ namespace Artsy.API.Controllers
                     PrintProviderId = printProviderId,
                     Variants = variants,
                     PrintAreas = printAreas,
-                    Images = images,
                 };
 
                 var requestJson = JsonSerializer.Serialize(productRequest, new JsonSerializerOptions { WriteIndented = false });
@@ -540,6 +620,7 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = result.Error });
 
                 var response = result.Product;
+                var responseJson = JsonSerializer.Serialize(response, new JsonSerializerOptions { WriteIndented = false });
 
                 var existing = await _printifyProductRepository.GetByCollectionAndProductIdAsync(request.CollectionId, product.Id);
                 if (existing != null)
@@ -551,9 +632,10 @@ namespace Artsy.API.Controllers
                     existing.Published = false;
                     existing.Status = 1;
                     existing.RequestJson = requestJson;
+                    existing.ResponseJson = responseJson;
                     await _printifyProductRepository.UpdateAsync(existing);
 
-                    var mockupsDownloaded = await DownloadAndSaveMockupsAsync(userId, shopId, response.Id, collection.ProjectId, request.CollectionId, existing.Id);
+                    var mockupsDownloaded = await DownloadAndSaveMockupsAsync(userId, shopId, response.Id, collection.ProjectId, request.CollectionId, existing.Id, response.Images);
 
                     return Json(new ApiResponse { success = true, data = new
                     {
@@ -585,10 +667,11 @@ namespace Artsy.API.Controllers
                     ProviderId = response.PrintProviderId,
                     Published = false,
                     Status = 1,
-                    RequestJson = requestJson
+                    RequestJson = requestJson,
+                    ResponseJson = responseJson
                 });
 
-                var mockupsDownloaded2 = await DownloadAndSaveMockupsAsync(userId, shopId, response.Id, collection.ProjectId, request.CollectionId, record.Id);
+                var mockupsDownloaded2 = await DownloadAndSaveMockupsAsync(userId, shopId, response.Id, collection.ProjectId, request.CollectionId, record.Id, response.Images);
 
                 return Json(new ApiResponse { success = true, data = new
                 {
@@ -646,7 +729,11 @@ namespace Artsy.API.Controllers
                 if (printifyProduct == null || string.IsNullOrWhiteSpace(printifyProduct.PrintifyProductId))
                     return Json(new ApiResponse { success = false, message = "Printify product not found." });
 
-                var mockupsDownloaded = await DownloadAndSaveMockupsAsync(userId, shopId, printifyProduct.PrintifyProductId, collection.ProjectId, request.CollectionId, printifyProduct.Id);
+                var productDetails = await _printifyService.GetProductAsync(userId, shopId, printifyProduct.PrintifyProductId);
+                if (productDetails == null)
+                    return Json(new ApiResponse { success = false, message = "Failed to get Printify product details." });
+
+                var mockupsDownloaded = await DownloadAndSaveMockupsAsync(userId, shopId, printifyProduct.PrintifyProductId, collection.ProjectId, request.CollectionId, printifyProduct.Id, productDetails.Images);
 
                 return Json(new ApiResponse { success = true, data = new
                 {
@@ -1016,26 +1103,20 @@ namespace Artsy.API.Controllers
             }
         }
 
-        private async Task<bool> DownloadAndSaveMockupsAsync(Guid userId, int shopId, string printifyProductId, Guid projectId, Guid collectionId, Guid printifyProductEntityId)
+        private async Task<bool> DownloadAndSaveMockupsAsync(Guid userId, int shopId, string printifyProductId, Guid projectId, Guid collectionId, Guid printifyProductEntityId, List<PrintifyProductImageResponse> productImages)
         {
             try
             {
-                var productDetails = await _printifyService.GetProductAsync(userId, shopId, printifyProductId);
-                if (productDetails == null)
-                {
-                    Console.WriteLine($"DownloadAndSaveMockupsAsync: GetProductAsync returned null for product {printifyProductId}");
-                    return false;
-                }
-                if (productDetails.Images == null || productDetails.Images.Count == 0)
-                {
-                    Console.WriteLine($"DownloadAndSaveMockupsAsync: No images found for product {printifyProductId}");
-                    return false;
-                }
-
                 await _mockupRepository.DeleteByPrintifyProductIdAsync(printifyProductEntityId);
 
+                if (productImages == null || productImages.Count == 0)
+                {
+                    Console.WriteLine($"DownloadAndSaveMockupsAsync: No images provided for product {printifyProductId}");
+                    return false;
+                }
+
                 var httpClient = IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory);
-                foreach (var img in productDetails.Images)
+                foreach (var img in productImages)
                 {
                     if (string.IsNullOrWhiteSpace(img.Src)) continue;
 

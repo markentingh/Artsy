@@ -15,7 +15,7 @@ export default function ArtworkQuestions() {
     aiItems, currentItemIndex, currentItem,
     currentItemQuestions, itemAnswers, setItemAnswers,
     ensureCollection, saveAnswers,
-    setStep, doGeneratePreview, STEPS, onClose,
+    setStep, doGeneratePreview, STEPS, onClose, goBack,
     collectionArtwork, collectionId, api, setArtworkPreview,
     currentArtwork,
     imageModels, selectedImageModel, setSelectedImageModel, loadImageModels,
@@ -234,6 +234,7 @@ export default function ArtworkQuestions() {
         )}
       </div>
       <div className="buttons flex justify-end gap-2 mt-4 mt-auto">
+        <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         <ButtonOutline onClick={handleNext}>Generate Artwork</ButtonOutline>
       </div>

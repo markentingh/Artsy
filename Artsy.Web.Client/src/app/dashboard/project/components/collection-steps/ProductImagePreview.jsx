@@ -9,7 +9,7 @@ export default function ProductImagePreview() {
   const {
     selectedProductCombos, currentProductComboIndex,
     collectionId, projectId, api, productImagePrompt,
-    setStep, setMessage, STEPS, onClose, onSaved,
+    setStep, setMessage, STEPS, onClose, onSaved, goBack,
     allProductImages, setAllProductImages,
     setCurrentProductComboIndex,
     selectedProductImageModel,
@@ -59,9 +59,9 @@ export default function ProductImagePreview() {
   }, [projectId, collectionId, api, productImagePrompt, setIsGeneratingProductImage, setCurrentProductImage, setShowProductImageChanges, setProductImageChanges, setMessage, refreshTokens, selectedProductImageModel, onSaved, collectionProducts]);
 
   useEffect(() => {
-    if (!currentProductImage && combo && !isGeneratingProductImage) {
-      doGenerateProductImage(combo);
-    }
+    if (!combo) return;
+    setCurrentProductImage(null);
+    doGenerateProductImage(combo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProductComboIndex]);
 
@@ -131,13 +131,6 @@ export default function ProductImagePreview() {
           )}
         </div>
 
-        {!showProductImageChanges && !isGeneratingProductImage && currentProductImage && (
-          <div className="buttons flex gap-2">
-            <ButtonOutline onClick={handleMakeChanges}>Make Changes</ButtonOutline>
-            <ButtonOutline onClick={handleAccept}>Accept</ButtonOutline>
-          </div>
-        )}
-
         {showProductImageChanges && !isGeneratingProductImage && (
           <div className="w-full max-w-[512px]">
             <TextArea
@@ -156,8 +149,15 @@ export default function ProductImagePreview() {
           </div>
         )}
       </div>
-      <div className="buttons flex justify-end gap-2 mt-4 mt-auto">
+      <div className="buttons flex justify-end gap-2 mt-8 mt-auto">
+        <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+        {!showProductImageChanges && !isGeneratingProductImage && currentProductImage && (
+          <>
+            <ButtonOutline onClick={handleMakeChanges}>Make Changes</ButtonOutline>
+            <ButtonOutline onClick={handleAccept}>Accept</ButtonOutline>
+          </>
+        )}
       </div>
     </div>
   );

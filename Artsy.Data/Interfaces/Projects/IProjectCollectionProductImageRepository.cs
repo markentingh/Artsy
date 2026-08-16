@@ -6,7 +6,7 @@ namespace Artsy.Data.Interfaces.Projects
     {
         Task<ProjectCollectionProductImage?> GetByIdAsync(Guid id);
         Task<IEnumerable<ProjectCollectionProductImage>> FilterByProjectIdsAsync(Guid[] projectIds, int length = 5);
-        Task<ProjectCollectionProductImage?> GetByCollectionBlueprintProductImageIdAsync(Guid collectionId, Guid projectBlueprintId, Guid productImageId);
+        Task<ProjectCollectionProductImage?> GetByCollectionBlueprintProductImageIdAsync(Guid collectionId, Guid projectBlueprintId, Guid productImageId, bool activeOnly = true);
         Task<IEnumerable<ProjectCollectionProductImage>> GetByCollectionIdAsync(Guid collectionId);
         Task<IEnumerable<ProjectCollectionProductImage>> GetAllByCollectionIdAsync(Guid collectionId);
         Task<IEnumerable<ProjectCollectionProductImage>> GetByCollectionAndBlueprintIdAsync(Guid collectionId, Guid projectBlueprintId);
@@ -14,6 +14,7 @@ namespace Artsy.Data.Interfaces.Projects
         Task<ProjectCollectionProductImage> CreateAsync(ProjectCollectionProductImage image);
         Task UpdateAsync(ProjectCollectionProductImage image);
         Task SetInactiveAsync(Guid collectionId, Guid projectBlueprintId, Guid productImageId);
+        Task DeleteByCollectionAndBlueprintIdAsync(Guid collectionId, Guid projectBlueprintId);
         Task DeleteAsync(Guid id);
     }
 }

@@ -149,7 +149,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
   const {
     items, setAiItems, aiItems,
     resumeStep, setResumeStep, blueprintItemIds,
-    collectionArtwork, savedAnswers,
+    collectionArtwork, savedAnswers, upscaleComplete,
     setStep, setCurrentItemIndex, loadItemData,
     fetchEstimate, setInitialLoading,
     STEPS, reset, loadData,
@@ -265,9 +265,9 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
           const aiBlueprintItems = aiItems.filter(item => !customItemIds.has(String(item.id)));
           const allFullSize = aiBlueprintItems.length > 0 && aiBlueprintItems.every(item => {
             const art = collectionArtwork.find(a => String(a.itemId) === String(item.id));
-            return art && art.accepted && art.fullSize;
+            return !art || (art.accepted && art.fullSize);
           });
-          if (allFullSize) {
+          if (allFullSize || upscaleComplete) {
             (async () => {
               const colId = initialCollectionId || await ensureCollection();
               if (colId) {
@@ -351,6 +351,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
                         blueprintName: pbi.blueprintName,
                         title: pbi.title,
                         variantColor: pbi.variantColor,
+                        variantIds: pbi.variantIds || [],
                         prompt: pbi.prompt || '',
                         printifyImageUrl,
                       };

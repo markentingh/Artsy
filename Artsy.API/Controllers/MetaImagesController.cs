@@ -36,6 +36,8 @@ namespace Artsy.API.Controllers
                     return NotFound();
 
                 imgBytes = await _imageService.ResizeAndCropForInstagramAsync(imgBytes);
+                Response.Headers["Content-Disposition"] = "inline; filename=\"product.jpg\"";
+                Response.Headers["Cache-Control"] = "public, max-age=86400";
                 return File(imgBytes, "image/jpeg");
             }
             catch
@@ -53,20 +55,10 @@ namespace Artsy.API.Controllers
                 if (artwork == null)
                     return NotFound();
 
-                byte[]? imgBytes;
-                if (artwork.Opacity)
-                {
-                    // For opacity artworks, serve the JPG with background for social media
-                    imgBytes = await _imageService.GetProjectCollectionArtworkJpgWithBgAsync(
-                        artwork.ProjectId, artwork.CollectionId, artwork.ItemId, artwork.Id);
-                    if (imgBytes == null || imgBytes.Length == 0)
-                    {
-                        // Fallback to the original JPG if the bg version doesn't exist
-                        imgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(
-                            artwork.ProjectId, artwork.CollectionId, artwork.ItemId, artwork.Id);
-                    }
-                }
-                else
+                // Always prefer the _bg.jpg version if it exists (used for opacity artworks), otherwise fall back to the original
+                byte[]? imgBytes = await _imageService.GetProjectCollectionArtworkJpgWithBgAsync(
+                    artwork.ProjectId, artwork.CollectionId, artwork.ItemId, artwork.Id);
+                if (imgBytes == null || imgBytes.Length == 0)
                 {
                     imgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(
                         artwork.ProjectId, artwork.CollectionId, artwork.ItemId, artwork.Id);
@@ -75,6 +67,8 @@ namespace Artsy.API.Controllers
                     return NotFound();
 
                 imgBytes = await _imageService.ResizeAndCropForInstagramAsync(imgBytes);
+                Response.Headers["Content-Disposition"] = "inline; filename=\"artwork.jpg\"";
+                Response.Headers["Cache-Control"] = "public, max-age=86400";
                 return File(imgBytes, "image/jpeg");
             }
             catch

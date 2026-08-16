@@ -13,7 +13,7 @@ export default function ProductImagePrompt() {
     productImagePrompt, setProductImagePrompt,
     selectedProductCombos,
     currentProductComboIndex,
-    setStep, setMessage, STEPS, onClose,
+    setStep, setMessage, STEPS, onClose, goBack,
     collectionId, api, projectId,
     setSelectedProductCombos, setCurrentProductComboIndex,
     collectionArtwork, blueprints,
@@ -77,7 +77,16 @@ export default function ProductImagePrompt() {
   const comboMockups = useMemo(() => {
     if (!combo) return [];
     const pp = printifyProducts.find(p => p.projectBlueprintId === combo.projectBlueprintId);
-    return mockups.filter(m => m.printifyProductId === pp?.id);
+    const productMockups = mockups.filter(m => m.printifyProductId === pp?.id);
+    const comboVariantIds = new Set((combo.variantIds || []).map(String));
+    if (comboVariantIds.size === 0) return productMockups;
+    return productMockups.filter(m => {
+      const mockupVariantIds = new Set((m.variantIds || '').split(',').map(s => s.trim()).filter(Boolean));
+      for (const id of comboVariantIds) {
+        if (mockupVariantIds.has(id)) return true;
+      }
+      return false;
+    });
   }, [combo, printifyProducts, mockups]);
 
   useEffect(() => {
@@ -363,6 +372,7 @@ export default function ProductImagePrompt() {
       </div>
 
       <div className="buttons flex justify-end gap-2 mt-auto">
+        <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         <ButtonOutline onClick={handleNext} disabled={!productImagePrompt.trim() || !productName.trim()}>
           Generate Image

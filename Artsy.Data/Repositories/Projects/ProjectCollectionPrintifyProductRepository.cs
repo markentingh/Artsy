@@ -43,8 +43,8 @@ namespace Artsy.Data.Repositories.Projects
             product.Id = Guid.NewGuid();
             product.Created = DateTime.UtcNow;
             const string query = @"
-                INSERT INTO public.""ProjectCollectionPrintifyProducts"" (""Id"", ""ProjectId"", ""CollectionId"", ""ProductId"", ""PrintifyProductId"", ""PrintifyShopId"", ""PrintifyUserId"", ""ProviderId"", ""Published"", ""Status"", ""RequestJson"", ""Created"")
-                VALUES (@Id, @ProjectId, @CollectionId, @ProductId, @PrintifyProductId, @PrintifyShopId, @PrintifyUserId, @ProviderId, @Published, @Status, @RequestJson, @Created)
+                INSERT INTO public.""ProjectCollectionPrintifyProducts"" (""Id"", ""ProjectId"", ""CollectionId"", ""ProductId"", ""PrintifyProductId"", ""PrintifyShopId"", ""PrintifyUserId"", ""ProviderId"", ""Published"", ""Status"", ""RequestJson"", ""ResponseJson"", ""Created"")
+                VALUES (@Id, @ProjectId, @CollectionId, @ProductId, @PrintifyProductId, @PrintifyShopId, @PrintifyUserId, @ProviderId, @Published, @Status, @RequestJson, @ResponseJson, @Created)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectCollectionPrintifyProduct>(query, product);
         }
@@ -59,7 +59,8 @@ namespace Artsy.Data.Repositories.Projects
                     ""ProviderId"" = @ProviderId,
                     ""Published"" = @Published,
                     ""Status"" = @Status,
-                    ""RequestJson"" = @RequestJson
+                    ""RequestJson"" = @RequestJson,
+                    ""ResponseJson"" = @ResponseJson
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, product);
         }

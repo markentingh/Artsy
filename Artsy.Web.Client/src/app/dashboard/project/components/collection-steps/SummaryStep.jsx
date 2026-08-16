@@ -3,7 +3,6 @@ import { useCollection } from '@/context/collection';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import ButtonOutline from '@/components/ui/button-outline';
-import Button from '@/components/ui/button';
 import List, { Item } from '@/components/ui/list';
 import Checked from '@/components/ui/checked';
 import Icon from '@/components/ui/icon';
@@ -15,7 +14,7 @@ export default function SummaryStep() {
     project, collectionId, collectionTitle, blueprints,
     allProductImages, collectionArtwork, printifyProducts,
     api, onClose, setMessage, instagramPost,
-    setArtworkPreview, collectionProducts,
+    setArtworkPreview, collectionProducts, goBack,
   } = useCollection();
 
   const printifyApi = Projects(session);
@@ -191,6 +190,7 @@ export default function SummaryStep() {
       </div>
 
       <div className="buttons flex justify-end gap-2 mt-auto">
+        <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Close</ButtonOutline>
       </div>
     </div>

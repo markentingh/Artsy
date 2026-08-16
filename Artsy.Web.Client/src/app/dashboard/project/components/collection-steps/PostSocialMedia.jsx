@@ -3,7 +3,6 @@ import { useCollection } from '@/context/collection';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
 import ButtonOutline from '@/components/ui/button-outline';
-import Button from '@/components/ui/button';
 import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';
 import Spinner from '@/components/ui/spinner';
@@ -18,7 +17,7 @@ export default function PostSocialMedia() {
     socialMediaSelectedImages, setSocialMediaSelectedImages,
     instagramPosted, setInstagramPosted,
     instagramPost, setInstagramPost,
-    STEPS, setStep,
+    STEPS, setStep, goBack,
   } = useCollection();
 
   const printifyApi = Projects(session);
@@ -46,9 +45,7 @@ export default function PostSocialMedia() {
         type: 'artwork',
         artworkId: a.id,
         itemId: a.itemId,
-        url: a.opacity
-          ? api.getCollectionArtworkJpgWithBgThumbUrl(collectionId, a.itemId, a.id)
-          : api.getCollectionArtworkThumbUrl(collectionId, a.itemId, a.id),
+        url: api.getCollectionArtworkJpgWithBgThumbUrl(collectionId, a.itemId, a.id),
         label: 'Artwork',
       }));
 
@@ -337,6 +334,7 @@ export default function PostSocialMedia() {
           Instagram posting is not enabled for this project.
         </p>
         <div className="buttons flex justify-end gap-2 mt-auto">
+          <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
           <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         </div>
       </div>
@@ -448,9 +446,10 @@ export default function PostSocialMedia() {
       )}
 
       <div className="buttons flex justify-end gap-2 mt-auto">
+        <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         {!instagramPosted && (
-          <Button onClick={handlePost} disabled={posting || orderedImages.filter(img => socialMediaSelectedImages[img.id]).length === 0}>
+          <ButtonOutline onClick={handlePost} disabled={posting || orderedImages.filter(img => socialMediaSelectedImages[img.id]).length === 0}>
             {posting ? (
               <>
                 <Icon name="progress_activity" spin className="w-4 h-4 inline mr-1" />
@@ -459,10 +458,10 @@ export default function PostSocialMedia() {
             ) : (
               'Post Images'
             )}
-          </Button>
+          </ButtonOutline>
         )}
         {instagramPosted && (
-          <Button onClick={() => setStep(STEPS.SUMMARY)}>Next</Button>
+          <ButtonOutline onClick={() => setStep(STEPS.SUMMARY)}>Next</ButtonOutline>
         )}
       </div>
 
