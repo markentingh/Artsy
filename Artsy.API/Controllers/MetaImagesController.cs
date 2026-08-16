@@ -22,7 +22,7 @@ namespace Artsy.API.Controllers
         }
 
         [HttpGet("product/{productImageId}")]
-        public async Task<IActionResult> GetProductImage(Guid productImageId)
+        public async Task<IActionResult> GetProductImage(Guid productImageId, [FromQuery] bool thumb = false)
         {
             try
             {
@@ -30,12 +30,14 @@ namespace Artsy.API.Controllers
                 if (image == null)
                     return NotFound();
 
-                var imgBytes = await _imageService.GetProjectCollectionProductImageAsync(
-                    image.ProjectId, image.CollectionId, image.Id);
+                var imgBytes = thumb
+                    ? await _imageService.GetProjectCollectionProductImageThumbAsync(image.ProjectId, image.CollectionId, image.Id)
+                    : await _imageService.GetProjectCollectionProductImageAsync(image.ProjectId, image.CollectionId, image.Id);
                 if (imgBytes == null || imgBytes.Length == 0)
                     return NotFound();
 
-                imgBytes = await _imageService.ResizeAndCropForInstagramAsync(imgBytes);
+                if (!thumb)
+                    imgBytes = await _imageService.ResizeAndCropForInstagramAsync(imgBytes);
                 Response.Headers["Content-Disposition"] = "inline; filename=\"product.jpg\"";
                 Response.Headers["Cache-Control"] = "public, max-age=86400";
                 return File(imgBytes, "image/jpeg");

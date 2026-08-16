@@ -95,8 +95,8 @@ namespace Artsy.Data.Repositories.Orders
                 order.Updated = DateTime.UtcNow;
 
                 const string insert = @"
-                    INSERT INTO public.""Orders"" (""Id"", ""AppUserId"", ""PrintifyShopId"", ""OrderId"", ""AppOrderId"", ""AddressTo"", ""Metadata"", ""TotalPrice"", ""TotalShipping"", ""TotalTax"", ""Status"", ""ShippingMethod"", ""IsExpress"", ""IsEconomyShipping"", ""DateCreated"", ""DateSentToProduction"", ""DateFulfilled"", ""PrintifyConnect"", ""DataHash"", ""Created"", ""Updated"")
-                    VALUES (@Id, @AppUserId, @PrintifyShopId, @OrderId, @AppOrderId, @AddressTo, @Metadata, @TotalPrice, @TotalShipping, @TotalTax, @Status, @ShippingMethod, @IsExpress, @IsEconomyShipping, @DateCreated, @DateSentToProduction, @DateFulfilled, @PrintifyConnect, @DataHash, @Created, @Updated)";
+                    INSERT INTO public.""Orders"" (""Id"", ""AppUserId"", ""PrintifyShopId"", ""OrderId"", ""AppOrderId"", ""AddressTo"", ""Metadata"", ""TotalPrice"", ""TotalShipping"", ""TotalTax"", ""Status"", ""ShippingMethod"", ""IsExpress"", ""IsEconomyShipping"", ""DateCreated"", ""DateSentToProduction"", ""DateFulfilled"", ""PrintifyConnect"", ""DataHash"", ""ResponseJson"", ""Created"", ""Updated"")
+                    VALUES (@Id, @AppUserId, @PrintifyShopId, @OrderId, @AppOrderId, @AddressTo, @Metadata, @TotalPrice, @TotalShipping, @TotalTax, @Status, @ShippingMethod, @IsExpress, @IsEconomyShipping, @DateCreated, @DateSentToProduction, @DateFulfilled, @PrintifyConnect, @DataHash, @ResponseJson, @Created, @Updated)";
                 await _dbConnection.ExecuteAsync(insert, order);
                 await InsertItemsAndShipmentsAsync(order.Id, items, shipments);
                 return new SyncResultItem { IsNew = true };
@@ -127,6 +127,7 @@ namespace Artsy.Data.Repositories.Orders
                         ""DateFulfilled"" = @DateFulfilled,
                         ""PrintifyConnect"" = @PrintifyConnect,
                         ""DataHash"" = @DataHash,
+                        ""ResponseJson"" = @ResponseJson,
                         ""Updated"" = @Updated
                     WHERE ""Id"" = @Id";
                 await _dbConnection.ExecuteAsync(update, order);
@@ -144,8 +145,8 @@ namespace Artsy.Data.Repositories.Orders
         async Task InsertItemsAndShipmentsAsync(Guid orderId, List<OrderItem> items, List<OrderShipment> shipments)
         {
             const string insertItem = @"
-                INSERT INTO public.""OrderItems"" (""Id"", ""OrderId"", ""ProductId"", ""Quantity"", ""VariantId"", ""PrintProviderId"", ""Cost"", ""ShippingCost"", ""Status"", ""Metadata"", ""DateSentToProduction"", ""DateFulfilled"")
-                VALUES (@Id, @OrderId, @ProductId, @Quantity, @VariantId, @PrintProviderId, @Cost, @ShippingCost, @Status, @Metadata, @DateSentToProduction, @DateFulfilled)";
+                INSERT INTO public.""OrderItems"" (""Id"", ""OrderId"", ""ProductId"", ""Quantity"", ""VariantId"", ""PrintProviderId"", ""Cost"", ""ShippingCost"", ""Status"", ""Metadata"", ""DateSentToProduction"", ""DateFulfilled"", ""ProjectId"", ""CollectionId"", ""CollectionProductId"", ""CollectionPrintifyProductId"")
+                VALUES (@Id, @OrderId, @ProductId, @Quantity, @VariantId, @PrintProviderId, @Cost, @ShippingCost, @Status, @Metadata, @DateSentToProduction, @DateFulfilled, @ProjectId, @CollectionId, @CollectionProductId, @CollectionPrintifyProductId)";
 
             foreach (var item in items)
             {

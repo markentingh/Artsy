@@ -6,6 +6,7 @@ namespace Artsy.Data.Interfaces.Projects
     {
         Task<ProjectCollectionPrintifyProduct?> GetByIdAsync(Guid id);
         Task<ProjectCollectionPrintifyProduct?> GetByProductIdAsync(Guid productId);
+        Task<ProjectCollectionPrintifyProduct?> GetByPrintifyProductIdAsync(string printifyProductId);
         Task<ProjectCollectionPrintifyProduct?> GetByCollectionAndProductIdAsync(Guid collectionId, Guid productId);
         Task<IEnumerable<ProjectCollectionPrintifyProduct>> GetByCollectionIdAsync(Guid collectionId);
         Task<ProjectCollectionPrintifyProduct> CreateAsync(ProjectCollectionPrintifyProduct product);

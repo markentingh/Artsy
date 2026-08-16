@@ -20,6 +20,12 @@ namespace Artsy.Data.Repositories.Projects
             return await _dbConnection.QueryFirstOrDefaultAsync<ProjectCollectionProduct>(query, new { id });
         }
 
+        public async Task<ProjectCollectionProduct?> GetByNameAndBlueprintIdAsync(string name, int blueprintId)
+        {
+            const string query = @"SELECT * FROM public.""ProjectCollectionProducts"" WHERE ""Name"" = @name AND ""BlueprintId"" = @blueprintId AND ""Active"" = TRUE";
+            return await _dbConnection.QueryFirstOrDefaultAsync<ProjectCollectionProduct>(query, new { name, blueprintId });
+        }
+
         public async Task<ProjectCollectionProduct?> GetByCollectionAndBlueprintIdAsync(Guid collectionId, Guid projectBlueprintId)
         {
             const string query = @"SELECT * FROM public.""ProjectCollectionProducts"" WHERE ""CollectionId"" = @collectionId AND ""ProjectBlueprintId"" = @projectBlueprintId";

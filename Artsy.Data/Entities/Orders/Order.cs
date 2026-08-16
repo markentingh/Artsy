@@ -21,6 +21,7 @@ namespace Artsy.Data.Entities.Orders
         public DateTime? DateFulfilled { get; set; }
         public string PrintifyConnect { get; set; } = "";
         public string DataHash { get; set; } = "";
+        public string ResponseJson { get; set; } = "";
         public DateTime Created { get; set; }
         public DateTime Updated { get; set; }
     }

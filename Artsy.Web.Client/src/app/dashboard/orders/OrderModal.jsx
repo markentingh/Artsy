@@ -5,6 +5,8 @@ import Modal from '@/components/ui/modal';
 import { List, Item } from '@/components/ui/list';
 import CarouselElements from '@/components/ui/carousel-elements';
 import Icon from '@/components/ui/icon';
+import ButtonOutline from '@/components/ui/button-outline';
+import PersonalizeOrderItem from './PersonalizeOrderItem';
 
 const formatCents = (cents) => (cents / 100).toFixed(2);
 
@@ -35,6 +37,7 @@ export default function OrderModal({ order, onClose }) {
   const { getOrderImages } = Orders(session);
   const [imagesByProduct, setImagesByProduct] = useState({});
   const [loadingImages, setLoadingImages] = useState(true);
+  const [personalizingItem, setPersonalizingItem] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +67,16 @@ export default function OrderModal({ order, onClose }) {
       onClose={onClose}
       className="max-w-4xl"
     >
+      <div className="flex justify-end mb-4">
+        <a
+          href={`https://printify.com/app/store/${order.order.printifyShopId}/order/${order.order.orderId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
+        >
+          View Order on Printify
+        </a>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-6">
         <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded">
           <h4 className="font-semibold mb-2">Customer</h4>
@@ -132,38 +145,60 @@ export default function OrderModal({ order, onClose }) {
       ) : (
         <List>
           {order.items.map((item) => (
-            <OrderItemRow key={item.id} item={item} imageUrls={imagesByProduct[item.productId] || []} />
+            <OrderItemRow
+              key={item.id}
+              order={order}
+              item={item}
+              imageUrls={imagesByProduct[item.id] || []}
+              onPersonalize={() => setPersonalizingItem(item)}
+            />
           ))}
         </List>
+      )}
+      {personalizingItem && (
+        <PersonalizeOrderItem
+          order={order}
+          orderItem={personalizingItem}
+          productImages={imagesByProduct[personalizingItem.id] || []}
+          onClose={() => setPersonalizingItem(null)}
+        />
       )}
     </Modal>
   );
 }
 
-function OrderItemRow({ item, imageUrls }) {
+function OrderItemRow({ order, item, imageUrls, onPersonalize }) {
   const meta = parseJson(item.metadata);
+  const statusLabel = item.status?.toLowerCase() === 'on-hold'
+    ? 'On Hold (Required Personalization)'
+    : capitalize(item.status);
   const imageElements = imageUrls.length > 0
     ? imageUrls.map((url, i) => (
         <img
           key={i}
           src={url}
           alt={meta.title || 'Product image'}
-          className="w-[100px] h-[100px] object-cover rounded"
-          width="100"
-          height="100"
+          className="w-[150px] h-[150px] object-cover rounded"
+          width="150"
+          height="150"
         />
       ))
     : [];
 
   return (
     <Item inModal className="items-start gap-4">
-      <div className="flex-shrink-0 w-[100px]">
+      <div className="flex-shrink-0 w-[214px]">
         {imageElements.length > 0 ? (
-          <CarouselElements elements={imageElements} gap={8} className="w-[100px]" />
+          <CarouselElements elements={imageElements} gap={8} className="w-full px-8" />
         ) : (
-          <div className="w-[100px] h-[100px] bg-gray-100 dark:bg-gray-700 flex items-center justify-center rounded text-gray-500 dark:text-gray-400 text-xs text-center p-2">
+          <div className="w-[150px] h-[150px] bg-gray-100 dark:bg-gray-700 flex items-center justify-center rounded text-gray-500 dark:text-gray-400 text-xs text-center p-2">
             No image
           </div>
+        )}
+        {item.status?.toLowerCase() === 'on-hold' && (
+          <ButtonOutline onClick={onPersonalize} size="small" className="w-full mt-2">
+            Personalize
+          </ButtonOutline>
         )}
       </div>
       <div className="grid grid-cols-3 gap-x-4 gap-y-2 text-sm flex-1">
@@ -201,7 +236,7 @@ function OrderItemRow({ item, imageUrls }) {
         </div>
         <div>
           <span className="text-gray-500 dark:text-gray-400">Status</span>
-          <p className="font-medium">{capitalize(item.status)}</p>
+          <p className="font-medium">{statusLabel}</p>
         </div>
         <div>
           <span className="text-gray-500 dark:text-gray-400">Sent to Production</span>

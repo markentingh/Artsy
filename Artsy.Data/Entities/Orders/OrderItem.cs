@@ -14,5 +14,9 @@ namespace Artsy.Data.Entities.Orders
         public string Metadata { get; set; } = "";
         public DateTime? DateSentToProduction { get; set; }
         public DateTime? DateFulfilled { get; set; }
+        public Guid ProjectId { get; set; }
+        public Guid CollectionId { get; set; }
+        public Guid CollectionProductId { get; set; }
+        public Guid CollectionPrintifyProductId { get; set; }
     }
 }

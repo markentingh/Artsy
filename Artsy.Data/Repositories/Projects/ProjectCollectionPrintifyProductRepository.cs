@@ -26,6 +26,12 @@ namespace Artsy.Data.Repositories.Projects
             return await _dbConnection.QueryFirstOrDefaultAsync<ProjectCollectionPrintifyProduct>(query, new { productId });
         }
 
+        public async Task<ProjectCollectionPrintifyProduct?> GetByPrintifyProductIdAsync(string printifyProductId)
+        {
+            const string query = @"SELECT * FROM public.""ProjectCollectionPrintifyProducts"" WHERE ""PrintifyProductId"" = @printifyProductId AND ""Status"" = 1";
+            return await _dbConnection.QueryFirstOrDefaultAsync<ProjectCollectionPrintifyProduct>(query, new { printifyProductId });
+        }
+
         public async Task<ProjectCollectionPrintifyProduct?> GetByCollectionAndProductIdAsync(Guid collectionId, Guid productId)
         {
             const string query = @"SELECT * FROM public.""ProjectCollectionPrintifyProducts"" WHERE ""CollectionId"" = @collectionId AND ""ProductId"" = @productId AND ""Status"" = 1";

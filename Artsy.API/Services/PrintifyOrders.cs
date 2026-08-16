@@ -6,6 +6,8 @@ using Artsy.Data.Entities.Auth;
 using Artsy.Data.Entities.Orders;
 using Artsy.Data.Interfaces.Auth;
 using Artsy.Data.Interfaces.Orders;
+using Artsy.Data.Interfaces.Projects;
+using Artsy.Data.Entities.Projects;
 using Artsy.Data.Models;
 
 namespace Artsy.API.Services
@@ -23,15 +25,17 @@ namespace Artsy.API.Services
         readonly IAppUserRepository _userRepository;
         readonly IOrderRepository _orderRepository;
         readonly IHangfireOrderRepository _hangfireOrderRepository;
+        readonly IProjectCollectionProductRepository _projectCollectionProductRepository;
 
         const string BaseUrl = "https://api.printify.com/v1";
 
-        public PrintifyOrders(IHttpClientFactory httpClientFactory, IAppUserRepository userRepository, IOrderRepository orderRepository, IHangfireOrderRepository hangfireOrderRepository)
+        public PrintifyOrders(IHttpClientFactory httpClientFactory, IAppUserRepository userRepository, IOrderRepository orderRepository, IHangfireOrderRepository hangfireOrderRepository, IProjectCollectionProductRepository projectCollectionProductRepository)
         {
             _httpClientFactory = httpClientFactory;
             _userRepository = userRepository;
             _orderRepository = orderRepository;
             _hangfireOrderRepository = hangfireOrderRepository;
+            _projectCollectionProductRepository = projectCollectionProductRepository;
         }
 
         public async Task<(int New, int Updated)> RefreshAllAsync()
@@ -103,7 +107,7 @@ namespace Artsy.API.Services
                     if (createdAt.HasValue && createdAt.Value < since)
                         continue;
 
-                    var (order, items, shipments, hash) = MapOrder(appUserId, shopId, orderEl);
+                    var (order, items, shipments, hash) = await MapOrder(appUserId, shopId, orderEl);
                     var result = await _orderRepository.SyncOrderAsync(order, items, shipments, hash);
                     if (result.IsNew) newCount++;
                     else if (result.IsUpdated) updatedCount++;
@@ -123,7 +127,7 @@ namespace Artsy.API.Services
             return (newCount, updatedCount);
         }
 
-        (Order, List<OrderItem>, List<OrderShipment>, string) MapOrder(Guid appUserId, int shopId, JsonElement orderEl)
+        async Task<(Order, List<OrderItem>, List<OrderShipment>, string)> MapOrder(Guid appUserId, int shopId, JsonElement orderEl)
         {
             var order = new Order
             {
@@ -144,6 +148,7 @@ namespace Artsy.API.Services
                 DateSentToProduction = ParseDateTime(orderEl, "sent_to_production_at"),
                 DateFulfilled = ParseDateTime(orderEl, "fulfilled_at"),
                 PrintifyConnect = GetJson(orderEl, "printify_connect"),
+                ResponseJson = orderEl.GetRawText(),
             };
 
             var items = new List<OrderItem>();
@@ -151,9 +156,18 @@ namespace Artsy.API.Services
             {
                 foreach (var item in lineItems.EnumerateArray())
                 {
+                    var title = GetString(item, "title");
+                    if (item.TryGetProperty("metadata", out var itemMetadata) && string.IsNullOrWhiteSpace(title))
+                        title = GetString(itemMetadata, "title");
+
+                    var blueprintId = GetInt(item, "blueprint_id");
+                    var cp = await _projectCollectionProductRepository.GetByNameAndBlueprintIdAsync(title, blueprintId);
+
+                    var printifyProductId = GetString(item, "product_id");
+
                     items.Add(new OrderItem
                     {
-                        ProductId = GetString(item, "product_id"),
+                        ProductId = printifyProductId,
                         Quantity = GetInt(item, "quantity"),
                         VariantId = GetInt(item, "variant_id"),
                         PrintProviderId = GetInt(item, "print_provider_id"),
@@ -163,6 +177,10 @@ namespace Artsy.API.Services
                         Metadata = GetJson(item, "metadata"),
                         DateSentToProduction = ParseDateTime(item, "sent_to_production_at"),
                         DateFulfilled = ParseDateTime(item, "fulfilled_at"),
+                        ProjectId = cp?.ProjectId ?? Guid.Empty,
+                        CollectionId = cp?.CollectionId ?? Guid.Empty,
+                        CollectionProductId = cp?.Id ?? Guid.Empty,
+                        CollectionPrintifyProductId = Guid.Empty,
                     });
                 }
             }
@@ -197,9 +215,7 @@ namespace Artsy.API.Services
 
         HttpClient CreatePrintifyClient(string accessToken)
         {
-            var client = _httpClientFactory.CreateClient();
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            return client;
+            return IPv4HttpClientHelper.CreateHttpClient(_httpClientFactory, accessToken);
         }
 
         static string GetJson(JsonElement el, string name)
