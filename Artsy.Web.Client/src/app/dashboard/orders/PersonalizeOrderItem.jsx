@@ -1,146 +1,145 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Modal from '@/components/ui/modal';
 import Icon from '@/components/ui/icon';
+import Spinner from '@/components/ui/spinner';
 import ButtonOutline from '@/components/ui/button-outline';
+import Steps from '@/components/ui/steps';
+import Select from '@/components/forms/select';
+import Carousel from '@/components/ui/carousel';
 import { PersonalizeOrderItemProvider, usePersonalizeOrderItem } from '@/context/personalizeOrderItem';
+import PersonalizeSetupList from './PersonalizeSetupList';
 
-const formatCents = (cents) => (cents / 100).toFixed(2);
+function ArtworkCarousel({ images, defaultIndex = 0 }) {
+  if (!images.length) {
+    return (
+      <div className="w-full h-64 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center text-gray-500 dark:text-gray-400 text-sm">
+        No artwork selected for this order item
+      </div>
+    );
+  }
 
-function StepHeader() {
-  const { step, STEPS, setStep, artworks } = usePersonalizeOrderItem();
-  const steps = [
-    { key: STEPS.GENERATE, label: 'Generate Personalized Artworks' },
-    { key: STEPS.DOWNLOAD, label: 'Download Artworks' },
-  ];
+  return (
+    <div className="w-full h-64">
+      <Carousel images={images} singleImage imageClassName="h-64" defaultIndex={defaultIndex} alt="Reference artwork" />
+    </div>
+  );
+}
 
+function Chevron({ showChecklist, setShowChecklist }) {
   return (
     <div className="flex items-center gap-2 mb-4">
-      {steps.map((s, idx) => (
-        <React.Fragment key={s.key}>
-          {idx > 0 && <span className="text-gray-400">→</span>}
-          <button
-            type="button"
-            onClick={() => s.key === STEPS.DOWNLOAD && artworks.length > 0 ? setStep(s.key) : setStep(STEPS.GENERATE)}
-            className={`text-sm px-3 py-1 rounded border ${
-              step === s.key
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600'
-            }`}
-          >
-            {s.label}
-          </button>
-        </React.Fragment>
-      ))}
+      <hr className="flex-1 border-gray-200 dark:border-gray-700" />
+      <button
+        onClick={() => setShowChecklist((prev) => !prev)}
+        className="rounded-full p-3 pb-2 transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+        title={showChecklist ? 'Hide' : 'Show'}
+      >
+        <Icon
+          name="expand_more"
+          className="text-lg leading-none text-gray-500 dark:text-gray-400 transition-transform duration-200"
+          style={{ display: 'block', transform: showChecklist ? 'rotate(180deg) translateY(4px)' : 'translateY(-2px)' }}
+        />
+      </button>
+      <hr className="flex-1 border-gray-200 dark:border-gray-700" />
     </div>
   );
 }
 
-function Checklist({ productImages = [] }) {
-  const { currentArtworkIndex, artworks } = usePersonalizeOrderItem();
-
-  const items = useMemo(() => {
-    const list = productImages.map((_, i) => ({ label: `Artwork ${i + 1}`, index: i }));
-    return list;
-  }, [productImages]);
-
-  return (
-    <div className="w-56 shrink-0 pr-4 border-r border-gray-200 dark:border-gray-700">
-      <h4 className="font-semibold mb-2 text-sm">Setup Checklist</h4>
-      <ul className="space-y-2 text-sm">
-        <li className="font-medium">Generate Personalized Artworks</li>
-        {items.map((it) => (
-          <li
-            key={it.index}
-            className={`pl-4 ${currentArtworkIndex === it.index ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}
-          >
-            {it.label}
-          </li>
-        ))}
-        <li className="text-gray-500 dark:text-gray-400">Download Artworks</li>
-      </ul>
-    </div>
-  );
-}
-
-function GenerateStep({ productImages = [] }) {
+function GenerateStep() {
   const {
     order,
     orderItem,
+    usedArtworks,
+    ordersApi,
     requestText,
     setRequestText,
-    imageModel,
-    setImageModel,
+    imageModels,
+    selectedImageModel,
+    setSelectedImageModel,
     generating,
     artworks,
     currentArtworkIndex,
     setCurrentArtworkIndex,
     setStep,
     addArtwork,
+    STEPS,
   } = usePersonalizeOrderItem();
 
   const currentArtwork = artworks[currentArtworkIndex];
-  const productId = orderItem?.productId;
+  const currentUsedArtwork = usedArtworks[currentArtworkIndex] || null;
+  const currentPlacements = currentUsedArtwork?.placements || [];
   const shopId = order?.order?.printifyShopId;
   const printifyOrderId = order?.order?.orderId;
 
-  const imageModels = [
-    { id: 'dall-e-3', name: 'DALL·E 3', cost: 4000 },
-    { id: 'sd-xl', name: 'Stable Diffusion XL', cost: 2000 },
-  ];
+  const modelOptions = useMemo(() => imageModels.map((m) => ({ value: m.id, label: m.name })), [imageModels]);
+  const [tokenCost, setTokenCost] = useState(null);
+
+  useEffect(() => {
+    if (!selectedImageModel?.id || !currentUsedArtwork?.artworkItemId || !order?.order?.id || !orderItem?.id) {
+      setTokenCost(null);
+      return;
+    }
+    let cancelled = false;
+    ordersApi.estimateOrderItemToken(order.order.id, orderItem.id, currentUsedArtwork.artworkItemId, selectedImageModel.id)
+      .then((res) => {
+        if (cancelled) return;
+        const cost = res.data?.data;
+        setTokenCost(typeof cost === 'number' ? Math.round(cost) : null);
+      })
+      .catch(() => { if (!cancelled) setTokenCost(null); });
+    return () => { cancelled = true; };
+  }, [selectedImageModel, currentUsedArtwork, order, orderItem, ordersApi]);
 
   const handleGenerate = () => {
-    // TODO: call generate API
     setGenerating(true);
     setTimeout(() => {
       setGenerating(false);
-      addArtwork({ id: `artwork-${Date.now()}`, url: '', status: 'done' });
+      addArtwork({ id: `artwork-${Date.now()}`, url: currentUsedArtwork?.sourceImageUrl, status: 'done' });
     }, 500);
   };
 
   const handleNext = () => {
-    if (currentArtworkIndex < productImages.length - 1) {
+    if (currentArtworkIndex < (usedArtworks.length || 1) - 1) {
       setCurrentArtworkIndex(currentArtworkIndex + 1);
+      setStep(STEPS.GENERATE);
     } else {
-      setStep(1);
+      setStep(STEPS.DOWNLOAD);
     }
   };
 
+  const currentImages = useMemo(() => {
+    const generated = currentArtwork?.url;
+    const source = currentUsedArtwork?.sourceImageUrl;
+    return [generated, source].filter(Boolean);
+  }, [currentArtwork, currentUsedArtwork]);
+
   return (
-    <div className="space-y-4 flex-1">
+    <div className="space-y-4">
       {shopId && printifyOrderId && (
         <a
           href={`https://printify.com/app/store/${shopId}/order/${printifyOrderId}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
+          className="text-blue-600 dark:text-blue-400 hover:underline text-sm block"
         >
           View Order on Printify
         </a>
       )}
 
-      <div className="w-full h-64 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center overflow-hidden">
-        {productImages.length > 0 ? (
-          <img src={productImages[0]} alt="Product" className="h-full w-full object-contain" />
-        ) : (
-          <span className="text-gray-500 dark:text-gray-400 text-sm">No product images</span>
-        )}
-      </div>
+      <ArtworkCarousel images={currentImages} />
 
-      <div className="flex items-center gap-4">
-        <label className="text-sm font-medium whitespace-nowrap">Image Model</label>
-        <select
-          value={imageModel}
-          onChange={(e) => setImageModel(e.target.value)}
-          className="border rounded px-2 py-1 text-sm dark:bg-gray-800 dark:border-gray-600"
-        >
-          <option value="">Select model</option>
-          {imageModels.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name} ({m.cost} tokens)
-            </option>
-          ))}
-        </select>
-      </div>
+      <Select
+        label="AI Image Model"
+        name="personalizeImageModel"
+        value={selectedImageModel?.id || ''}
+        onChange={(value) => {
+          const model = imageModels.find((m) => m.id === value);
+          setSelectedImageModel(model || null);
+        }}
+        options={modelOptions}
+        fitContent
+        note={tokenCost != null ? `Estimated token cost: ${tokenCost.toLocaleString()}` : selectedImageModel ? 'Token cost not available' : ''}
+      />
 
       <div>
         <label className="text-sm font-medium block mb-1">Copy/Paste Customer Personalization Request</label>
@@ -153,24 +152,26 @@ function GenerateStep({ productImages = [] }) {
         />
       </div>
 
-      {generating ? (
+      {generating && (
         <div className="w-full h-48 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center">
-          <Icon name="progress_activity" spin className="w-8 h-8 text-gray-500" />
+          <Spinner className="text-4xl" />
         </div>
-      ) : currentArtwork ? (
-        <div className="w-full h-64 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center">
+      )}
+
+      {currentArtwork && !generating && (
+        <div className="w-full h-48 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center">
           <img src={currentArtwork.url || ''} alt="Generated artwork" className="h-full w-full object-contain" />
         </div>
-      ) : null}
+      )}
 
       <div className="flex justify-end gap-2">
         {!currentArtwork ? (
-          <ButtonOutline onClick={handleGenerate} disabled={!imageModel || !requestText}>
+          <ButtonOutline onClick={handleGenerate} disabled={!selectedImageModel || !requestText || !currentPlacement}>
             Generate Artwork
           </ButtonOutline>
         ) : (
           <ButtonOutline onClick={handleNext}>
-            {currentArtworkIndex < productImages.length - 1 ? 'Next' : 'Finish'}
+            {currentArtworkIndex < (placements.length || 1) - 1 ? 'Next' : 'Finish'}
           </ButtonOutline>
         )}
       </div>
@@ -180,18 +181,16 @@ function GenerateStep({ productImages = [] }) {
 
 function DownloadStep() {
   const { order, artworks, onClose } = usePersonalizeOrderItem();
-  const shopId = order?.order?.printifyShopId;
-  const orderId = order?.order?.orderId;
 
   return (
-    <div className="space-y-4 flex-1">
+    <div className="space-y-4">
       <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {artworks.map((a) => (
-          <div key={a.id} className="h-40 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center">
+        {artworks.map((a, i) => (
+          <div key={i} className="h-40 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center">
             {a.url ? (
               <img src={a.url} alt="Artwork" className="h-full w-full object-contain" />
             ) : (
-              <span className="text-xs text-gray-500">placeholder</span>
+              <span className="text-xs text-gray-500">Artwork {i + 1}</span>
             )}
           </div>
         ))}
@@ -206,30 +205,62 @@ function DownloadStep() {
   );
 }
 
-function PersonalizeOrderItemInner({ productImages }) {
-  const { step, STEPS, onClose } = usePersonalizeOrderItem();
+function PersonalizeOrderItemInner() {
+  const { step, STEPS, currentArtworkIndex, setCurrentArtworkIndex, setStep, usedArtworks, loadingPlacements } = usePersonalizeOrderItem();
+  const [showChecklist, setShowChecklist] = useState(true);
+
+  const currentIndex = step === STEPS.GENERATE ? currentArtworkIndex : usedArtworks.length;
+  const totalArtworks = usedArtworks.length || 1;
+  const stepLabels = usedArtworks.map((a, i) => a.artworkItemTitle || a.artworkPrompt || a.artworkImageModel || `Artwork ${i + 1}`);
+  const steps = [...stepLabels, 'Download'];
+
+  const handleStepClick = (index) => {
+    if (index < usedArtworks.length) {
+      setCurrentArtworkIndex(index);
+      setStep(STEPS.GENERATE);
+    } else {
+      setStep(STEPS.DOWNLOAD);
+    }
+  };
 
   return (
-    <Modal title="Personalize Order Item" onClose={onClose} className="max-w-5xl">
-      <div className="flex min-h-[400px]">
-        <Checklist productImages={productImages} />
-        <div className="flex-1 pl-4">
-          <StepHeader />
-          {step === STEPS.GENERATE ? <GenerateStep productImages={productImages} /> : <DownloadStep />}
+    <Modal title="Personalize Order Item" onClose={() => {}} className="min-w-[40em] max-w-full" top>
+      {loadingPlacements ? (
+        <div className="flex items-center justify-center py-12">
+          <Spinner className="text-4xl" />
         </div>
-      </div>
+      ) : (
+        <>
+          <Steps
+            steps={steps}
+            currentIndex={currentIndex}
+            onStepClick={handleStepClick}
+          />
+          <Chevron showChecklist={showChecklist} setShowChecklist={setShowChecklist} />
+          <div className={showChecklist ? 'flex gap-4 items-stretch overflow-x-hidden' : ''}>
+            {showChecklist && (
+              <div className="min-w-[280px] w-fit max-w-[45%] shrink-0 overflow-y-auto overflow-x-hidden max-h-[60vh]">
+                <PersonalizeSetupList />
+              </div>
+            )}
+            <div className={showChecklist ? 'flex-1 min-w-[500px] flex flex-col' : ''}>
+              {step === STEPS.GENERATE ? <GenerateStep /> : <DownloadStep />}
+            </div>
+          </div>
+        </>
+      )}
     </Modal>
   );
 }
 
-export default function PersonalizeOrderItem({ order, orderItem, productImages = [], onClose }) {
+export default function PersonalizeOrderItem({ order, orderItem, onClose }) {
   return (
     <PersonalizeOrderItemProvider
       order={order}
       orderItem={orderItem}
       onClose={onClose}
     >
-      <PersonalizeOrderItemInner productImages={productImages} />
+      <PersonalizeOrderItemInner />
     </PersonalizeOrderItemProvider>
   );
 }

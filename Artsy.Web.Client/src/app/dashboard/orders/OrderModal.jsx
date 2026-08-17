@@ -159,7 +159,6 @@ export default function OrderModal({ order, onClose }) {
         <PersonalizeOrderItem
           order={order}
           orderItem={personalizingItem}
-          productImages={imagesByProduct[personalizingItem.id] || []}
           onClose={() => setPersonalizingItem(null)}
         />
       )}
