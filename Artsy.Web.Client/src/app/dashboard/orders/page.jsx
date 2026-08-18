@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSession } from '@/context/session';
-import { Orders } from '@/api/orders';
+import { Orders } from '@/api/user/orders';
 import Button from '@/components/ui/button';
 import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';

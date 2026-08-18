@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSession } from '@/context/session';
-import { Orders } from '@/api/orders';
+import { Orders } from '@/api/user/orders';
 import Modal from '@/components/ui/modal';
 import { List, Item } from '@/components/ui/list';
 import CarouselElements from '@/components/ui/carousel-elements';
@@ -32,10 +32,18 @@ const parseJson = (s) => {
   }
 };
 
+function cacheBustUrl(url) {
+  if (!url) return url;
+  const u = new URL(url, window.location.href);
+  u.searchParams.set('r', Math.floor(Math.random() * 100000).toString());
+  return u.toString();
+}
+
 export default function OrderModal({ order, onClose }) {
   const session = useSession();
-  const { getOrderImages } = Orders(session);
+  const { getOrderImages, getOrderArtworks } = Orders(session);
   const [imagesByProduct, setImagesByProduct] = useState({});
+  const [hasArtworksByItem, setHasArtworksByItem] = useState({});
   const [loadingImages, setLoadingImages] = useState(true);
   const [personalizingItem, setPersonalizingItem] = useState(null);
 
@@ -54,6 +62,22 @@ export default function OrderModal({ order, onClose }) {
       }
     };
     fetchImages();
+    return () => { cancelled = true; };
+  }, [order.order.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchArtworks = async () => {
+      try {
+        const resp = await getOrderArtworks(order.order.id);
+        if (resp.data?.success && !cancelled) {
+          setHasArtworksByItem(resp.data.hasArtworks || {});
+        }
+      } catch (error) {
+        // fail silently
+      }
+    };
+    fetchArtworks();
     return () => { cancelled = true; };
   }, [order.order.id]);
 
@@ -150,6 +174,7 @@ export default function OrderModal({ order, onClose }) {
               order={order}
               item={item}
               imageUrls={imagesByProduct[item.id] || []}
+              hasArtworks={!!hasArtworksByItem[item.id]}
               onPersonalize={() => setPersonalizingItem(item)}
             />
           ))}
@@ -159,23 +184,31 @@ export default function OrderModal({ order, onClose }) {
         <PersonalizeOrderItem
           order={order}
           orderItem={personalizingItem}
-          onClose={() => setPersonalizingItem(null)}
+          onClose={async () => {
+            try {
+              const resp = await getOrderImages(order.order.id);
+              if (resp.data?.success) {
+                setImagesByProduct(resp.data.images || {});
+              }
+            } catch (error) {
+              // fail silently
+            }
+            setPersonalizingItem(null);
+          }}
         />
       )}
     </Modal>
   );
 }
 
-function OrderItemRow({ order, item, imageUrls, onPersonalize }) {
+function OrderItemRow({ order, item, imageUrls, hasArtworks, onPersonalize }) {
   const meta = parseJson(item.metadata);
-  const statusLabel = item.status?.toLowerCase() === 'on-hold'
-    ? 'On Hold (Required Personalization)'
-    : capitalize(item.status);
+  const statusLabel = capitalize(item.status);
   const imageElements = imageUrls.length > 0
     ? imageUrls.map((url, i) => (
         <img
           key={i}
-          src={url}
+          src={cacheBustUrl(url)}
           alt={meta.title || 'Product image'}
           className="w-[150px] h-[150px] object-cover rounded"
           width="150"
@@ -194,7 +227,7 @@ function OrderItemRow({ order, item, imageUrls, onPersonalize }) {
             No image
           </div>
         )}
-        {item.status?.toLowerCase() === 'on-hold' && (
+        {(item.status?.toLowerCase() === 'on-hold' || hasArtworks) && (
           <ButtonOutline onClick={onPersonalize} size="small" className="w-full mt-2">
             Personalize
           </ButtonOutline>
@@ -237,6 +270,12 @@ function OrderItemRow({ order, item, imageUrls, onPersonalize }) {
           <span className="text-gray-500 dark:text-gray-400">Status</span>
           <p className="font-medium">{statusLabel}</p>
         </div>
+        {(hasArtworks || item.status?.toLowerCase() === 'on-hold') && (
+          <div>
+            <span className="text-gray-500 dark:text-gray-400">Personalization</span>
+            <p className="font-medium">Yes</p>
+          </div>
+        )}
         <div>
           <span className="text-gray-500 dark:text-gray-400">Sent to Production</span>
           <p className="font-medium">{formatDate(item.dateSentToProduction)}</p>

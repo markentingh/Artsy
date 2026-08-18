@@ -23,6 +23,7 @@ SELECT 'CREATE DATABASE artsy' WHERE NOT EXISTS (SELECT FROM pg_database WHERE d
 \i Tables/Orders/HangfireOrders.sql
 \i Tables/Orders/Orders.sql
 \i Tables/Orders/OrderItems.sql
+\i Tables/Orders/OrderItemArtworks.sql
 \i Tables/Orders/OrderShipments.sql
 \i Tables/Printify/PrintifyBlueprintPrintProviders.sql
 \i Tables/Printify/PrintifyBlueprintShipping.sql
@@ -44,6 +45,7 @@ SELECT 'CREATE DATABASE artsy' WHERE NOT EXISTS (SELECT FROM pg_database WHERE d
 \i Tables/Projects/ProjectIdeas.sql
 \i Tables/Projects/ProjectIdeaVariations.sql
 \i Tables/Projects/ProjectItems.sql
+\i Tables/Orders/OrderItemAnswers.sql
 \i Tables/Projects/ProjectCollectionAnswers.sql
 \i Tables/Projects/ProjectCollectionArtwork.sql
 \i Tables/Projects/ProjectCollectionChatHistory.sql

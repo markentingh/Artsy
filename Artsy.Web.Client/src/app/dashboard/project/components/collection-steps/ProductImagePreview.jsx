@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { useCollection } from '@/context/collection';
 import { useDashboard } from '@/context/dashboard';
 import TextArea from '@/components/forms/textarea';
@@ -108,7 +108,13 @@ export default function ProductImagePreview() {
     doGenerateProductImage(selectedProductCombos[currentProductComboIndex], productImageChanges);
   }, [productImageChanges, selectedProductCombos, currentProductComboIndex, doGenerateProductImage, setShowProductImageChanges]);
 
-  const imageUrl = currentProductImage?.imageUrl?.replace('?thumb=true', '') || null;
+  const imageUrl = useMemo(() => {
+    if (!currentProductImage?.imageUrl) return null;
+    const u = new URL(currentProductImage.imageUrl, window.location.href);
+    u.searchParams.delete('thumb');
+    u.searchParams.set('r', Math.floor(Math.random() * 100000).toString());
+    return u.toString();
+  }, [currentProductImage?.imageUrl]);
 
   return (
     <div className="flex flex-col h-full">

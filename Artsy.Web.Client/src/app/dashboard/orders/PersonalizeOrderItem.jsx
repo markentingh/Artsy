@@ -1,13 +1,21 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Modal from '@/components/ui/modal';
 import Icon from '@/components/ui/icon';
 import Spinner from '@/components/ui/spinner';
+import Tooltip from '@/components/ui/tooltip';
 import ButtonOutline from '@/components/ui/button-outline';
 import Steps from '@/components/ui/steps';
 import Select from '@/components/forms/select';
 import Carousel from '@/components/ui/carousel';
+import TextArea from '@/components/forms/textarea';
 import { PersonalizeOrderItemProvider, usePersonalizeOrderItem } from '@/context/personalizeOrderItem';
 import PersonalizeSetupList from './PersonalizeSetupList';
+
+function cacheBustUrl(url) {
+  if (!url) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}r=${Math.floor(Math.random() * 100000)}`;
+}
 
 function ArtworkCarousel({ images, defaultIndex = 0 }) {
   if (!images.length) {
@@ -45,31 +53,103 @@ function Chevron({ showChecklist, setShowChecklist }) {
   );
 }
 
+function QuestionsStep() {
+  const {
+    projectQuestions,
+    answers,
+    setAnswers,
+    saveAnswers,
+    loadingQuestions,
+    savingAnswers,
+    setStep,
+    STEPS,
+    onClose,
+  } = usePersonalizeOrderItem();
+
+  const handleChange = useCallback((questionId, value) => {
+    setAnswers((prev) => ({ ...prev, [questionId]: value }));
+  }, [setAnswers]);
+
+  const handleNext = useCallback(async () => {
+    const saved = await saveAnswers();
+    if (saved) setStep(STEPS.GENERATE);
+  }, [saveAnswers, setStep, STEPS]);
+
+  if (loadingQuestions) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Spinner className="text-4xl" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full space-y-4">
+      <div className="max-h-[50vh] overflow-y-auto">
+        {projectQuestions.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">No project questions.</p>
+        ) : (
+          <div className="space-y-4">
+            {projectQuestions.map((question) => (
+              <TextArea
+                key={question.id}
+                name={`answer-${question.id}`}
+                label={question.question}
+                value={answers[question.id] || ''}
+                onChange={(e) => handleChange(question.id, e.target.value)}
+                placeholder="Enter an answer"
+                rows={3}
+                maxLength={255}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="buttons flex justify-end gap-2 mt-auto">
+        <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+        <ButtonOutline onClick={handleNext} disabled={savingAnswers}>
+          {savingAnswers ? 'Saving...' : 'Next'}
+        </ButtonOutline>
+      </div>
+    </div>
+  );
+}
+
 function GenerateStep() {
   const {
     order,
     orderItem,
     usedArtworks,
-    ordersApi,
+    personalizeApi,
     requestText,
     setRequestText,
     imageModels,
     selectedImageModel,
     setSelectedImageModel,
     generating,
+    setGenerating,
     artworks,
     currentArtworkIndex,
     setCurrentArtworkIndex,
     setStep,
-    addArtwork,
+    setArtworks,
     STEPS,
+    onClose,
+    goBack,
   } = usePersonalizeOrderItem();
 
   const currentArtwork = artworks[currentArtworkIndex];
   const currentUsedArtwork = usedArtworks[currentArtworkIndex] || null;
-  const currentPlacements = currentUsedArtwork?.placements || [];
   const shopId = order?.order?.printifyShopId;
   const printifyOrderId = order?.order?.orderId;
+
+  const [view, setView] = useState(currentArtwork ? 'preview' : 'form');
+  const [requestedChanges, setRequestedChanges] = useState('');
+
+  useEffect(() => {
+    setView(currentArtwork ? 'preview' : 'form');
+    setRequestedChanges('');
+  }, [currentArtworkIndex, currentArtwork]);
 
   const modelOptions = useMemo(() => imageModels.map((m) => ({ value: m.id, label: m.name })), [imageModels]);
   const [tokenCost, setTokenCost] = useState(null);
@@ -80,7 +160,7 @@ function GenerateStep() {
       return;
     }
     let cancelled = false;
-    ordersApi.estimateOrderItemToken(order.order.id, orderItem.id, currentUsedArtwork.artworkItemId, selectedImageModel.id)
+    personalizeApi.estimateOrderItemToken(order.order.id, orderItem.id, currentUsedArtwork.artworkItemId, selectedImageModel.id)
       .then((res) => {
         if (cancelled) return;
         const cost = res.data?.data;
@@ -88,24 +168,73 @@ function GenerateStep() {
       })
       .catch(() => { if (!cancelled) setTokenCost(null); });
     return () => { cancelled = true; };
-  }, [selectedImageModel, currentUsedArtwork, order, orderItem, ordersApi]);
+  }, [selectedImageModel, currentUsedArtwork, order, orderItem, personalizeApi]);
 
-  const handleGenerate = () => {
+  const handleGenerate = async (changes = '') => {
+    if (!selectedImageModel || !currentUsedArtwork || (!requestText.trim() && !changes.trim()) || !order?.order?.id || !orderItem?.id) return;
     setGenerating(true);
-    setTimeout(() => {
+    try {
+      const generationText = [requestText, changes].filter(Boolean).join('\n');
+      const res = await personalizeApi.generateOrderItemArtwork(order.order.id, orderItem.id, currentUsedArtwork.artworkItemId, selectedImageModel.id, generationText);
+      if (res.data?.success) {
+        const artwork = res.data.data.artwork;
+        setArtworks((prev) => {
+          const next = [...prev];
+          next[currentArtworkIndex] = {
+            id: artwork.id,
+            url: artwork.url,
+            prompt: artwork.prompt,
+            width: artwork.width,
+            height: artwork.height,
+            status: 'done',
+          };
+          return next;
+        });
+        setView('preview');
+      }
+    } finally {
       setGenerating(false);
-      addArtwork({ id: `artwork-${Date.now()}`, url: currentUsedArtwork?.sourceImageUrl, status: 'done' });
-    }, 500);
+    }
   };
 
-  const handleNext = () => {
+  const handleTryAgain = useCallback(() => {
+    setArtworks((prev) => {
+      const next = [...prev];
+      next[currentArtworkIndex] = undefined;
+      return next;
+    });
+    setView('form');
+  }, [currentArtworkIndex, setArtworks]);
+
+  const handleMakeChanges = useCallback(() => {
+    setView('changes');
+  }, []);
+
+  const handleSubmitChanges = useCallback(() => {
+    if (!requestedChanges.trim()) return;
+    handleGenerate(requestedChanges);
+  }, [requestedChanges, handleGenerate]);
+
+  const handleAccept = useCallback(async () => {
+    if (currentArtwork?.id && order?.order?.id && orderItem?.id) {
+      try {
+        const res = await personalizeApi.acceptOrderItemArtwork(order.order.id, orderItem.id, currentArtwork.id);
+        if (!res.data?.success) return;
+        setArtworks((prev) => {
+          const next = [...prev];
+          next[currentArtworkIndex] = { ...next[currentArtworkIndex], status: 'accepted' };
+          return next;
+        });
+      } catch {
+        return;
+      }
+    }
     if (currentArtworkIndex < (usedArtworks.length || 1) - 1) {
       setCurrentArtworkIndex(currentArtworkIndex + 1);
-      setStep(STEPS.GENERATE);
     } else {
       setStep(STEPS.DOWNLOAD);
     }
-  };
+  }, [currentArtwork, currentArtworkIndex, order, orderItem, personalizeApi, setArtworks, usedArtworks.length, setCurrentArtworkIndex, setStep, STEPS]);
 
   const currentImages = useMemo(() => {
     const generated = currentArtwork?.url;
@@ -113,66 +242,116 @@ function GenerateStep() {
     return [generated, source].filter(Boolean);
   }, [currentArtwork, currentUsedArtwork]);
 
+  const title = currentUsedArtwork
+    ? `Artwork ${currentArtworkIndex + 1} of ${usedArtworks.length}: ${currentUsedArtwork.artworkItemTitle || 'Untitled'}`
+    : 'Generate Personalized Artwork';
+
   return (
-    <div className="space-y-4">
-      {shopId && printifyOrderId && (
-        <a
-          href={`https://printify.com/app/store/${shopId}/order/${printifyOrderId}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-600 dark:text-blue-400 hover:underline text-sm block"
-        >
-          View Order on Printify
-        </a>
+    <div className="flex flex-col h-full">
+      <h3 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
+        {title}
+      </h3>
+
+      {view === 'form' && !generating && (
+        <div className="space-y-4 flex-1">
+          {shopId && printifyOrderId && (
+            <a
+              href={`https://printify.com/app/store/${shopId}/order/${printifyOrderId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 dark:text-blue-400 hover:underline text-sm block"
+            >
+              View Order on Printify
+            </a>
+          )}
+
+          <ArtworkCarousel images={currentImages} />
+
+          <Select
+            label="AI Image Model"
+            name="personalizeImageModel"
+            value={selectedImageModel?.id || ''}
+            onChange={(value) => {
+              const model = imageModels.find((m) => m.id === value);
+              setSelectedImageModel(model || null);
+            }}
+            options={modelOptions}
+            fitContent
+            note={tokenCost != null ? `Estimated token cost: ${tokenCost.toLocaleString()}` : selectedImageModel ? 'Token cost not available' : ''}
+          />
+
+          <TextArea
+            label="Copy/Paste Customer Personalization Request"
+            name="requestText"
+            value={requestText}
+            onChange={(e) => setRequestText(e.target.value)}
+            rows={4}
+            placeholder="Enter the customer's request..."
+          />
+        </div>
       )}
 
-      <ArtworkCarousel images={currentImages} />
+      {(view === 'preview' || view === 'changes') && !generating && (
+        <div className="space-y-4 flex-1">
+          {view === 'preview' && (
+            <div className="w-[512px] h-[512px] max-w-full flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden mx-auto">
+              {currentArtwork ? (
+                <img src={cacheBustUrl(currentArtwork.url)} alt="Generated artwork" className="w-full h-full object-contain cursor-pointer" />
+              ) : (
+                <span className="text-sm text-gray-500 dark:text-gray-400">No preview generated yet.</span>
+              )}
+            </div>
+          )}
 
-      <Select
-        label="AI Image Model"
-        name="personalizeImageModel"
-        value={selectedImageModel?.id || ''}
-        onChange={(value) => {
-          const model = imageModels.find((m) => m.id === value);
-          setSelectedImageModel(model || null);
-        }}
-        options={modelOptions}
-        fitContent
-        note={tokenCost != null ? `Estimated token cost: ${tokenCost.toLocaleString()}` : selectedImageModel ? 'Token cost not available' : ''}
-      />
-
-      <div>
-        <label className="text-sm font-medium block mb-1">Copy/Paste Customer Personalization Request</label>
-        <textarea
-          value={requestText}
-          onChange={(e) => setRequestText(e.target.value)}
-          rows={4}
-          className="w-full border rounded p-2 text-sm dark:bg-gray-800 dark:border-gray-600"
-          placeholder="Enter the customer's request..."
-        />
-      </div>
+          {view === 'changes' && (
+            <TextArea
+              name="requestedChanges"
+              label="Requested Changes"
+              value={requestedChanges}
+              onChange={(e) => setRequestedChanges(e.target.value)}
+              placeholder="Describe the changes you want..."
+              rows={4}
+            />
+          )}
+        </div>
+      )}
 
       {generating && (
-        <div className="w-full h-48 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center">
+        <div className="w-full h-64 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center flex-1">
           <Spinner className="text-4xl" />
         </div>
       )}
 
-      {currentArtwork && !generating && (
-        <div className="w-full h-48 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center">
-          <img src={currentArtwork.url || ''} alt="Generated artwork" className="h-full w-full object-contain" />
-        </div>
-      )}
+      <div className="buttons flex justify-end gap-2 items-center pt-4 mt-auto">
+        {view === 'form' && !generating && (
+          <>
+            <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
+            <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+            <ButtonOutline onClick={() => handleGenerate('')} disabled={!selectedImageModel || !requestText || !currentUsedArtwork}>
+              Generate Artwork
+            </ButtonOutline>
+          </>
+        )}
 
-      <div className="flex justify-end gap-2">
-        {!currentArtwork ? (
-          <ButtonOutline onClick={handleGenerate} disabled={!selectedImageModel || !requestText || !currentPlacement}>
-            Generate Artwork
-          </ButtonOutline>
-        ) : (
-          <ButtonOutline onClick={handleNext}>
-            {currentArtworkIndex < (placements.length || 1) - 1 ? 'Next' : 'Finish'}
-          </ButtonOutline>
+        {view === 'preview' && !generating && currentArtwork && (
+          <>
+            <Tooltip text="Either make changes to the generated artwork using a prompt to edit the artwork, accept the currently generated artwork, or try again by changing the original prompt text." className="pr-8" />
+            <ButtonOutline color="gray" onClick={handleMakeChanges}>Make Changes</ButtonOutline>
+            <ButtonOutline onClick={handleAccept}>Accept</ButtonOutline>
+            <ButtonOutline color="red" onClick={handleTryAgain}>Try Again</ButtonOutline>
+            <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
+            <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+          </>
+        )}
+
+        {view === 'changes' && !generating && (
+          <>
+            <ButtonOutline color="gray" onClick={() => setView('preview')}>Back</ButtonOutline>
+            <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+            <ButtonOutline onClick={handleSubmitChanges} disabled={!requestedChanges.trim()}>
+              Regenerate
+            </ButtonOutline>
+          </>
         )}
       </div>
     </div>
@@ -180,62 +359,86 @@ function GenerateStep() {
 }
 
 function DownloadStep() {
-  const { order, artworks, onClose } = usePersonalizeOrderItem();
+  const { order, orderItem, artworks, onClose, goBack, personalizeApi } = usePersonalizeOrderItem();
+
+  const downloadUrl = order?.order?.id && orderItem?.id
+    ? personalizeApi.downloadOrderItemArtworks(order.order.id, orderItem.id)
+    : null;
+  const printifyUrl = order?.order?.printifyShopId && order?.order?.orderId
+    ? `https://printify.com/app/store/${order.order.printifyShopId}/order/${order.order.orderId}`
+    : null;
+  const imageUrls = artworks.filter(Boolean).map((a) => cacheBustUrl(a.url));
 
   return (
-    <div className="space-y-4">
-      <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {artworks.map((a, i) => (
-          <div key={i} className="h-40 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center">
-            {a.url ? (
-              <img src={a.url} alt="Artwork" className="h-full w-full object-contain" />
-            ) : (
-              <span className="text-xs text-gray-500">Artwork {i + 1}</span>
-            )}
+    <div className="flex flex-col h-full space-y-4">
+      <div className="w-full flex items-center justify-center">
+        {imageUrls.length > 0 ? (
+          <div className="w-full">
+            <Carousel images={imageUrls} alt="Artwork" />
           </div>
-        ))}
+        ) : (
+          <span className="text-sm text-gray-500 dark:text-gray-400">No artworks available.</span>
+        )}
       </div>
-      <p className="text-sm text-gray-600 dark:text-gray-300">
-        Download the personalized artwork and apply it to your order item on Printify by clicking the Review button for the order item and uploading the artwork.
+      <p className="text-sm text-gray-600 dark:text-gray-300 max-w-[500px]">
+        <a href={downloadUrl} download className="text-blue-600 dark:text-blue-400 underline">Download</a>
+        {' the personalized artwork and apply it to your '}
+        {printifyUrl ? (
+          <a href={printifyUrl} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 underline">order item on Printify</a>
+        ) : (
+          'order item on Printify'
+        )}
+        {' by clicking the Review button for the order item and uploading the artwork.'}
       </p>
-      <div className="flex justify-end gap-2">
-        <ButtonOutline onClick={onClose}>Close</ButtonOutline>
+      <div className="buttons flex justify-end gap-2 mt-auto">
+        <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
+        <ButtonOutline color="gray" className="cancel" onClick={onClose}>Close</ButtonOutline>
       </div>
     </div>
   );
 }
 
 function PersonalizeOrderItemInner() {
-  const { step, STEPS, currentArtworkIndex, setCurrentArtworkIndex, setStep, usedArtworks, loadingPlacements } = usePersonalizeOrderItem();
+  const { step, STEPS, currentArtworkIndex, setCurrentArtworkIndex, usedArtworks, loadingPlacements, loadingQuestions, onClose } = usePersonalizeOrderItem();
   const [showChecklist, setShowChecklist] = useState(true);
 
-  const currentIndex = step === STEPS.GENERATE ? currentArtworkIndex : usedArtworks.length;
-  const totalArtworks = usedArtworks.length || 1;
+  const currentIndex = step === STEPS.QUESTIONS
+    ? 0
+    : step === STEPS.DOWNLOAD
+      ? usedArtworks.length + 1
+      : currentArtworkIndex + 1;
   const stepLabels = usedArtworks.map((a, i) => a.artworkItemTitle || a.artworkPrompt || a.artworkImageModel || `Artwork ${i + 1}`);
-  const steps = [...stepLabels, 'Download'];
+  const steps = ['Project Questions', ...stepLabels, 'Download'];
 
   const handleStepClick = (index) => {
-    if (index < usedArtworks.length) {
-      setCurrentArtworkIndex(index);
+    if (index === 0) {
+      setStep(STEPS.QUESTIONS);
+      setCurrentArtworkIndex(0);
+    } else if (index <= usedArtworks.length) {
       setStep(STEPS.GENERATE);
+      setCurrentArtworkIndex(index - 1);
     } else {
       setStep(STEPS.DOWNLOAD);
     }
   };
 
+  const showStepper = !loadingPlacements && !loadingQuestions;
+
   return (
-    <Modal title="Personalize Order Item" onClose={() => {}} className="min-w-[40em] max-w-full" top>
-      {loadingPlacements ? (
+    <Modal title="Personalize Order Item" onClose={onClose} className="min-w-[40em] max-w-full" top>
+      {loadingPlacements || loadingQuestions ? (
         <div className="flex items-center justify-center py-12">
           <Spinner className="text-4xl" />
         </div>
       ) : (
         <>
-          <Steps
-            steps={steps}
-            currentIndex={currentIndex}
-            onStepClick={handleStepClick}
-          />
+          {showStepper && (
+            <Steps
+              steps={steps}
+              currentIndex={currentIndex}
+              onStepClick={handleStepClick}
+            />
+          )}
           <Chevron showChecklist={showChecklist} setShowChecklist={setShowChecklist} />
           <div className={showChecklist ? 'flex gap-4 items-stretch overflow-x-hidden' : ''}>
             {showChecklist && (
@@ -244,7 +447,9 @@ function PersonalizeOrderItemInner() {
               </div>
             )}
             <div className={showChecklist ? 'flex-1 min-w-[500px] flex flex-col' : ''}>
-              {step === STEPS.GENERATE ? <GenerateStep /> : <DownloadStep />}
+              {step === STEPS.QUESTIONS && <QuestionsStep />}
+              {step === STEPS.GENERATE && <GenerateStep />}
+              {step === STEPS.DOWNLOAD && <DownloadStep />}
             </div>
           </div>
         </>

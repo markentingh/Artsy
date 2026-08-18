@@ -24,7 +24,7 @@ export default function ArtworkPreview() {
     if (!previewImageData || !currentArtwork || !collectionId) return null;
     if (hasOpacity) {
       const pngUrl = previewImageData;
-      const jpgWithBgUrl = api.getCollectionArtworkJpgWithBgUrl(collectionId, currentItem.id, currentArtwork.id, false, Date.now());
+      const jpgWithBgUrl = api.getCollectionArtworkJpgWithBgUrl(collectionId, currentItem.id, currentArtwork.id, false, Math.floor(Math.random() * 100000));
       return [pngUrl, jpgWithBgUrl];
     }
     return null;

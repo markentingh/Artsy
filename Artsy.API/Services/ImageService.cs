@@ -55,6 +55,13 @@ namespace Artsy.API.Services
         Task SaveCustomImageAsync(Guid appUserId, Guid imageId, string extension, byte[] imageData);
         Task<byte[]> GetCustomImageAsync(Guid appUserId, Guid imageId, string extension, bool thumb = false);
         Task DeleteCustomImageAsync(Guid appUserId, Guid imageId, string extension);
+
+        Task SaveOrderItemArtworkAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, byte[] imageData);
+        Task<byte[]> GetOrderItemArtworkImageAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId);
+        Task SaveOrderItemArtworkPngAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, byte[] imageData);
+        Task<byte[]> GetOrderItemArtworkPngAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId);
+        Task SaveOrderItemArtworkFullSizeAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, byte[] imageData);
+        Task<byte[]> GetOrderItemArtworkFullSizeAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId);
     }
 
     public class ImageService : IImageService
@@ -1076,6 +1083,91 @@ namespace Artsy.API.Services
             await DeleteFromFileSystemAsync(relativePath);
             await DeleteFromFileSystemAsync(thumbJpgRelativePath);
             await DeleteFromFileSystemAsync(thumbPngRelativePath);
+        }
+
+        public async Task SaveOrderItemArtworkAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, byte[] imageData)
+        {
+            var fileName = $"{artworkId}.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "orders", orderId.ToString(), artworkId.ToString(), fileName);
+            var thumbFileName = $"{artworkId}_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "orders", orderId.ToString(), artworkId.ToString(), thumbFileName);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+        }
+
+        public async Task<byte[]> GetOrderItemArtworkImageAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId)
+        {
+            var fileName = $"{artworkId}.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "orders", orderId.ToString(), artworkId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveOrderItemArtworkPngAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, byte[] imageData)
+        {
+            var fileName = $"{artworkId}.png";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "orders", orderId.ToString(), artworkId.ToString(), fileName);
+            var thumbFileName = $"{artworkId}_thumb.png";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "orders", orderId.ToString(), artworkId.ToString(), thumbFileName);
+            var thumbImageData = await GeneratePngThumbnailAsync(imageData);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+        }
+
+        public async Task<byte[]> GetOrderItemArtworkPngAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId)
+        {
+            var fileName = $"{artworkId}.png";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "orders", orderId.ToString(), artworkId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveOrderItemArtworkFullSizeAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, byte[] imageData)
+        {
+            var fileName = $"{artworkId}_fullsize.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "orders", orderId.ToString(), artworkId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+        }
+
+        public async Task<byte[]> GetOrderItemArtworkFullSizeAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId)
+        {
+            var fileName = $"{artworkId}_fullsize.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "orders", orderId.ToString(), artworkId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
         }
     }
 }

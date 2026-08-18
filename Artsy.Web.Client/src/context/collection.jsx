@@ -266,7 +266,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
       if (res.data.success) {
         const artwork = res.data.data;
-        const url = api.getCollectionArtworkImageUrl(colId, item.id, artwork.id, false, Date.now());
+        const url = api.getCollectionArtworkImageUrl(colId, item.id, artwork.id, false, Math.floor(Math.random() * 100000));
         setCurrentArtwork(artwork);
         setPreviewImageData(url);
         setShowChanges(false);
@@ -340,7 +340,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
       const existingArt = collectionArtwork.find(a => String(a.itemId) === String(item.id) && a.active);
       if (existingArt) {
-        setPreviewImageData(api.getCollectionArtworkImageUrl(collectionId, item.id, existingArt.id, false, Date.now()));
+        setPreviewImageData(api.getCollectionArtworkImageUrl(collectionId, item.id, existingArt.id, false, Math.floor(Math.random() * 100000)));
         setStep(STEPS.ARTWORK_PREVIEW);
       } else if (questions.length > 0) {
         setPreviewImageData(null);
@@ -547,7 +547,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
         if (res.data.success) {
           const artwork = res.data.data;
-          const url = api.getCollectionArtworkImageUrl(colId, gen.itemId, artwork.id, true, Date.now());
+          const url = api.getCollectionArtworkImageUrl(colId, gen.itemId, artwork.id, true, Math.floor(Math.random() * 100000));
           results.push({ itemId: gen.itemId, artworkId: artwork.id, url, width: gen.width, height: gen.height });
           setGeneratedArtworks([...results]);
           setCollectionArtwork(prev => prev.map(a =>

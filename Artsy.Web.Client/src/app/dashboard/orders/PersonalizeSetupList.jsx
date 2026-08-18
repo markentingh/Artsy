@@ -9,6 +9,9 @@ export default function PersonalizeSetupList() {
   const {
     STEPS,
     step,
+    maxStepIndex,
+    projectQuestions,
+    answers,
     artworks,
     usedArtworks,
     currentArtworkIndex,
@@ -17,8 +20,10 @@ export default function PersonalizeSetupList() {
   } = usePersonalizeOrderItem();
 
   const totalArtworks = usedArtworks.length || 1;
-  const generateComplete = artworks.length >= totalArtworks;
-  const downloadComplete = artworks.length > 0 && step === STEPS.DOWNLOAD;
+  const questionsComplete = projectQuestions.length > 0 && projectQuestions.every((q) => !!answers[q.id]?.trim());
+  const allAccepted = usedArtworks.length > 0 && usedArtworks.every((u, i) => u.accepted || artworks[i]?.status === 'accepted');
+  const generateComplete = allAccepted;
+  const downloadComplete = allAccepted;
 
   const isCurrent = (targetStep) => step === targetStep;
 
@@ -54,33 +59,33 @@ export default function PersonalizeSetupList() {
   const artworkContent = (
     <List inModal>
       {usedArtworks.map((artwork, idx) => {
-        const generated = idx < artworks.length;
+        const accepted = artwork.accepted || artworks[idx]?.status === 'accepted';
         const current = step === STEPS.GENERATE && currentArtworkIndex === idx;
         const title = artwork.artworkItemTitle || artwork.artworkPrompt || artwork.artworkImageModel || `Artwork ${idx + 1}`;
         return (
           <Item key={artwork.id || idx} className="justify-between text-sm" onClick={() => { setStep(STEPS.GENERATE); setCurrentArtworkIndex(idx); }}>
             <div className="flex items-center gap-2">
               <Icon
-                name={generated ? 'check_circle' : 'radio_button_unchecked'}
-                className={generated && current
+                name={accepted ? 'check_circle' : 'radio_button_unchecked'}
+                className={accepted && current
                   ? 'text-blue-500'
-                  : generated
+                  : accepted
                   ? 'text-green-500'
                   : current
                   ? 'text-blue-500'
                   : 'text-gray-400 dark:text-gray-500'}
               />
-              <span className={`whitespace-nowrap ${generated && current
+              <span className={`whitespace-nowrap ${accepted && current
                 ? 'text-blue-600 dark:text-blue-400'
-                : generated
+                : accepted
                 ? 'text-gray-500 dark:text-gray-400'
                 : current
                 ? 'text-blue-600 dark:text-blue-400'
                 : 'text-gray-700 dark:text-gray-300'}`}>
                 {title}
-              </span>
+                </span>
             </div>
-            {((generated && !current) || (idx === artworks.length && !current)) && (
+            {((accepted && !current) || (idx === artworks.length && !current)) && (
               <ButtonOutline size="small" color="blue" onClick={() => { setStep(STEPS.GENERATE); setCurrentArtworkIndex(idx); }}>
                 Review
               </ButtonOutline>
@@ -92,6 +97,15 @@ export default function PersonalizeSetupList() {
   );
 
   const accordionItems = [
+    {
+      title: renderTitle('Project Questions', questionsComplete, `${projectQuestions.length}`, isCurrent(STEPS.QUESTIONS)),
+      content: null,
+      action: !isCurrent(STEPS.QUESTIONS) ? (
+        <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.QUESTIONS)}>
+          Review
+        </ButtonOutline>
+      ) : null,
+    },
     {
       title: renderTitle('Generate Personalized Artworks', generateComplete, `${artworks.length}/${totalArtworks}`, isCurrent(STEPS.GENERATE)),
       content: artworkContent,
