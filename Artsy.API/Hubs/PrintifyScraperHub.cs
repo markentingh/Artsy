@@ -9,13 +9,16 @@ namespace Artsy.API.Hubs
     {
         readonly IPrintifyScraperService _scraperService;
         readonly IPrintifyBlueprintRepository _blueprintRepo;
+        readonly IPrintifyBlueprintVariantRepository _variantRepo;
 
         public PrintifyScraperHub(
             IPrintifyScraperService scraperService,
-            IPrintifyBlueprintRepository blueprintRepo)
+            IPrintifyBlueprintRepository blueprintRepo,
+            IPrintifyBlueprintVariantRepository variantRepo)
         {
             _scraperService = scraperService;
             _blueprintRepo = blueprintRepo;
+            _variantRepo = variantRepo;
         }
 
         public async Task<object> GetProviderColors(int blueprintId)
@@ -41,6 +44,23 @@ namespace Artsy.API.Hubs
 
                 if (providerInfos.Count == 0)
                     return new { success = false, message = "No provider colors found." };
+
+                foreach (var p in providerInfos)
+                {
+                    if (p.Colors == null || p.Colors.Count == 0) continue;
+                    var colorHexValues = p.Colors
+                        .Where(c => !string.IsNullOrWhiteSpace(c.Name) && !string.IsNullOrWhiteSpace(c.Hex))
+                        .GroupBy(c => c.Name)
+                        .Select(g => (g.Key, string.Join(",", g.Select(c => c.Hex.TrimStart('#')).Distinct())));
+                    try
+                    {
+                        await _variantRepo.UpdateHexColorsAsync(bp.BlueprintId, p.PrintProviderId, colorHexValues);
+                    }
+                    catch
+                    {
+                        // ignore; don't fail the whole scraping if hex update fails
+                    }
+                }
 
                 return new
                 {

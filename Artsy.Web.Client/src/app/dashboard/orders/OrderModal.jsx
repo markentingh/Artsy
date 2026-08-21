@@ -32,6 +32,13 @@ const parseJson = (s) => {
   }
 };
 
+const statusClass = (status) => {
+  const s = status?.toLowerCase() || '';
+  if (s === 'canceled') return 'text-red-600 font-medium';
+  if (s === 'on-hold') return 'text-yellow-600 font-medium';
+  return '';
+};
+
 function cacheBustUrl(url) {
   if (!url) return url;
   const u = new URL(url, window.location.href);
@@ -114,7 +121,7 @@ export default function OrderModal({ order, onClose }) {
         </div>
         <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded">
           <h4 className="font-semibold mb-2">Order</h4>
-          <p>Status: {capitalize(order.order.status)}</p>
+          <p>Status: <span className={statusClass(order.order.status)}>{capitalize(order.order.status)}</span></p>
           <p>Total: ${formatCents(order.order.totalPrice)}</p>
           <p>Shipping: ${formatCents(order.order.totalShipping)}</p>
           <p>Tax: ${formatCents(order.order.totalTax)}</p>
@@ -268,7 +275,7 @@ function OrderItemRow({ order, item, imageUrls, hasArtworks, onPersonalize }) {
         </div>
         <div>
           <span className="text-gray-500 dark:text-gray-400">Status</span>
-          <p className="font-medium">{statusLabel}</p>
+          <p className={`font-medium ${statusClass(item.status)}`}>{statusLabel}</p>
         </div>
         {(hasArtworks || item.status?.toLowerCase() === 'on-hold') && (
           <div>

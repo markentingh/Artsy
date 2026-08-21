@@ -209,15 +209,22 @@ namespace Artsy.API.Services
             {
                 using var bgImage = Image.Load(backgroundBytes);
 
-                // Resize background to fill the foreground dimensions (cover mode)
-                bgImage.Mutate(ctx => ctx.Resize(new ResizeOptions
+                // Resize background to the foreground width if it's larger, maintaining aspect ratio.
+                // Then center it on the canvas.
+                if (bgImage.Width > foreground.Width)
                 {
-                    Size = new Size(foreground.Width, foreground.Height),
-                    Mode = ResizeMode.Crop
-                }));
+                    var scale = (double)foreground.Width / bgImage.Width;
+                    var newH = (int)Math.Round(bgImage.Height * scale);
+                    bgImage.Mutate(ctx => ctx.Resize(foreground.Width, newH));
+                }
 
-                // Draw background onto canvas
-                canvas.Mutate(ctx => ctx.DrawImage(bgImage, new Point(0, 0), 1f));
+                // Center the background image on the canvas
+                var bgX = (foreground.Width - bgImage.Width) / 2;
+                var bgY = (foreground.Height - bgImage.Height) / 2;
+                if (bgX < 0) bgX = 0;
+                if (bgY < 0) bgY = 0;
+
+                canvas.Mutate(ctx => ctx.DrawImage(bgImage, new Point(bgX, bgY), 1f));
             }
             else
             {

@@ -154,7 +154,7 @@ export default function CustomImageSelector({ show, selectedImageId, onSelect, o
           {images.map((img) => (
             <div
               key={img.id}
-              className={`relative group rounded-lg overflow-hidden border cursor-pointer transition ${
+              className={`relative group rounded-lg overflow-hidden border cursor-pointer transition w-[120px] h-[120px] flex items-center justify-center ${
                 selectedImageId === img.id
                   ? 'border-primary-500 ring-2 ring-primary-500'
                   : 'border-gray-300 dark:border-gray-600 hover:border-primary-500'
@@ -164,7 +164,7 @@ export default function CustomImageSelector({ show, selectedImageId, onSelect, o
               <img
                 src={getCustomImageUrl(img.id, true)}
                 alt={img.fileName}
-                className="w-[120px] h-[120px] object-cover"
+                className="max-w-full max-h-full object-contain"
               />
               <button
                 type="button"

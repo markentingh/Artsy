@@ -17,15 +17,15 @@ public class ImageUpscaler : IImageUpscaler
         _logger = logger;
     }
 
-    public async Task<byte[]> UpscaleAsync(byte[] imageBytes)
+    public async Task<byte[]> UpscaleAsync(byte[] imageBytes, int scale = 2)
     {
         if (imageBytes == null || imageBytes.Length == 0)
             throw new ArgumentException("Image bytes are required for upscaling.", nameof(imageBytes));
 
         var endpoint = _options.Endpoint.TrimEnd('/');
-        var upscaleUrl = $"{endpoint}/upscale";
+        var upscaleUrl = $"{endpoint}/upscale?scale={scale}";
 
-        _logger.LogInformation("Sending {Bytes} bytes to upscaler service at {Url}", imageBytes.Length, upscaleUrl);
+        _logger.LogInformation("Sending {Bytes} bytes to upscaler service at {Url} (scale={Scale})", imageBytes.Length, upscaleUrl, scale);
 
         using var client = _httpClientFactory.CreateClient("Upscaler");
         using var content = new ByteArrayContent(imageBytes);

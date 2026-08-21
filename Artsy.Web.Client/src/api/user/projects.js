@@ -31,8 +31,9 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     getItemArtwork: (itemId) => api.get(`${apiPath}/get-item-artwork?itemId=${itemId}`),
     updateItemPrompt: (request) => api.post(`${apiPath}/update-item-prompt`, request),
     updateItemImageModel: (request) => api.post(`${apiPath}/update-item-image-model`, request),
-    estimateItemTokens: (itemId, width, height, modelId = '') => api.get(`${apiPath}/estimate-item-tokens?itemId=${itemId}&width=${width}&height=${height}&modelId=${modelId || ''}`),
+    estimateItemTokens: (itemId, modelId = '') => api.get(`${apiPath}/estimate-item-tokens?itemId=${itemId}&modelId=${modelId || ''}`),
     updateItemArtworkType: (request) => api.post(`${apiPath}/update-item-artwork-type`, request),
+    updateItemAspectRatio: (request) => api.post(`${apiPath}/update-item-aspect-ratio`, request),
     updateItemIgnoredQuestions: (request) => api.post(`${apiPath}/update-item-ignored-questions`, request),
     updateItemOpacity: (request) => api.post(`${apiPath}/update-item-opacity`, request),
     getItemPreviews: (itemId) => api.get(`${apiPath}/get-item-previews?itemId=${itemId}`),
@@ -88,29 +89,6 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     deactivateProductImages: (request) => api.post(`${apiPath}/deactivate-product-images`, request),
     syncProductImageSelections: (request) => api.post(`${apiPath}/sync-product-image-selections`, request),
     estimateCollectionTokens: (request) => api.post(`${apiPath}/estimate-collection-tokens`, request),
-    getCollectionArtworkImageUrl: (collectionId, itemId, artworkId, fullSize = false, cacheBust = null) => {
-      const params = [];
-      if (fullSize) params.push('fullSize=true');
-      if (cacheBust) params.push(`r=${cacheBust}`);
-      const qs = params.length > 0 ? `?${params.join('&')}` : '';
-      return `${apiPath}/collection/${collectionId}/item/${itemId}/artwork/${artworkId}${qs}`;
-    },
-    getCollectionArtworkThumbUrl: (collectionId, itemId, artworkId, cacheBust = null) => {
-      const params = ['thumb=true'];
-      if (cacheBust) params.push(`r=${cacheBust}`);
-      return `${apiPath}/collection/${collectionId}/item/${itemId}/artwork/${artworkId}?${params.join('&')}`;
-    },
-    getCollectionArtworkJpgWithBgUrl: (collectionId, itemId, artworkId, fullSize = false, cacheBust = null) => {
-      const params = ['jpgWithBg=true'];
-      if (fullSize) params.push('fullSize=true');
-      if (cacheBust) params.push(`r=${cacheBust}`);
-      return `${apiPath}/collection/${collectionId}/item/${itemId}/artwork/${artworkId}?${params.join('&')}`;
-    },
-    getCollectionArtworkJpgWithBgThumbUrl: (collectionId, itemId, artworkId, cacheBust = null) => {
-      const params = ['jpgWithBg=true', 'thumb=true'];
-      if (cacheBust) params.push(`r=${cacheBust}`);
-      return `${apiPath}/collection/${collectionId}/item/${itemId}/artwork/${artworkId}?${params.join('&')}`;
-    },
     generateArtworkThumbnail: (request) => api.post(`${apiPath}/generate-artwork-thumbnail`, request),
     getProductImageVariants: (projectId, collectionId) => api.get(`${apiPath}/get-product-image-variants?projectId=${projectId}&collectionId=${collectionId}`),
     estimateProductImageTokens: (request) => api.post(`${apiPath}/estimate-product-image-tokens`, request),

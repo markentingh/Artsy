@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import { useCollection } from '@/context/collection';
 import { useDashboard } from '@/context/dashboard';
+import { artworkImageUrl, artworkThumbUrl } from '@/utils/artworkUrls';
 import TextArea from '@/components/forms/textarea';
 import Select from '@/components/forms/select';
 import Input from '@/components/forms/input';
@@ -135,14 +136,30 @@ export default function ProductImagePrompt() {
 
   const artworkImages = useMemo(() => {
     if (!collectionId || !placementItemId) return [];
-    return collectionArtwork
-      .filter(a => a.active && String(a.itemId) === placementItemId)
-      .map(a => ({
-        itemId: a.itemId,
-        artworkId: a.id,
-        url: api.getCollectionArtworkImageUrl(collectionId, a.itemId, a.id, false),
-        thumbUrl: api.getCollectionArtworkThumbUrl(collectionId, a.itemId, a.id),
-      }));
+    const result = [];
+    for (const a of collectionArtwork.filter(a => a.active && String(a.itemId) === placementItemId)) {
+      const totalPlacements = a.totalPlacements || 0;
+      if (totalPlacements > 0) {
+        for (let i = 0; i < totalPlacements; i++) {
+          result.push({
+            itemId: a.itemId,
+            artworkId: a.id,
+            placementIndex: i,
+            url: artworkImageUrl(collectionId, a.itemId, a.id, { placementIndex: i }),
+            thumbUrl: artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex: i }),
+          });
+        }
+      } else {
+        result.push({
+          itemId: a.itemId,
+          artworkId: a.id,
+          placementIndex: null,
+          url: artworkImageUrl(collectionId, a.itemId, a.id),
+          thumbUrl: artworkThumbUrl(collectionId, a.itemId, a.id),
+        });
+      }
+    }
+    return result;
   }, [collectionId, collectionArtwork, api, placementItemId]);
 
   const existingProductImage = useMemo(() => {

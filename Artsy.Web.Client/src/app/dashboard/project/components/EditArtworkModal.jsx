@@ -17,6 +17,8 @@ import Spinner from '@/components/ui/spinner';
 import Message from '@/components/ui/message';
 import Slider from '@/components/ui/slider';
 import ColorPicker from '@/components/ui/ColorPicker';
+import SelectGrid from '@/components/ui/select-grid';
+import { aspectRatioOptions } from '@/components/ui/aspect-ratio-icons';
 import QuestionsAnswersModal from './QuestionsAnswersModal';
 import CustomImageSelector from './CustomImageSelector';
 import ArtworkSelector from './ArtworkSelector';
@@ -32,7 +34,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     getQuestions, getItemQuestions, createItemQuestion, updateItemQuestion, deleteItemQuestion,
     getItemPreviews, generateItemPreview, deleteItemPreview, getItemPreviewUrl,
     getItemReferences, uploadItemReference, deleteItemReference, addArtworkReference, addCustomImageReference, getItemReferenceUrl,
-    estimateItemTokens, updateItemIgnoredQuestions, updateItemOpacity
+    estimateItemTokens, updateItemIgnoredQuestions, updateItemOpacity, updateItemAspectRatio
   } = Projects(session);
   const { getCustomImageUrl } = CustomImages(session);
 
@@ -45,6 +47,8 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const [imageModel, setImageModel] = useState('');
   const [initialImageModel, setInitialImageModel] = useState('');
   const [artworkType, setArtworkType] = useState('ai');
+  const [aspectRatio, setAspectRatio] = useState('1:1');
+  const [initialAspectRatio, setInitialAspectRatio] = useState('1:1');
   const [customImageId, setCustomImageId] = useState(null);
   const [showCustomImageSelector, setShowCustomImageSelector] = useState(false);
   const [showReferenceCustomImageSelector, setShowReferenceCustomImageSelector] = useState(false);
@@ -135,6 +139,8 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setImageModel('');
     setInitialImageModel('');
     setArtworkType('ai');
+    setAspectRatio('1:1');
+    setInitialAspectRatio('1:1');
     setCustomImageId(null);
     setShowCustomImageSelector(false);
     setQuestions([]);
@@ -187,6 +193,8 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
           setImageModel(response.data.data?.imageModel || '');
           setInitialImageModel(response.data.data?.imageModel || '');
           setArtworkType(response.data.data?.artworkType || 'ai');
+          setAspectRatio(response.data.data?.aspectRatio || '1:1');
+          setInitialAspectRatio(response.data.data?.aspectRatio || '1:1');
           setCustomImageId(response.data.data?.customImageId || null);
           try {
             const ignored = response.data.data?.ignoredQuestions;
@@ -373,7 +381,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       return;
     }
     setEstimating(true);
-    estimateItemTokens(item.id, 3840, 3840, selectedImageModelId).then(response => {
+    estimateItemTokens(item.id, selectedImageModelId).then(response => {
       if (response.data.success) {
         setEstimatedCost(response.data.data);
       } else {
@@ -406,7 +414,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     }
     if (previewEstimateTimerRef.current) clearTimeout(previewEstimateTimerRef.current);
     previewEstimateTimerRef.current = setTimeout(() => {
-      estimateItemTokens(item.id, 512, 512).then(response => {
+      estimateItemTokens(item.id).then(response => {
         if (response.data.success) {
           setPreviewEstimatedCost(response.data.data);
         } else {
@@ -432,6 +440,22 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save image model' });
+    }
+  };
+
+  const handleAspectRatioChange = async (value) => {
+    setAspectRatio(value);
+    if (!item) return;
+    try {
+      const response = await updateItemAspectRatio({ itemId: item.id, aspectRatio: value });
+      if (response.data.success) {
+        setMessage(null);
+        setInitialAspectRatio(value);
+      } else {
+        setMessage({ type: 'error', text: response.data.message || 'Failed to save aspect ratio' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save aspect ratio' });
     }
   };
 
@@ -740,7 +764,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
           <img
             src={getCustomImageUrl(customImageId, true)}
             alt="Custom image"
-            className="w-full rounded-lg object-cover border border-gray-300 dark:border-gray-600"
+            className="w-full h-auto rounded-lg object-contain border border-gray-300 dark:border-gray-600"
           />
         </div>
       )}
@@ -752,6 +776,19 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
             checked={socialMedia}
             onChange={handleSocialMediaChange}
           />
+          {artworkType === 'ai' && (
+            <SelectGrid
+              name="aspectRatio"
+              label="Aspect Ratio"
+              options={aspectRatioOptions}
+              value={aspectRatio}
+              onChange={handleAspectRatioChange}
+              columns={6}
+              buttonWidth={250}
+              dropdownWidth={400}
+              placeholder="Select aspect ratio..."
+            />
+          )}
         </div>
       )}
       {(titleDirty || socialMedia !== initialSocialMedia) && (
@@ -1209,7 +1246,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         </div>
       )}
       {previews.length > 0 || isGenerating ? (
-        <div className="grid grid-cols-[repeat(auto-fill,200px)] gap-2">
+        <div className="flex flex-wrap gap-2">
           {isGenerating && (
             <div className="flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 w-[200px] h-[200px]">
               <Spinner className="text-2xl" />
@@ -1223,7 +1260,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
               <img
                 src={getItemPreviewUrl(item.id, preview.id, true)}
                 alt="Preview"
-                className="w-[200px] h-[200px] rounded-lg object-cover cursor-pointer"
+                className="!max-w-[200px] !max-h-[200px] rounded-lg object-contain cursor-pointer"
                 onClick={() => setEnlargedPreview(preview)}
               />
               <button
@@ -1282,7 +1319,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
             </div>
           </div>
           {references.length > 0 ? (
-            <div className="grid grid-cols-[repeat(auto-fill,150px)] gap-2">
+            <div className="flex flex-wrap gap-2">
               {references.map((ref) => (
                 <div
                   key={ref.id}
@@ -1293,7 +1330,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
                       <img
                         src={artworkRefPreviews[ref.id]}
                         alt="Artwork reference"
-                        className="w-[150px] h-[150px] object-cover"
+                        className="!max-w-[150px] !max-h-[150px] object-contain"
                       />
                     ) : (
                       <div className="w-[150px] h-[150px] flex items-center justify-center bg-gray-100 dark:bg-gray-700">
@@ -1304,7 +1341,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
                     <img
                       src={getCustomImageUrl(ref.customImageId, true)}
                       alt=""
-                      className="w-[150px] h-[150px] object-cover"
+                      className="!max-w-[150px] !max-h-[150px] object-contain"
                     />
                   )}
                   {ref.artworkId && (

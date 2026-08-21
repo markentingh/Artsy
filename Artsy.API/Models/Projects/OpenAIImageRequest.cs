@@ -21,6 +21,13 @@ namespace Artsy.API.Models.Projects
 
         [JsonPropertyName("images")]
         public List<OpenAIImageReference>? Images { get; set; }
+
+        /// <summary>
+        /// Alpha mask PNG (transparent = editable area) for the images/edits API.
+        /// When set, the edit request is sent as multipart form data with the mask as a file.
+        /// </summary>
+        [JsonIgnore]
+        public byte[]? Mask { get; set; }
     }
 
     public class OpenAIResponsesRequest

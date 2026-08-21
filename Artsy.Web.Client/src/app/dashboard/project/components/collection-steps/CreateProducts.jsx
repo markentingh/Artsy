@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useCollection } from '@/context/collection';
 import { useSession } from '@/context/session';
 import { PrintifyProducts } from '@/api/user/printifyProducts';
+import { artworkThumbUrl, artworkImageUrl } from '@/utils/artworkUrls';
 import Button from '@/components/ui/button';
 import ButtonOutline from '@/components/ui/button-outline';
 import List, { Item } from '@/components/ui/list';
@@ -153,7 +154,7 @@ export default function CreateProducts() {
   const artworkImages = useMemo(() =>
     acceptedArtwork.map(a => ({
       ...a,
-      imageUrl: api.getCollectionArtworkThumbUrl(collectionId, a.itemId, a.id),
+      imageUrl: artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex: a.totalPlacements > 0 ? 0 : null }),
       type: 'artwork',
     })),
     [acceptedArtwork, collectionId, api]
@@ -174,24 +175,49 @@ export default function CreateProducts() {
     setMessage(null);
 
     for (const art of activeArtworkImages) {
-      if (artworkUploadState[art.id]?.status === 'done') continue;
+      const artKey = art.id;
+      if (artworkUploadState[artKey]?.status === 'done') continue;
 
-      setArtworkUploadState(prev => ({ ...prev, [art.id]: { status: 'uploading' } }));
+      setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'uploading' } }));
 
       try {
-        const response = await printifyProductsApi.uploadArtworkImage({
-          collectionId,
-          artworkId: art.id,
-        });
-
-        if (response.data.success) {
-          setArtworkUploadState(prev => ({ ...prev, [art.id]: { status: 'done' } }));
+        // For variant artworks, upload each placement variant separately
+        const totalPlacements = art.totalPlacements || 0;
+        if (totalPlacements > 0) {
+          let allVariantSuccess = true;
+          for (let i = 0; i < totalPlacements; i++) {
+            const variantResponse = await printifyProductsApi.uploadArtworkImage({
+              collectionId,
+              artworkId: art.id,
+              placementIndex: i,
+            });
+            if (!variantResponse.data.success) {
+              allVariantSuccess = false;
+              setMessage({ type: 'error', text: variantResponse.data.message || `Failed to upload placement variant ${i}` });
+              break;
+            }
+          }
+          if (allVariantSuccess) {
+            setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'done' } }));
+          } else {
+            setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'error' } }));
+          }
         } else {
-          setArtworkUploadState(prev => ({ ...prev, [art.id]: { status: 'error' } }));
-          setMessage({ type: 'error', text: response.data.message || 'Failed to upload artwork' });
+          // Standard single artwork upload
+          const response = await printifyProductsApi.uploadArtworkImage({
+            collectionId,
+            artworkId: art.id,
+          });
+
+          if (response.data.success) {
+            setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'done' } }));
+          } else {
+            setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'error' } }));
+            setMessage({ type: 'error', text: response.data.message || 'Failed to upload artwork' });
+          }
         }
       } catch (error) {
-        setArtworkUploadState(prev => ({ ...prev, [art.id]: { status: 'error' } }));
+        setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'error' } }));
         setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to upload artwork' });
       }
     }
@@ -418,10 +444,12 @@ export default function CreateProducts() {
   }, [artworkImages, allImages]);
 
   const fullSizePreviewImages = useMemo(() => {
-    const artworkFull = acceptedArtwork.map(a => api.getCollectionArtworkImageUrl(collectionId, a.itemId, a.id, true));
+    const artworkFull = artworkImages.map(a => artworkImageUrl(collectionId, a.itemId, a.id, {
+      placementIndex: a.totalPlacements > 0 ? 0 : null,
+    }));
     const productFull = allImages.map(img => (img.imageUrl || '').replace('?thumb=true', ''));
     return [...artworkFull, ...productFull];
-  }, [acceptedArtwork, allImages, collectionId, api]);
+  }, [artworkImages, allImages, collectionId]);
 
   const handleImageClick = useCallback((clickedImg) => {
     const idx = allPreviewImages.indexOf(clickedImg.imageUrl);
@@ -453,7 +481,7 @@ export default function CreateProducts() {
                   <img
                     src={art.imageUrl}
                     alt="Artwork"
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain"
                   />
                   {isUploading && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/40">

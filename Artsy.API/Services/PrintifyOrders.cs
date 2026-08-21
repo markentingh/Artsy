@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Artsy.Data.Entities.Auth;
 using Artsy.Data.Entities.Orders;
 using Artsy.Data.Interfaces.Auth;
@@ -26,16 +27,18 @@ namespace Artsy.API.Services
         readonly IOrderRepository _orderRepository;
         readonly IHangfireOrderRepository _hangfireOrderRepository;
         readonly IProjectCollectionProductRepository _projectCollectionProductRepository;
+        readonly IConfiguration _configuration;
 
         const string BaseUrl = "https://api.printify.com/v1";
 
-        public PrintifyOrders(IHttpClientFactory httpClientFactory, IAppUserRepository userRepository, IOrderRepository orderRepository, IHangfireOrderRepository hangfireOrderRepository, IProjectCollectionProductRepository projectCollectionProductRepository)
+        public PrintifyOrders(IHttpClientFactory httpClientFactory, IAppUserRepository userRepository, IOrderRepository orderRepository, IHangfireOrderRepository hangfireOrderRepository, IProjectCollectionProductRepository projectCollectionProductRepository, IConfiguration configuration)
         {
             _httpClientFactory = httpClientFactory;
             _userRepository = userRepository;
             _orderRepository = orderRepository;
             _hangfireOrderRepository = hangfireOrderRepository;
             _projectCollectionProductRepository = projectCollectionProductRepository;
+            _configuration = configuration;
         }
 
         public async Task<(int New, int Updated)> RefreshAllAsync()
@@ -54,12 +57,16 @@ namespace Artsy.API.Services
 
         public async Task<(int New, int Updated)> CheckAndRunAllAsync()
         {
+            var interval = _configuration.GetValue<int?>("Hangfire:Orders:Intervals") ?? 1440;
+            if (interval <= 0)
+                return (0, 0);
+
             var latest = await _hangfireOrderRepository.GetLatestAsync();
-            if (latest != null && latest.DateChecked > DateTime.UtcNow.AddHours(-1))
+            if (latest != null && latest.DateChecked > DateTime.UtcNow.AddMinutes(-interval))
                 return (0, 0);
 
             var (n, u) = await RefreshAllAsync();
-            await _hangfireOrderRepository.AddAsync(new HangfireOrder { NewOrders = n, UpdatedOrders = u });
+            await _hangfireOrderRepository.AddAsync(new HangfireOrder { NewOrders = n, UpdatedOrders = u, DateChecked = DateTime.UtcNow });
             return (n, u);
         }
 

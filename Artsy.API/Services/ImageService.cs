@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
 namespace Artsy.API.Services
@@ -39,6 +40,26 @@ namespace Artsy.API.Services
         Task<byte[]> GetProjectCollectionArtworkJpgWithBgAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
         Task<byte[]> GetProjectCollectionArtworkJpgWithBgThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
         Task<bool> GenerateProjectCollectionArtworkJpgWithBgThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId);
+
+        // Per-placement variant image storage (keyed by artworkId + placementIndex)
+        Task SaveProjectCollectionArtworkPlacementAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkPlacementImageAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex);
+        Task<byte[]> GetProjectCollectionArtworkPlacementThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex);
+        Task<bool> GenerateProjectCollectionArtworkPlacementThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex);
+        Task SaveProjectCollectionArtworkPlacementJpgWithBgAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkPlacementJpgWithBgAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex);
+        Task<byte[]> GetProjectCollectionArtworkPlacementJpgWithBgThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex);
+        Task SaveProjectCollectionArtworkPlacementFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkPlacementFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex);
+        Task SaveProjectCollectionArtworkPlacementPngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkPlacementPngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex);
+        Task SaveProjectCollectionArtworkPlacementFullSizePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkPlacementFullSizePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex);
+
+        // Mask generation and cropping for placement-aware artwork generation
+        Task<byte[]> GeneratePlacementMaskAsync(int placementWidth, int placementHeight, string cropX, string cropY);
+        Task<byte[]> ConvertMaskToAlphaMaskAsync(byte[] bwMask);
+        Task<byte[]> CropToPlacementAsync(byte[] imageBytes, int placementWidth, int placementHeight, string cropX, string cropY);
         Task SaveProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId, byte[] imageData);
         Task<byte[]> GetProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId);
         Task<byte[]> GetProjectCollectionProductImageThumbAsync(Guid projectId, Guid collectionId, Guid productImageId);
@@ -249,12 +270,11 @@ namespace Artsy.API.Services
         async Task<byte[]> GenerateThumbnailAsync(byte[] imageData, int size = 350)
         {
             using var image = Image.Load(imageData);
-            image.Mutate(x => x
-                .Resize(new ResizeOptions
-                {
-                    Size = new Size(size, size),
-                    Mode = ResizeMode.Crop
-                }));
+            var ratio = Math.Min((double)size / image.Width, (double)size / image.Height);
+            if (ratio < 1)
+            {
+                image.Mutate(x => x.Resize((int)(image.Width * ratio), (int)(image.Height * ratio)));
+            }
             using var stream = new MemoryStream();
             image.SaveAsJpeg(stream, new JpegEncoder { Quality = 85 });
             return stream.ToArray();
@@ -263,12 +283,11 @@ namespace Artsy.API.Services
         async Task<byte[]> GeneratePngThumbnailAsync(byte[] imageData, int size = 350)
         {
             using var image = Image.Load(imageData);
-            image.Mutate(x => x
-                .Resize(new ResizeOptions
-                {
-                    Size = new Size(size, size),
-                    Mode = ResizeMode.Crop
-                }));
+            var ratio = Math.Min((double)size / image.Width, (double)size / image.Height);
+            if (ratio < 1)
+            {
+                image.Mutate(x => x.Resize((int)(image.Width * ratio), (int)(image.Height * ratio)));
+            }
             using var stream = new MemoryStream();
             await image.SaveAsync(stream, new PngEncoder());
             return stream.ToArray();
@@ -740,6 +759,401 @@ namespace Artsy.API.Services
             await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
             return true;
         }
+
+        #region Per-Placement Variant Image Storage
+
+        public async Task SaveProjectCollectionArtworkPlacementAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex, byte[] imageData)
+        {
+            var fileName = $"{artworkId}_{placementIndex}.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+            var thumbFileName = $"{artworkId}_{placementIndex}_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkPlacementImageAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex)
+        {
+            var fileName = $"{artworkId}_{placementIndex}.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkPlacementThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex)
+        {
+            var thumbFileName = $"{artworkId}_{placementIndex}_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
+
+            byte[] thumbBytes;
+            if (_activeStorage == "azure")
+                thumbBytes = await GetFromAzureBlobAsync(thumbRelativePath);
+            else
+                thumbBytes = await GetFromFileSystemAsync(thumbRelativePath);
+
+            if (thumbBytes != null && thumbBytes.Length > 0)
+                return thumbBytes;
+
+            await GenerateProjectCollectionArtworkPlacementThumbAsync(projectId, collectionId, itemId, artworkId, placementIndex);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(thumbRelativePath);
+            return await GetFromFileSystemAsync(thumbRelativePath);
+        }
+
+        public async Task<bool> GenerateProjectCollectionArtworkPlacementThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex)
+        {
+            var imageData = await GetProjectCollectionArtworkPlacementImageAsync(projectId, collectionId, itemId, artworkId, placementIndex);
+            if (imageData == null || imageData.Length == 0)
+            {
+                imageData = await GetProjectCollectionArtworkPlacementFullSizeAsync(projectId, collectionId, itemId, artworkId, placementIndex);
+                if (imageData == null || imageData.Length == 0)
+                    return false;
+            }
+
+            var thumbFileName = $"{artworkId}_{placementIndex}_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return true;
+            }
+
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+            return true;
+        }
+
+        public async Task SaveProjectCollectionArtworkPlacementFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex, byte[] imageData)
+        {
+            var fileName = $"{artworkId}_{placementIndex}_fullsize.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkPlacementFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex)
+        {
+            var fileName = $"{artworkId}_{placementIndex}_fullsize.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveProjectCollectionArtworkPlacementPngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex, byte[] imageData)
+        {
+            var fileName = $"{artworkId}_{placementIndex}.png";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+            var thumbFileName = $"{artworkId}_{placementIndex}_thumb.png";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
+            var thumbImageData = await GeneratePngThumbnailAsync(imageData);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkPlacementPngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex)
+        {
+            var fileName = $"{artworkId}_{placementIndex}.png";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveProjectCollectionArtworkPlacementFullSizePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex, byte[] imageData)
+        {
+            var fileName = $"{artworkId}_{placementIndex}_fullsize.png";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkPlacementFullSizePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex)
+        {
+            var fileName = $"{artworkId}_{placementIndex}_fullsize.png";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveProjectCollectionArtworkPlacementJpgWithBgAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex, byte[] imageData)
+        {
+            var fileName = $"{artworkId}_{placementIndex}_bg.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+            var thumbFileName = $"{artworkId}_{placementIndex}_bg_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkPlacementJpgWithBgAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex)
+        {
+            var fileName = $"{artworkId}_{placementIndex}_bg.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkPlacementJpgWithBgThumbAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, int placementIndex)
+        {
+            var thumbFileName = $"{artworkId}_{placementIndex}_bg_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), thumbFileName);
+
+            byte[] thumbBytes;
+            if (_activeStorage == "azure")
+                thumbBytes = await GetFromAzureBlobAsync(thumbRelativePath);
+            else
+                thumbBytes = await GetFromFileSystemAsync(thumbRelativePath);
+
+            if (thumbBytes != null && thumbBytes.Length > 0)
+                return thumbBytes;
+
+            // Generate thumb from full bg image
+            var fullBg = await GetProjectCollectionArtworkPlacementJpgWithBgAsync(projectId, collectionId, itemId, artworkId, placementIndex);
+            if (fullBg == null || fullBg.Length == 0)
+                return null;
+
+            var generatedThumb = await GenerateThumbnailAsync(fullBg);
+            if (_activeStorage == "azure")
+                await SaveToAzureBlobAsync(thumbRelativePath, generatedThumb);
+            else
+                await SaveToFileSystemAsync(thumbRelativePath, generatedThumb);
+
+            return generatedThumb;
+        }
+
+        #endregion
+
+        #region Placement Mask Generation & Cropping
+
+        /// <summary>
+        /// Calculates the white (printable) rectangle within a canvas of canvasSize x canvasSize
+        /// for a placement with the given dimensions and crop alignment.
+        /// </summary>
+        static (int X, int Y, int W, int H) CalculateMaskRegion(int canvasSize, int placementWidth, int placementHeight, string cropX, string cropY)
+        {
+            if (placementWidth <= 0 || placementHeight <= 0)
+                return (0, 0, canvasSize, canvasSize);
+
+            var targetRatio = (double)placementWidth / placementHeight;
+            int whiteW, whiteH, whiteX, whiteY;
+
+            if (targetRatio > 1)
+            {
+                // Landscape: fill width, position vertically per cropY
+                whiteW = canvasSize;
+                whiteH = (int)Math.Round(canvasSize / targetRatio);
+                whiteX = 0;
+                whiteY = cropY.ToLower() switch
+                {
+                    "top" => 0,
+                    "bottom" => canvasSize - whiteH,
+                    _ => (canvasSize - whiteH) / 2,
+                };
+            }
+            else if (targetRatio < 1)
+            {
+                // Portrait: fill height, position horizontally per cropX
+                whiteH = canvasSize;
+                whiteW = (int)Math.Round(canvasSize * targetRatio);
+                whiteY = 0;
+                whiteX = cropX.ToLower() switch
+                {
+                    "left" => 0,
+                    "right" => canvasSize - whiteW,
+                    _ => (canvasSize - whiteW) / 2,
+                };
+            }
+            else
+            {
+                // Square: fill entire canvas
+                return (0, 0, canvasSize, canvasSize);
+            }
+
+            return (whiteX, whiteY, whiteW, whiteH);
+        }
+
+        public Task<byte[]> GeneratePlacementMaskAsync(int placementWidth, int placementHeight, string cropX, string cropY)
+        {
+            const int maskSize = 1024;
+            cropX = string.IsNullOrWhiteSpace(cropX) ? "center" : cropX;
+            cropY = string.IsNullOrWhiteSpace(cropY) ? "center" : cropY;
+
+            // "fit" is treated as centered for mask purposes
+            if (cropX.Equals("fit", StringComparison.OrdinalIgnoreCase))
+            {
+                cropX = "center";
+                cropY = "center";
+            }
+
+            var (wx, wy, ww, wh) = CalculateMaskRegion(maskSize, placementWidth, placementHeight, cropX, cropY);
+
+            using var mask = new Image<Rgb24>(maskSize, maskSize, Color.Black);
+            // Fill the white print region using pixel manipulation (avoids Drawing package dependency)
+            mask.ProcessPixelRows(accessor =>
+            {
+                for (int y = wy; y < wy + wh && y < accessor.Height; y++)
+                {
+                    var row = accessor.GetRowSpan(y);
+                    for (int x = wx; x < wx + ww && x < row.Length; x++)
+                    {
+                        row[x] = new Rgb24(255, 255, 255);
+                    }
+                }
+            });
+
+            using var ms = new MemoryStream();
+            mask.Save(ms, new PngEncoder());
+            return Task.FromResult(ms.ToArray());
+        }
+
+        public Task<byte[]> ConvertMaskToAlphaMaskAsync(byte[] bwMask)
+        {
+            using var image = Image.Load<Rgba32>(bwMask);
+            // For the OpenAI edit API: transparent = where to generate (was white), opaque = keep (was black)
+            // White pixels (R>128) become transparent, black pixels stay opaque black
+            image.ProcessPixelRows(accessor =>
+            {
+                for (int y = 0; y < accessor.Height; y++)
+                {
+                    var row = accessor.GetRowSpan(y);
+                    for (int x = 0; x < row.Length; x++)
+                    {
+                        if (row[x].R > 128)
+                        {
+                            // Was white → make transparent (API will generate here)
+                            row[x] = new Rgba32(0, 0, 0, 0);
+                        }
+                        else
+                        {
+                            // Was black → keep opaque
+                            row[x] = new Rgba32(0, 0, 0, 255);
+                        }
+                    }
+                }
+            });
+
+            using var ms = new MemoryStream();
+            image.Save(ms, new PngEncoder());
+            return Task.FromResult(ms.ToArray());
+        }
+
+        public Task<byte[]> CropToPlacementAsync(byte[] imageBytes, int placementWidth, int placementHeight, string cropX, string cropY)
+        {
+            cropX = string.IsNullOrWhiteSpace(cropX) ? "center" : cropX;
+            cropY = string.IsNullOrWhiteSpace(cropY) ? "center" : cropY;
+
+            if (cropX.Equals("fit", StringComparison.OrdinalIgnoreCase))
+            {
+                cropX = "center";
+                cropY = "center";
+            }
+
+            using var image = Image.Load(imageBytes);
+            var srcW = image.Width;
+            var srcH = image.Height;
+
+            // If the placement is square or the image already matches the aspect ratio, no crop needed
+            if (placementWidth <= 0 || placementHeight <= 0)
+                return Task.FromResult(imageBytes);
+
+            var targetRatio = (double)placementWidth / placementHeight;
+            var srcRatio = (double)srcW / srcH;
+
+            // If ratios are essentially equal, no crop needed
+            if (Math.Abs(srcRatio - targetRatio) < 0.001)
+                return Task.FromResult(imageBytes);
+
+            int cropW, cropH, cropXPos, cropYPos;
+
+            if (srcRatio > targetRatio)
+            {
+                // Source is wider: crop width, keep full height
+                cropH = srcH;
+                cropW = (int)Math.Round(srcH * targetRatio);
+                cropYPos = 0;
+                cropXPos = cropX.ToLower() switch
+                {
+                    "left" => 0,
+                    "right" => srcW - cropW,
+                    _ => (srcW - cropW) / 2,
+                };
+            }
+            else
+            {
+                // Source is taller: crop height, keep full width
+                cropW = srcW;
+                cropH = (int)Math.Round(srcW / targetRatio);
+                cropXPos = 0;
+                cropYPos = cropY.ToLower() switch
+                {
+                    "top" => 0,
+                    "bottom" => srcH - cropH,
+                    _ => (srcH - cropH) / 2,
+                };
+            }
+
+            image.Mutate(ctx => ctx.Crop(new Rectangle(cropXPos, cropYPos, cropW, cropH)));
+
+            using var ms = new MemoryStream();
+            image.Save(ms, new JpegEncoder { Quality = 95 });
+            return Task.FromResult(ms.ToArray());
+        }
+
+        #endregion
 
         public async Task SaveProjectCollectionProductImageAsync(Guid projectId, Guid collectionId, Guid productImageId, byte[] imageData)
         {

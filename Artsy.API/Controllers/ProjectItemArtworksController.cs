@@ -184,6 +184,56 @@ namespace Artsy.API.Controllers
             }
         }
 
+        [HttpPost("update-item-aspect-ratio")]
+        public async Task<IActionResult> UpdateItemAspectRatio([FromBody] UpdateProjectItemAspectRatioRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.ItemId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Item ID is required." });
+
+            if (string.IsNullOrWhiteSpace(request.AspectRatio))
+                return Json(new ApiResponse { success = false, message = "Aspect ratio is required." });
+
+            try
+            {
+                var item = await _projectItemRepository.GetByIdAsync(request.ItemId);
+                if (item == null)
+                    return Json(new ApiResponse { success = false, message = "Item not found." });
+
+                var project = await _projectRepository.GetByIdAsync(item.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                var artworkList = await _projectItemArtworkRepository.GetByItemIdAsync(request.ItemId);
+                var artwork = artworkList.FirstOrDefault();
+                if (artwork == null)
+                {
+                    artwork = new ProjectItemArtwork
+                    {
+                        ItemId = request.ItemId,
+                        ProjectId = item.ProjectId,
+                        ArtworkType = "ai",
+                        AspectRatio = request.AspectRatio
+                    };
+                    var created = await _projectItemArtworkRepository.CreateAsync(artwork);
+                    return Json(new ApiResponse { success = true, data = created });
+                }
+                else
+                {
+                    artwork.AspectRatio = request.AspectRatio;
+                    await _projectItemArtworkRepository.UpdateAsync(artwork);
+                    return Json(new ApiResponse { success = true, data = artwork });
+                }
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
         [HttpPost("update-item-ignored-questions")]
         public async Task<IActionResult> UpdateItemIgnoredQuestions([FromBody] UpdateProjectItemIgnoredQuestionsRequest request)
         {

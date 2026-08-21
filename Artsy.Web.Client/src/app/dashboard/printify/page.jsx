@@ -210,11 +210,13 @@ export default function DashboardPrintify() {
                   onClick={() => handleBlueprintClick(bp)}
                 >
                   {bp.imageCount > 0 ? (
-                    <Carousel
-                      images={Array.from({ length: bp.imageCount }, (_, i) => getBlueprintImageUrl(bp.id, i))}
-                      alt={bp.title}
-                      singleImage
-                    />
+                    <div className="w-full aspect-square">
+                      <Carousel
+                        images={Array.from({ length: bp.imageCount }, (_, i) => getBlueprintImageUrl(bp.id, i))}
+                        alt={bp.title}
+                        singleImage
+                      />
+                    </div>
                   ) : (
                     <div className="w-full aspect-square flex items-center justify-center bg-gray-100 dark:bg-gray-700">
                       <span className="text-xs text-gray-400">No image</span>

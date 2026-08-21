@@ -88,18 +88,16 @@ export default function ArtworkSelector({ show, projectId, currentIndex, onSelec
                 className="border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden cursor-pointer hover:border-primary-500 hover:ring-2 hover:ring-primary-500 transition"
                 onClick={() => handleSelect(item)}
               >
-                <div className="h-[200px] flex items-center justify-center bg-gray-100 dark:bg-gray-700">
+                <div className="flex items-center justify-center bg-gray-100 dark:bg-gray-700">
                   {images.length > 0 ? (
                     <Carousel
                       images={images}
                       alt={item.title}
                       singleImage
-                      imageClassName="w-[200px] h-[200px] object-cover"
-                      imageWidth="200px"
-                      imageHeight="200px"
+                      imageClassName="!max-w-[200px] !max-h-[200px] object-contain"
                     />
                   ) : (
-                    <span className="text-sm text-gray-400">No preview</span>
+                    <span className="text-sm text-gray-400 my-8">No preview</span>
                   )}
                 </div>
                 <div className="px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 truncate">

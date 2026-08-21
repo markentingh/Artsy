@@ -24,6 +24,8 @@ namespace Artsy.API.Controllers
         readonly IProjectItemQuestionRepository _projectItemQuestionRepository;
         readonly IProjectQuestionRepository _projectQuestionRepository;
         readonly IProjectCollectionArtworkRepository _projectCollectionArtworkRepository;
+        readonly IProjectCollectionArtworkPlacementRepository _projectCollectionArtworkPlacementRepository;
+        readonly IProjectCollectionProductPlacementRepository _projectCollectionProductPlacementRepository;
         readonly IProjectCollectionProductImageRepository _projectCollectionProductImageRepository;
         readonly IProjectCollectionAnswerRepository _projectCollectionAnswerRepository;
         readonly IPrintifyBlueprintRepository _printifyBlueprintRepository;
@@ -48,6 +50,7 @@ namespace Artsy.API.Controllers
         readonly ICustomImageRepository _customImageRepository;
         readonly TokenCostOptions _tokenCostOptions;
         readonly IAITokenService _aiTokenService;
+        readonly IArtworkGenerationPlanService _artworkGenerationPlanService;
 
         public ProjectsController(
             IProjectRepository projectRepository,
@@ -58,6 +61,8 @@ namespace Artsy.API.Controllers
             IProjectItemQuestionRepository projectItemQuestionRepository,
             IProjectQuestionRepository projectQuestionRepository,
             IProjectCollectionArtworkRepository projectCollectionArtworkRepository,
+            IProjectCollectionArtworkPlacementRepository projectCollectionArtworkPlacementRepository,
+            IProjectCollectionProductPlacementRepository projectCollectionProductPlacementRepository,
             IProjectCollectionProductImageRepository projectCollectionProductImageRepository,
             IProjectCollectionAnswerRepository projectCollectionAnswerRepository,
             IPrintifyBlueprintRepository printifyBlueprintRepository,
@@ -81,7 +86,8 @@ namespace Artsy.API.Controllers
             IProjectCollectionProductRepository productRepository,
             ICustomImageRepository customImageRepository,
             IOptions<TokenCostOptions> tokenCostOptions,
-            IAITokenService aiTokenService)
+            IAITokenService aiTokenService,
+            IArtworkGenerationPlanService artworkGenerationPlanService)
         {
             _projectRepository = projectRepository;
             _projectCollectionRepository = projectCollectionRepository;
@@ -91,6 +97,8 @@ namespace Artsy.API.Controllers
             _projectItemQuestionRepository = projectItemQuestionRepository;
             _projectQuestionRepository = projectQuestionRepository;
             _projectCollectionArtworkRepository = projectCollectionArtworkRepository;
+            _projectCollectionArtworkPlacementRepository = projectCollectionArtworkPlacementRepository;
+            _projectCollectionProductPlacementRepository = projectCollectionProductPlacementRepository;
             _projectCollectionProductImageRepository = projectCollectionProductImageRepository;
             _projectCollectionAnswerRepository = projectCollectionAnswerRepository;
             _printifyBlueprintRepository = printifyBlueprintRepository;
@@ -115,6 +123,7 @@ namespace Artsy.API.Controllers
             _customImageRepository = customImageRepository;
             _tokenCostOptions = tokenCostOptions.Value;
             _aiTokenService = aiTokenService;
+            _artworkGenerationPlanService = artworkGenerationPlanService;
         }
 
         [HttpGet("get-by-id")]

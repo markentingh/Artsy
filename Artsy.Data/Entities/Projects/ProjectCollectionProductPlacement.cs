@@ -5,7 +5,9 @@ namespace Artsy.Data.Entities.Projects
         public Guid Id { get; set; }
         public Guid ProductId { get; set; }
         public Guid ArtworkId { get; set; }
+        public Guid? ArtworkPlacementId { get; set; }
         public string Position { get; set; } = "";
         public string VariantIds { get; set; } = "[]";
+        public int PlacementIndex { get; set; }
     }
 }

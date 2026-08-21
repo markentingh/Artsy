@@ -59,6 +59,7 @@ builder.Services.AddScoped<Artsy.API.Services.IEmailService, Artsy.API.Services.
 builder.Services.AddScoped<Artsy.API.Services.ITelegramService, Artsy.API.Services.TelegramService>();
 builder.Services.AddScoped<Artsy.API.Services.IImageService, Artsy.API.Services.ImageService>();
 builder.Services.AddScoped<Artsy.API.Services.IOpacityService, Artsy.API.Services.OpacityService>();
+builder.Services.AddScoped<Artsy.API.Services.IArtworkGenerationPlanService, Artsy.API.Services.ArtworkGenerationPlanService>();
 builder.Services.AddScoped<Artsy.API.Services.ITrendResearchService, Artsy.API.Services.TrendResearchService>();
 builder.Services.AddScoped<Artsy.API.Services.IPrintifyService, Artsy.API.Services.PrintifyService>();
 builder.Services.AddScoped<Artsy.API.Services.IPrintifyOrders, Artsy.API.Services.PrintifyOrders>();
@@ -76,14 +77,15 @@ builder.Services.AddSwaggerGen(e =>
 
 var app = builder.Build();
 
-try
+var syncInterval = app.Configuration.GetValue<int?>("Hangfire:Orders:Intervals") ?? 1440;
+
+static string ToCronExpression(int minutes)
 {
-    RecurringJob.AddOrUpdate<Artsy.API.Services.IPrintifyOrders>("printify-orders-sync", x => x.CheckAndRunAllAsync(), "*/10 * * * *");
-    Console.WriteLine("Scheduled Printify orders sync every 10 minutes.");
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"Warning: Failed to schedule Printify orders sync: {ex.Message}");
+    if (minutes < 60)
+        return $"*/{minutes} * * * *";
+    if (minutes < 1440)
+        return $"0 */{minutes / 60} * * *";
+    return $"0 0 */{minutes / 1440} * *";
 }
 
 if (!app.Environment.IsDevelopment())
@@ -125,6 +127,24 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
     Authorization = new[] { new HangfireAdminAuthorizationFilter() }
 });
+
+try
+{
+    if (syncInterval > 0)
+    {
+        var cron = ToCronExpression(syncInterval);
+        RecurringJob.AddOrUpdate<Artsy.API.Services.PrintifyOrders>("printify-orders-sync", x => x.CheckAndRunAllAsync(), cron);
+        Console.WriteLine($"Scheduled Printify orders sync every {syncInterval} minutes ({cron}).");
+    }
+    else
+    {
+        Console.WriteLine("Printify orders sync is disabled (Hangfire:Orders:Intervals <= 0).");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Warning: Failed to schedule Printify orders sync: {ex.Message}");
+}
 
 try
 {

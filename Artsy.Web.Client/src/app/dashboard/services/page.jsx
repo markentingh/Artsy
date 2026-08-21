@@ -14,6 +14,7 @@ import Tooltip from '@/components/ui/tooltip';
 import CarouselElements from '@/components/ui/carousel-elements';
 import ProductImagePreview from '@/app/dashboard/project/components/ProductImagePreview';
 import ConfigurePrintifyBlueprint from '@/app/dashboard/printify/components/ConfigurePrintifyBlueprint';
+import PrintifyColorsWizard from '@/app/dashboard/printify/components/PrintifyColorsWizard';
 import { TYPE_OPTIONS } from '@/context/printifyBlueprint';
 
 function groupColors(colors) {
@@ -384,6 +385,28 @@ export default function DashboardServices() {
     return connection;
   }, [session.token]);
 
+  const handleWizardError = (message) => {
+    const bp = matchQueueRef.current[matchQueueIndexRef.current];
+    setScraperStatus(`Error: ${message}`);
+    setScraperError({ blueprintId: bp?.id, title: bp?.title, message: message || 'Failed to load blueprint' });
+    setScraperPanel(null);
+  };
+
+  const handleWizardComplete = async () => {
+    const bp = matchQueueRef.current[matchQueueIndexRef.current];
+    if (!bp) return;
+    setScraperPanel(null);
+    setScraperStatus('Publishing blueprint...');
+    try {
+      const resp = await publishBlueprint(bp.id);
+      if (!resp.data?.success) throw new Error(resp.data?.message || 'Failed to publish blueprint');
+      await loadMatchBlueprint(matchQueueIndexRef.current + 1);
+    } catch (error) {
+      setScraperStatus(`Error: ${error?.message || 'Failed to publish blueprint'}`);
+      setScraperError({ blueprintId: bp.id, title: bp.title, message: error?.message || 'Failed to publish blueprint' });
+    }
+  };
+
   const loadMatchBlueprint = async (queueIndex) => {
     const queue = matchQueueRef.current;
     if (queueIndex >= queue.length) {
@@ -399,23 +422,7 @@ export default function DashboardServices() {
     setScraperProgress({ processed: queueIndex + 1, total: queue.length });
     setScraperStatus(`Processing blueprint ${queueIndex + 1}/${queue.length}: ${bp.title}`);
     setScraperError(null);
-
-    try {
-      const imgResp = await getMatchBlueprintImages(bp.id);
-      if (!imgResp.data.success) throw new Error(imgResp.data.message || 'Failed to load blueprint images');
-      matchImagesRef.current = imgResp.data.data || [];
-
-      const connection = await setupScraperHub();
-      const colorResp = await connection.invoke('GetProviderColors', bp.id);
-      await connection.stop();
-      scraperHubRef.current = null;
-      if (!colorResp?.success) throw new Error(colorResp?.message || 'No colors found');
-
-      advanceToImage(0, colorResp.data.providers);
-    } catch (error) {
-      setScraperStatus(`Error: ${error?.message || 'Failed to load blueprint'}`);
-      setScraperError({ blueprintId: bp.id, title: bp.title, message: error?.message || 'Failed to load blueprint' });
-    }
+    setScraperPanel({ blueprintId: bp.id, blueprintTitle: bp.title });
   };
 
   const advanceToImage = (imageIndex, providers) => {
@@ -972,126 +979,15 @@ export default function DashboardServices() {
 
               {/* Panel: image + color checkboxes + Apply button */}
               {scraperPanel && (
-                <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-900">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-                      {scraperPanel.blueprintTitle}
-                    </h3>
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={handleViewBlueprint}
-                        className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-                      >
-                        View Blueprint
-                      </button>
-                      {scraperPanel.printifyUrl && (
-                        <a href={scraperPanel.printifyUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
-                          View on Printify
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-4">
-                    {/* Image */}
-                    <div className="shrink-0">
-                      <img
-                        src={scraperPanel.imageBase64}
-                        alt={`Blueprint ${scraperPanel.blueprintId} - Image ${scraperPanel.imageIndex}`}
-                        width={250}
-                        height={250}
-                        className="rounded-lg border border-gray-300 dark:border-gray-600"
-                      />
-                    </div>
-
-                    {/* Color list with checkboxes */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                          Select Colors for Image {scraperPanel.imageIndex + 1}
-                        </h4>
-                        <button
-                          type="button"
-                          onClick={handleSelectAllNone}
-                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                        >
-                          {allColorsSelected ? 'Select None' : 'Select All'}
-                        </button>
-                      </div>
-                      {scraperPanel.providers.length > 1 ? (
-                        <Accordion
-                          items={providerColorGroups.map((p) => ({
-                            title: p.title,
-                            content: (
-                              <List className="max-h-none overflow-visible">
-                                {renderColorGroups(p.groups)}
-                              </List>
-                            ),
-                          }))}
-                          defaultExpandedIndex={0}
-                        />
-                      ) : (
-                        <List className="max-h-none overflow-visible">
-                          {renderColorGroups(groupedColors)}
-                        </List>
-                      )}
-                      <div className="mt-3 flex flex-wrap items-end gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Type
-                          </label>
-                          <select
-                            className="w-auto inline-block rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 mb-3"
-                            value={selectedType}
-                            onChange={(e) => setSelectedType(e.target.value)}
-                          >
-                            {TYPE_OPTIONS.map((opt) => (
-                              <option key={opt.value} value={opt.value}>{opt.label}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Position
-                          </label>
-                          <select
-                            className="w-auto inline-block rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 mb-3"
-                            value={selectedPosition}
-                            onChange={(e) => setSelectedPosition(e.target.value)}
-                          >
-                            <option value="0">None</option>
-                            <option value="1">Front</option>
-                            <option value="2">Back</option>
-                            <option value="3">Top</option>
-                            <option value="4">Bottom</option>
-                            <option value="5">Left Side</option>
-                            <option value="6">Right Side</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {scraperPanel.imageIndex > 0 && (
-                          <ButtonOutline onClick={handleBackVariants} color="gray">
-                            Back
-                          </ButtonOutline>
-                        )}
-                        <ButtonOutline onClick={() => handleApplyVariants(false)} color="blue">
-                          Apply Variants
-                        </ButtonOutline>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-4 w-full">
-                    <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Blueprint Images ({scraperPanel.imageCount})
-                    </h5>
-                    <CarouselElements
-                      elements={blueprintImageCarouselElements}
-                      className="w-full"
-                      gap={16}
-                    />
-                  </div>
-                </div>
+                <PrintifyColorsWizard
+                  blueprintId={scraperPanel.blueprintId}
+                  onComplete={handleWizardComplete}
+                  onError={handleWizardError}
+                  onCancel={() => {
+                    setScraperPanel(null);
+                    setScraperRunning(false);
+                  }}
+                />
               )}
             </div>
           )}

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { useCollection } from '@/context/collection';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
+import { artworkThumbUrl, artworkImageUrl } from '@/utils/artworkUrls';
 import ButtonOutline from '@/components/ui/button-outline';
 import List, { Item } from '@/components/ui/list';
 import Checked from '@/components/ui/checked';
@@ -33,21 +34,39 @@ export default function SummaryStep() {
     const productImgs = (allProductImages || [])
       .filter(img => img.accepted && img.active)
       .map(img => img.imageUrl);
-    const artworkImgs = (collectionArtwork || [])
-      .filter(a => a.accepted && a.active)
-      .map(a => api.getCollectionArtworkThumbUrl(collectionId, a.itemId, a.id));
+    const artworkImgs = [];
+    for (const a of (collectionArtwork || [])) {
+      if (!a.accepted || !a.active) continue;
+      const totalPlacements = a.totalPlacements || 0;
+      if (totalPlacements > 0) {
+        for (let i = 0; i < totalPlacements; i++) {
+          artworkImgs.push(artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex: i }));
+        }
+      } else {
+        artworkImgs.push(artworkThumbUrl(collectionId, a.itemId, a.id));
+      }
+    }
     return [...productImgs, ...artworkImgs];
-  }, [allProductImages, collectionArtwork, collectionId, api]);
+  }, [allProductImages, collectionArtwork, collectionId]);
 
   const fullSizeImages = useMemo(() => {
     const productImgs = (allProductImages || [])
       .filter(img => img.accepted && img.active)
       .map(img => (img.imageUrl || '').replace('?thumb=true', ''));
-    const artworkImgs = (collectionArtwork || [])
-      .filter(a => a.accepted && a.active)
-      .map(a => api.getCollectionArtworkImageUrl(collectionId, a.itemId, a.id, true));
+    const artworkImgs = [];
+    for (const a of (collectionArtwork || [])) {
+      if (!a.accepted || !a.active) continue;
+      const totalPlacements = a.totalPlacements || 0;
+      if (totalPlacements > 0) {
+        for (let i = 0; i < totalPlacements; i++) {
+          artworkImgs.push(artworkImageUrl(collectionId, a.itemId, a.id, { fullSize: true, placementIndex: i }));
+        }
+      } else {
+        artworkImgs.push(artworkImageUrl(collectionId, a.itemId, a.id, { fullSize: true }));
+      }
+    }
     return [...productImgs, ...artworkImgs];
-  }, [allProductImages, collectionArtwork, collectionId, api]);
+  }, [allProductImages, collectionArtwork, collectionId]);
 
   const blueprintsWithImages = useMemo(() => {
     const imageBlueprintIds = new Set(allProductImages.map(img => img.projectBlueprintId));
@@ -107,8 +126,9 @@ export default function SummaryStep() {
           <Carousel
             images={allImages}
             alt="Collection images"
-            imageWidth="8rem"
-            imageHeight="8rem"
+            imageWidth="150px"
+            imageHeight="150px"
+            imageClassName="object-contain"
             onImageClick={handleImageClick}
           />
         </div>

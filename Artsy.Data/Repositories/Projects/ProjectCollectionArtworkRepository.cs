@@ -77,8 +77,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             artwork.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectCollectionArtwork"" (""Id"", ""ProjectId"", ""CollectionId"", ""ItemId"", ""Active"", ""Width"", ""Height"", ""ImageModel"", ""Prompt"", ""Accepted"", ""ResponseId"", ""FullSize"", ""Index"", ""Opacity"")
-                VALUES (@Id, @ProjectId, @CollectionId, @ItemId, @Active, @Width, @Height, @ImageModel, @Prompt, @Accepted, @ResponseId, @FullSize, @Index, @Opacity)
+                INSERT INTO public.""ProjectCollectionArtwork"" (""Id"", ""ProjectId"", ""CollectionId"", ""ItemId"", ""Active"", ""Width"", ""Height"", ""ImageModel"", ""Prompt"", ""Accepted"", ""ResponseId"", ""FullSize"", ""Index"", ""Opacity"", ""TotalPlacements"")
+                VALUES (@Id, @ProjectId, @CollectionId, @ItemId, @Active, @Width, @Height, @ImageModel, @Prompt, @Accepted, @ResponseId, @FullSize, @Index, @Opacity, @TotalPlacements)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectCollectionArtwork>(query, artwork);
         }
@@ -87,10 +87,10 @@ namespace Artsy.Data.Repositories.Projects
         {
             artwork.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectCollectionArtwork"" (""Id"", ""ProjectId"", ""CollectionId"", ""ItemId"", ""Active"", ""Width"", ""Height"", ""ImageModel"", ""Prompt"", ""Accepted"", ""ResponseId"", ""FullSize"", ""Index"", ""Opacity"")
-                VALUES (@Id, @ProjectId, @CollectionId, @ItemId, @Active, @Width, @Height, @ImageModel, @Prompt, @Accepted, @ResponseId, @FullSize, @Index, @Opacity)
+                INSERT INTO public.""ProjectCollectionArtwork"" (""Id"", ""ProjectId"", ""CollectionId"", ""ItemId"", ""Active"", ""Width"", ""Height"", ""ImageModel"", ""Prompt"", ""Accepted"", ""ResponseId"", ""FullSize"", ""Index"", ""Opacity"", ""TotalPlacements"")
+                VALUES (@Id, @ProjectId, @CollectionId, @ItemId, @Active, @Width, @Height, @ImageModel, @Prompt, @Accepted, @ResponseId, @FullSize, @Index, @Opacity, @TotalPlacements)
                 ON CONFLICT (""CollectionId"", ""ItemId"")
-                DO UPDATE SET ""Active"" = EXCLUDED.""Active"", ""Width"" = EXCLUDED.""Width"", ""Height"" = EXCLUDED.""Height"", ""ImageModel"" = EXCLUDED.""ImageModel"", ""Prompt"" = EXCLUDED.""Prompt"", ""FullSize"" = EXCLUDED.""FullSize"", ""Index"" = EXCLUDED.""Index"", ""Opacity"" = EXCLUDED.""Opacity""
+                DO UPDATE SET ""Active"" = EXCLUDED.""Active"", ""Width"" = EXCLUDED.""Width"", ""Height"" = EXCLUDED.""Height"", ""ImageModel"" = EXCLUDED.""ImageModel"", ""Prompt"" = EXCLUDED.""Prompt"", ""FullSize"" = EXCLUDED.""FullSize"", ""Index"" = EXCLUDED.""Index"", ""Opacity"" = EXCLUDED.""Opacity"", ""TotalPlacements"" = EXCLUDED.""TotalPlacements""
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectCollectionArtwork>(query, artwork);
         }
@@ -100,7 +100,7 @@ namespace Artsy.Data.Repositories.Projects
             const string query = @"
                 UPDATE public.""ProjectCollectionArtwork""
                 SET ""Active"" = @Active, ""Width"" = @Width, ""Height"" = @Height,
-                    ""ImageModel"" = @ImageModel, ""Prompt"" = @Prompt, ""Accepted"" = @Accepted, ""ResponseId"" = @ResponseId, ""FullSize"" = @FullSize, ""Index"" = @Index, ""Opacity"" = @Opacity
+                    ""ImageModel"" = @ImageModel, ""Prompt"" = @Prompt, ""Accepted"" = @Accepted, ""ResponseId"" = @ResponseId, ""FullSize"" = @FullSize, ""Index"" = @Index, ""Opacity"" = @Opacity, ""TotalPlacements"" = @TotalPlacements
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, artwork);
         }

@@ -1,6 +1,7 @@
 import React, { useCallback, useState, useRef, useMemo, useEffect } from 'react';
 import { useCollection } from '@/context/collection';
 import { useDashboard } from '@/context/dashboard';
+import { artworkThumbUrl } from '@/utils/artworkUrls';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 import Checked from '@/components/ui/checked';
@@ -21,14 +22,25 @@ export default function ReadyToGenerate() {
   } = useCollection();
   const { refreshTokens } = useDashboard();
 
-  const acceptedArtworks = collectionArtwork.filter(a => a.active && a.imageModel !== 'custom');
+  const acceptedArtworks = useMemo(() => {
+    const noUpscaleItemIds = new Set(
+      (estimate?.generations || [])
+        .filter(gen => gen.needsUpscale === false)
+        .map(gen => String(gen.itemId))
+    );
+    return collectionArtwork.filter(a =>
+      a.active && a.imageModel !== 'custom' && !noUpscaleItemIds.has(String(a.itemId))
+    );
+  }, [collectionArtwork, estimate]);
   const [thumbRetried, setThumbRetried] = useState({});
   const [thumbFailed, setThumbFailed] = useState({});
   const retryRef = useRef({});
 
-  const artworkImages = acceptedArtworks.map(a =>
-    api.getCollectionArtworkThumbUrl(collectionId, a.itemId, a.id, a.updatedAt || a.id)
-  );
+  const artworkImages = acceptedArtworks.map(a => {
+    // For variant artworks, show the first placement variant thumbnail
+    const placementIndex = a.totalPlacements > 0 ? 0 : null;
+    return artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex, cacheBust: Math.floor(Math.random() * 1000000) });
+  });
 
   const handleImageError = useCallback(async (index) => {
     if (retryRef.current[index]) return;
@@ -64,6 +76,7 @@ export default function ReadyToGenerate() {
   const pendingCount = useMemo(() => {
     if (!estimate?.generations) return 0;
     return estimate.generations.filter(gen =>
+      gen.needsUpscale !== false &&
       !collectionArtwork.some(a => String(a.itemId) === String(gen.itemId) && a.fullSize)
     ).length;
   }, [estimate, collectionArtwork]);
@@ -155,7 +168,9 @@ export default function ReadyToGenerate() {
                 });
               }}
               onImageError={handleImageError}
-              imageClassName="!max-h-none w-[150px] h-[150px] object-contain rounded-lg"
+              imageWidth="150px"
+              imageHeight="150px"
+              imageClassName="!max-h-none w-full h-full object-contain rounded-lg"
               overlayRender={renderOverlay}
             />
           </div>

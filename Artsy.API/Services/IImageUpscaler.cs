@@ -2,5 +2,5 @@ namespace Artsy.API.Services;
 
 public interface IImageUpscaler
 {
-    Task<byte[]> UpscaleAsync(byte[] imageBytes);
+    Task<byte[]> UpscaleAsync(byte[] imageBytes, int scale = 2);
 }

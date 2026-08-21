@@ -11,5 +11,6 @@ namespace Artsy.Data.Entities.Projects
         public Guid? CustomImageId { get; set; }
         public string? IgnoredQuestions { get; set; }
         public string? OpacityJson { get; set; }
+        public string AspectRatio { get; set; } = "1:1";
     }
 }

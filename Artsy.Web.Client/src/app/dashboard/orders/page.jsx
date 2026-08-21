@@ -22,6 +22,13 @@ const capitalize = (s) => {
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
 
+const statusClass = (status) => {
+  const s = status?.toLowerCase() || '';
+  if (s === 'canceled') return 'text-red-600 font-medium';
+  if (s === 'on-hold') return 'text-yellow-600 font-medium';
+  return '';
+};
+
 const sumQty = (items) => (items || []).reduce((acc, i) => acc + (i.quantity || 0), 0);
 
 const parseJson = (s) => {
@@ -139,7 +146,7 @@ export default function OrdersPage() {
                     <td className="px-4 py-3">${formatCents(o.order.totalPrice)}</td>
                     <td className="px-4 py-3">${formatCents(o.order.totalShipping)}</td>
                     <td className="px-4 py-3">${formatCents(o.order.totalTax)}</td>
-                    <td className="px-4 py-3">{capitalize(o.order.status)}</td>
+                    <td className="px-4 py-3"><span className={statusClass(o.order.status)}>{capitalize(o.order.status)}</span></td>
                     <td className="px-4 py-3">{formatDate(o.order.dateCreated)}</td>
                     <td className="px-4 py-3">{formatDate(o.order.dateFulfilled)}</td>
                   </tr>

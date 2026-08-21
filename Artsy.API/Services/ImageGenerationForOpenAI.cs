@@ -75,7 +75,7 @@ namespace Artsy.API.Services
                 throw new InvalidOperationException("OpenAI API key is missing.");
 
             var model = string.IsNullOrWhiteSpace(request.Model) ? "gpt-image-2" : request.Model;
-            var size = FindBestResolution($"{request.Width}x{request.Height}");
+            var size = !string.IsNullOrWhiteSpace(request.CustomSize) ? request.CustomSize : FindBestResolution($"{request.Width}x{request.Height}");
             var quality = string.IsNullOrWhiteSpace(request.Quality) ? "medium" : request.Quality;
 
             var images = new List<OpenAIImageReference>();
@@ -159,21 +159,8 @@ namespace Artsy.API.Services
                 throw new InvalidOperationException("OpenAI API key is missing.");
 
             var model = string.IsNullOrWhiteSpace(request.Model) ? "gpt-image-2" : request.Model;
-            var size = FindBestResolution($"{request.Width}x{request.Height}");
+            var size = !string.IsNullOrWhiteSpace(request.CustomSize) ? request.CustomSize : FindBestResolution($"{request.Width}x{request.Height}");
             var quality = string.IsNullOrWhiteSpace(request.Quality) ? "medium" : request.Quality;
-
-            var images = new List<OpenAIImageReference>();
-            for (var i = 0; i < request.InputImages.Count; i++)
-            {
-                var img = request.InputImages[i];
-                if (img != null && img.Length > 0)
-                {
-                    images.Add(new OpenAIImageReference
-                    {
-                        ImageUrl = GetImageDataUrl(img)
-                    });
-                }
-            }
 
             var jsonOptions = new JsonSerializerOptions
             {
@@ -182,28 +169,87 @@ namespace Artsy.API.Services
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             };
 
-            var imageEditRequest = new OpenAIImageRequest
-            {
-                Model = model,
-                Prompt = request.Prompt,
-                N = 1,
-                Size = size,
-                Quality = quality,
-                Images = images
-            };
-
-            var jsonContent = JsonSerializer.Serialize(imageEditRequest, jsonOptions);
-            var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
             using var client = _httpClientFactory.CreateClient("ImageGeneration");
-            var httpRequest = new HttpRequestMessage(HttpMethod.Post, config.ImageEditEndpoint)
-            {
-                Content = content
-            };
-            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ApiKey);
-
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(_options.TimeoutSeconds));
-            var response = await client.SendAsync(httpRequest, cts.Token);
+
+            HttpResponseMessage response;
+
+            // When a mask is provided, use multipart form data (image + mask as file uploads)
+            if (request.InputMask != null && request.InputMask.Length > 0 && request.InputImages.Count > 0)
+            {
+                using var formContent = new MultipartFormDataContent();
+
+                formContent.Add(new StringContent(model), "model");
+                formContent.Add(new StringContent(request.Prompt), "prompt");
+                formContent.Add(new StringContent("1"), "n");
+                formContent.Add(new StringContent(size), "size");
+                formContent.Add(new StringContent(quality), "quality");
+
+                // First input image as the base "image" file
+                var baseImage = request.InputImages[0];
+                var imageContent = new ByteArrayContent(baseImage);
+                imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+                formContent.Add(imageContent, "image", "image.png");
+
+                // Mask as the "mask" file
+                var maskContent = new ByteArrayContent(request.InputMask);
+                maskContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+                formContent.Add(maskContent, "mask", "mask.png");
+
+                // Additional input images as extra file fields
+                for (var i = 1; i < request.InputImages.Count; i++)
+                {
+                    var extraImg = request.InputImages[i];
+                    if (extraImg == null || extraImg.Length == 0) continue;
+                    var extraContent = new ByteArrayContent(extraImg);
+                    extraContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+                    formContent.Add(extraContent, "image[]", $"image_{i}.png");
+                }
+
+                using var maskRequest = new HttpRequestMessage(HttpMethod.Post, config.ImageEditEndpoint)
+                {
+                    Content = formContent
+                };
+                maskRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ApiKey);
+                response = await client.SendAsync(maskRequest, cts.Token);
+            }
+            else
+            {
+                // No mask: use JSON body with image URLs (existing behavior)
+                var images = new List<OpenAIImageReference>();
+                for (var i = 0; i < request.InputImages.Count; i++)
+                {
+                    var img = request.InputImages[i];
+                    if (img != null && img.Length > 0)
+                    {
+                        images.Add(new OpenAIImageReference
+                        {
+                            ImageUrl = GetImageDataUrl(img)
+                        });
+                    }
+                }
+
+                var imageEditRequest = new OpenAIImageRequest
+                {
+                    Model = model,
+                    Prompt = request.Prompt,
+                    N = 1,
+                    Size = size,
+                    Quality = quality,
+                    Images = images
+                };
+
+                var jsonContent = JsonSerializer.Serialize(imageEditRequest, jsonOptions);
+                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, config.ImageEditEndpoint)
+                {
+                    Content = content
+                };
+                httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ApiKey);
+                response = await client.SendAsync(httpRequest, cts.Token);
+            }
+
             var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
 
             if (!response.IsSuccessStatusCode)
@@ -241,7 +287,7 @@ namespace Artsy.API.Services
                 throw new InvalidOperationException("OpenAI API key is missing.");
 
             var imageModel = string.IsNullOrWhiteSpace(request.Model) ? "gpt-image-2" : request.Model;
-            var toolSize = FindBestResolution($"{request.Width}x{request.Height}");
+            var toolSize = !string.IsNullOrWhiteSpace(request.CustomSize) ? request.CustomSize : FindBestResolution($"{request.Width}x{request.Height}");
             var toolQuality = string.IsNullOrWhiteSpace(request.Quality) ? "medium" : request.Quality;
 
             var jsonOptions = new JsonSerializerOptions
@@ -391,6 +437,82 @@ namespace Artsy.API.Services
             }
 
             return $"{best.W}x{best.H}";
+        }
+
+        /// <summary>
+        /// Calculates a valid GPT image 2.0 custom size for a placement with the given dimensions.
+        /// GPT image 2.0 supports custom sizes where edges are multiples of 16 and ratio ≤ 3:1.
+        /// The returned size matches the placement's aspect ratio (clamped to 3:1) at a generation
+        /// resolution appropriate for upscaling later.
+        /// </summary>
+        /// <param name="placementWidth">Placement print width in pixels</param>
+        /// <param name="placementHeight">Placement print height in pixels</param>
+        /// <returns>Tuple of (width, height, needsCrop) where needsCrop is true when the placement
+        /// ratio exceeds 3:1 and the generated image will need post-generation cropping</returns>
+        public static (int Width, int Height, bool NeedsCrop) CalculateCustomResolution(int placementWidth, int placementHeight)
+        {
+            if (placementWidth <= 0 || placementHeight <= 0)
+                return (1024, 1024, false);
+
+            var ratio = (double)placementWidth / placementHeight;
+            var needsCrop = Math.Abs(ratio) > 3.0 || Math.Abs(ratio) < 1.0 / 3.0;
+
+            // Clamp ratio to 3:1 for generation
+            double genRatio;
+            if (ratio > 3.0)
+                genRatio = 3.0;
+            else if (ratio < 1.0 / 3.0)
+                genRatio = 1.0 / 3.0;
+            else
+                genRatio = ratio;
+
+            // Pick target area based on the larger placement dimension
+            // 2K area (~4M pixels) for placements > 1024px, 1K area (~1M pixels) for smaller
+            var maxDim = Math.Max(placementWidth, placementHeight);
+            var targetArea = maxDim > 1024 ? 2048.0 * 2048 : 1024.0 * 1024;
+
+            // Calculate width and height from target area and ratio
+            var w = Math.Sqrt(targetArea * genRatio);
+            var h = Math.Sqrt(targetArea / genRatio);
+
+            // Round to nearest multiple of 16
+            var width = (int)Math.Round(w / 16) * 16;
+            var height = (int)Math.Round(h / 16) * 16;
+
+            // Ensure minimum dimensions
+            if (width < 64) width = 64;
+            if (height < 64) height = 64;
+
+            return (width, height, needsCrop);
+        }
+
+        /// <summary>
+        /// Parses an aspect ratio string (e.g. "9:16", "1:1", "16:9") and returns pixel dimensions
+        /// at the requested resolution tier. 1K targets ~1M pixels, 2K targets ~4M pixels.
+        /// Dimensions are rounded to multiples of 16 for GPT image 2.0 compatibility.
+        /// </summary>
+        public static (int Width, int Height) GetDimensionsFromAspectRatio(string aspectRatio, int tier)
+        {
+            if (string.IsNullOrWhiteSpace(aspectRatio))
+                aspectRatio = "1:1";
+
+            var parts = aspectRatio.Split(':');
+            if (parts.Length != 2 || !int.TryParse(parts[0], out var rw) || !int.TryParse(parts[1], out var rh) || rw <= 0 || rh <= 0)
+                return (tier, tier);
+
+            var ratio = (double)rw / rh;
+            var targetArea = tier == 1 ? 1024.0 * 1024 : 2048.0 * 2048;
+
+            var w = Math.Sqrt(targetArea * ratio);
+            var h = Math.Sqrt(targetArea / ratio);
+
+            var width = (int)Math.Round(w / 16) * 16;
+            var height = (int)Math.Round(h / 16) * 16;
+
+            if (width < 64) width = 64;
+            if (height < 64) height = 64;
+
+            return (width, height);
         }
     }
 }

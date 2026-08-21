@@ -371,6 +371,11 @@ function DownloadStep() {
 
   return (
     <div className="flex flex-col h-full space-y-4">
+      {printifyUrl && (
+        <div className="flex justify-end">
+          <a href={printifyUrl} target="_blank" rel="noreferrer" className="text-sm text-blue-600 dark:text-blue-400 underline">View Order on Printify</a>
+        </div>
+      )}
       <div className="w-full flex items-center justify-center">
         {imageUrls.length > 0 ? (
           <div className="w-full">
@@ -381,18 +386,18 @@ function DownloadStep() {
         )}
       </div>
       <p className="text-sm text-gray-600 dark:text-gray-300 max-w-[500px]">
-        <a href={downloadUrl} download className="text-blue-600 dark:text-blue-400 underline">Download</a>
-        {' the personalized artwork and apply it to your '}
-        {printifyUrl ? (
-          <a href={printifyUrl} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 underline">order item on Printify</a>
-        ) : (
-          'order item on Printify'
-        )}
-        {' by clicking the Review button for the order item and uploading the artwork.'}
+        Download the personalized artwork and apply it to your order item on Printify by clicking the Review button for the order item and uploading the artwork.
       </p>
-      <div className="buttons flex justify-end gap-2 mt-auto">
-        <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
-        <ButtonOutline color="gray" className="cancel" onClick={onClose}>Close</ButtonOutline>
+      <div className="buttons flex justify-between gap-2 mt-auto">
+        <div className="flex gap-2">
+          {downloadUrl && (
+            <ButtonOutline onClick={() => window.location.href = downloadUrl}>Download Images</ButtonOutline>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
+          <ButtonOutline color="gray" className="cancel" onClick={onClose}>Close</ButtonOutline>
+        </div>
       </div>
     </div>
   );

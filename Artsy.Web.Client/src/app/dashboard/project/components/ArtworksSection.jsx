@@ -221,14 +221,14 @@ export default function ArtworksSection({ projectId, onArtworkChanged }) {
               onClick={() => handleOpenEditArtwork(item)}
               className="rounded-lg bg-white dark:bg-gray-800 shadow hover:shadow-md cursor-pointer overflow-hidden transition"
             >
-              <div className="aspect-square w-full">
+              <div className="w-full">
                 <Carousel
                   images={item.thumbnails || []}
                   alt={item.title || 'Artwork'}
                   singleImage
                   infiniteScroll
                   placeholder="No Previews"
-                  imageClassName="!max-h-none w-full h-full object-cover"
+                  imageClassName="!max-w-[300px] !max-h-[300px] object-contain"
                 />
               </div>
               <div className="p-3">

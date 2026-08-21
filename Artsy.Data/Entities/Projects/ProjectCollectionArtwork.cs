@@ -17,5 +17,6 @@ namespace Artsy.Data.Entities.Projects
         public int Index { get; set; }
         public string PrintifyImageId { get; set; } = "";
         public bool Opacity { get; set; }
+        public int TotalPlacements { get; set; } = 1;
     }
 }

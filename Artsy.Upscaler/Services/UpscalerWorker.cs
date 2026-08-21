@@ -85,6 +85,14 @@ public class UpscalerWorker : BackgroundService
             {
                 _logger.LogInformation("Connection received: POST {Path}", path);
 
+                // Parse scale from query string (default 2, supports 4 for 6K upscaling)
+                var scale = 2;
+                var query = ctx.Request.QueryString;
+                if (!string.IsNullOrWhiteSpace(query["scale"]) && int.TryParse(query["scale"], out var parsedScale))
+                {
+                    scale = parsedScale == 4 ? 4 : 2;
+                }
+
                 using var ms = new MemoryStream();
                 await ctx.Request.InputStream.CopyToAsync(ms, ct);
                 var inputBytes = ms.ToArray();
@@ -96,9 +104,9 @@ public class UpscalerWorker : BackgroundService
                     return;
                 }
 
-                _logger.LogInformation("Received upscale request: {Bytes} bytes", inputBytes.Length);
+                _logger.LogInformation("Received upscale request: {Bytes} bytes (scale={Scale})", inputBytes.Length, scale);
 
-                var result = _engine.Upscale(inputBytes);
+                var result = _engine.Upscale(inputBytes, scale);
 
                 ctx.Response.StatusCode = 200;
                 ctx.Response.ContentType = "application/octet-stream";

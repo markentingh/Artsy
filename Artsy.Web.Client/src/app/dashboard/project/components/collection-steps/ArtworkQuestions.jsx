@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useEffect, useState, useRef } from 'react'
 import { useSession } from '@/context/session';
 import { useCollection } from '@/context/collection';
 import { CustomImages } from '@/api/user/customImages';
+import { artworkImageUrl, artworkThumbUrl } from '@/utils/artworkUrls';
 import TextArea from '@/components/forms/textarea';
 import Select from '@/components/forms/select';
 import ButtonOutline from '@/components/ui/button-outline';
@@ -54,8 +55,8 @@ export default function ArtworkQuestions() {
             const generated = ca.filter(a => a.active && String(a.itemId) === String(r.artworkId));
             for (const a of generated) {
               refArtworks.push({
-                thumb: api.getCollectionArtworkThumbUrl(cId, r.artworkId, a.id),
-                full: api.getCollectionArtworkImageUrl(cId, r.artworkId, a.id, !!a.fullSize),
+                thumb: artworkThumbUrl(cId, r.artworkId, a.id),
+                full: artworkImageUrl(cId, r.artworkId, a.id, { fullSize: !!a.fullSize }),
               });
             }
           }
@@ -89,10 +90,10 @@ export default function ArtworkQuestions() {
       .filter(a => a.active && String(a.itemId) === String(currentItem.id))
       .map(a => ({
         id: a.id,
-        thumbUrl: api.getCollectionArtworkThumbUrl(collectionId, currentItem.id, a.id),
-        fullUrl: api.getCollectionArtworkImageUrl(collectionId, currentItem.id, a.id, !!a.fullSize),
+        thumbUrl: artworkThumbUrl(collectionId, currentItem.id, a.id),
+        fullUrl: artworkImageUrl(collectionId, currentItem.id, a.id, { fullSize: !!a.fullSize }),
       }));
-  }, [currentItem, collectionArtwork, collectionId, api]);
+  }, [currentItem, collectionArtwork, collectionId]);
 
   const thumbImages = useMemo(() => existingArtworks.map(a => a.thumbUrl), [existingArtworks]);
   const fullImages = useMemo(() => existingArtworks.map(a => a.fullUrl), [existingArtworks]);
@@ -125,7 +126,7 @@ export default function ArtworkQuestions() {
     setEstimatingTokens(true);
     estimateTimerRef.current = setTimeout(async () => {
       try {
-        const res = await api.estimateItemTokens(currentItem.id, 2048, 2048, selectedImageModel.id);
+        const res = await api.estimateItemTokens(currentItem.id, selectedImageModel.id);
         if (res.data.success) {
           setCalculatedTokens(res.data.data);
         } else {
@@ -138,7 +139,7 @@ export default function ArtworkQuestions() {
       }
     }, 500);
     return () => { if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current); };
-  }, [currentItem, selectedImageModel, api]);
+  }, [currentItem, selectedImageModel, currentArtwork, api]);
 
   const modelOptions = useMemo(() =>
     (imageModels || []).map((m) => ({ value: m.id, label: m.name })),
@@ -170,7 +171,7 @@ export default function ArtworkQuestions() {
             alt="Generated Artwork"
             singleImage
             infiniteScroll
-            imageClassName="!max-h-none w-full h-full object-contain"
+            imageClassName="!max-w-[300px] !max-h-[300px] object-contain"
             onImageClick={(_src, index) => setArtworkPreview({ images: fullImages, src: fullImages[index], alt: 'Artwork Preview' })}
             placeholder="No Thumbnail"
           />
@@ -183,7 +184,7 @@ export default function ArtworkQuestions() {
             alt="Artwork Previews"
             singleImage
             infiniteScroll
-            imageClassName="!max-h-none w-full h-full object-contain"
+            imageClassName="!max-w-[300px] !max-h-[300px] object-contain"
             onImageClick={(_src, index) => setArtworkPreview({ images: previewFullImages, src: previewFullImages[index], alt: 'Artwork Preview' })}
             placeholder="No Previews"
           />

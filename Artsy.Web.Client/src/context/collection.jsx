@@ -3,6 +3,7 @@ import { useSession } from '@/context/session';
 import { useDashboard } from '@/context/dashboard';
 import { Projects } from '@/api/user/projects';
 import { Instagram } from '@/api/user/instagram';
+import { artworkImageUrl } from '@/utils/artworkUrls';
 import { PrintifyProducts } from '@/api/user/printifyProducts';
 import { ImageGeneration } from '@/api/user/imageGeneration';
 
@@ -266,7 +267,8 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
       if (res.data.success) {
         const artwork = res.data.data;
-        const url = api.getCollectionArtworkImageUrl(colId, item.id, artwork.id, false, Math.floor(Math.random() * 100000));
+        const placementIndex = artwork.totalPlacements > 0 ? 0 : null;
+        const url = artworkImageUrl(colId, item.id, artwork.id, { thumb: true, cacheBust: Math.floor(Math.random() * 100000), placementIndex });
         setCurrentArtwork(artwork);
         setPreviewImageData(url);
         setShowChanges(false);
@@ -340,7 +342,9 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
       const existingArt = collectionArtwork.find(a => String(a.itemId) === String(item.id) && a.active);
       if (existingArt) {
-        setPreviewImageData(api.getCollectionArtworkImageUrl(collectionId, item.id, existingArt.id, false, Math.floor(Math.random() * 100000)));
+        const placementIndex = existingArt.totalPlacements > 0 ? 0 : null;
+        setPreviewImageData(artworkImageUrl(collectionId, item.id, existingArt.id, { thumb: true, cacheBust: Math.floor(Math.random() * 100000), placementIndex }));
+        setCurrentArtwork(existingArt);
         setStep(STEPS.ARTWORK_PREVIEW);
       } else if (questions.length > 0) {
         setPreviewImageData(null);
@@ -398,23 +402,28 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     return [];
   }, [collectionId, projectId, api, blueprints]);
 
+  const selectedImageModelRef = useRef(selectedImageModel);
+  selectedImageModelRef.current = selectedImageModel;
+  const selectedProductImageModelRef = useRef(selectedProductImageModel);
+  selectedProductImageModelRef.current = selectedProductImageModel;
+
   const loadImageModels = useCallback(async () => {
     try {
       const res = await imageGenerationApi.getActiveModels();
       if (res.data.success) {
         const models = res.data.data || [];
         setImageModels(models);
-        if (models.length > 0 && !selectedImageModel) {
+        if (models.length > 0 && !selectedImageModelRef.current) {
           setSelectedImageModel(models[0]);
         }
-        if (models.length > 0 && !selectedProductImageModel) {
+        if (models.length > 0 && !selectedProductImageModelRef.current) {
           setSelectedProductImageModel(models[0]);
         }
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load image models' });
     }
-  }, [api, selectedImageModel, selectedProductImageModel]);
+  }, [api]);
 
   const advanceToNextItem = useCallback((fromIndex = currentItemIndex, artworkOverride = null) => {
     const artwork = artworkOverride || collectionArtwork;
@@ -511,6 +520,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     if (!estimate || estimate.generations.length === 0) return;
 
     const pendingGenerations = estimate.generations.filter(gen =>
+      gen.needsUpscale !== false &&
       !collectionArtwork.some(a => String(a.itemId) === String(gen.itemId) && a.fullSize)
     );
 
@@ -547,7 +557,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
         if (res.data.success) {
           const artwork = res.data.data;
-          const url = api.getCollectionArtworkImageUrl(colId, gen.itemId, artwork.id, true, Math.floor(Math.random() * 100000));
+          const url = artworkImageUrl(colId, gen.itemId, artwork.id, { thumb: true, cacheBust: Math.floor(Math.random() * 100000) });
           results.push({ itemId: gen.itemId, artworkId: artwork.id, url, width: gen.width, height: gen.height });
           setGeneratedArtworks([...results]);
           setCollectionArtwork(prev => prev.map(a =>
@@ -705,6 +715,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         } catch { /* non-critical */ }
 
         const pendingUpscale = (estimateData?.generations || []).filter(gen =>
+          gen.needsUpscale !== false &&
           !artworkList.some(a => String(a.itemId) === String(gen.itemId) && a.fullSize)
         ).length;
         setUpscaleComplete(pendingUpscale === 0);

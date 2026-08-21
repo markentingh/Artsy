@@ -128,6 +128,7 @@ namespace Artsy.API.Controllers
                         p.Id,
                         p.Position,
                         p.ArtworkId,
+                        placementIndex = p.PlacementIndex,
                         artworkItemId = artwork?.ItemId,
                         artworkItemTitle = projectItem?.Title,
                         artworkItemIndex = projectItem?.Index ?? 0,
@@ -135,6 +136,7 @@ namespace Artsy.API.Controllers
                         artworkPrompt = artwork?.Prompt,
                         artworkAccepted = artwork?.Accepted,
                         artworkFullSize = artwork?.FullSize,
+                        artworkTotalPlacements = artwork?.TotalPlacements ?? 1,
                         placeholder = placeholder == null ? null : new { placeholder.Position, placeholder.Width, placeholder.Height, placeholder.DecorationMethod },
                     };
                 }).ToList();
@@ -721,12 +723,9 @@ namespace Artsy.API.Controllers
             if (maxWidth <= 0 || maxHeight <= 0)
                 return (0, 0);
 
-            var resolution = ImageGenerationForOpenAI.FindBestResolution($"{maxWidth}x{maxHeight}");
-            var parts = resolution.Split('x');
-            if (parts.Length == 2 && int.TryParse(parts[0], out var w) && int.TryParse(parts[1], out var h))
-                return (w, h);
-
-            return (1024, 1024);
+            // Use CalculateCustomResolution for GPT image 2.0 custom sizes
+            var (genW, genH, _) = ImageGenerationForOpenAI.CalculateCustomResolution(maxWidth, maxHeight);
+            return (genW, genH);
         }
     }
 }

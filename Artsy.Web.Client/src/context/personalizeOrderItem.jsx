@@ -3,6 +3,7 @@ import { useSession } from '@/context/session';
 import { ImageGeneration } from '@/api/user/imageGeneration';
 import { PersonalizeOrder } from '@/api/user/personalizeOrder';
 import { Projects } from '@/api/user/projects';
+import { artworkThumbUrl } from '@/utils/artworkUrls';
 
 const STEPS = {
   QUESTIONS: 0,
@@ -150,7 +151,7 @@ export function PersonalizeOrderItemProvider({ children, order, orderItem, colle
         setPlacements(placementList.map((p) => ({
           ...p,
           sourceImageUrl: collectionId && p.artworkItemId && p.artworkId
-            ? projectsApi.getCollectionArtworkThumbUrl(collectionId, p.artworkItemId, p.artworkId)
+            ? artworkThumbUrl(collectionId, p.artworkItemId, p.artworkId)
             : '',
         })));
       }

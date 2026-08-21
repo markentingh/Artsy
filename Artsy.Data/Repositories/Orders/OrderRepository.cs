@@ -132,12 +132,77 @@ namespace Artsy.Data.Repositories.Orders
                     WHERE ""Id"" = @Id";
                 await _dbConnection.ExecuteAsync(update, order);
 
-                const string deleteItems = @"DELETE FROM public.""OrderItems"" WHERE ""OrderId"" = @id";
-                const string deleteShipments = @"DELETE FROM public.""OrderShipments"" WHERE ""OrderId"" = @id";
-                await _dbConnection.ExecuteAsync(deleteItems, new { id = order.Id });
-                await _dbConnection.ExecuteAsync(deleteShipments, new { id = order.Id });
+                const string selectItems = @"SELECT * FROM public.""OrderItems"" WHERE ""OrderId"" = @id";
+                var existingItems = (await _dbConnection.QueryAsync<OrderItem>(selectItems, new { id = order.Id })).AsList();
+                var existingItemMap = new Dictionary<string, OrderItem>();
+                foreach (var ei in existingItems)
+                {
+                    var key = $"{ei.ProductId}|{ei.VariantId}";
+                    if (!existingItemMap.ContainsKey(key))
+                        existingItemMap[key] = ei;
+                }
 
-                await InsertItemsAndShipmentsAsync(order.Id, items, shipments);
+                const string updateItem = @"
+                    UPDATE public.""OrderItems"" SET
+                        ""ProductId"" = @ProductId,
+                        ""Quantity"" = @Quantity,
+                        ""VariantId"" = @VariantId,
+                        ""PrintProviderId"" = @PrintProviderId,
+                        ""Cost"" = @Cost,
+                        ""ShippingCost"" = @ShippingCost,
+                        ""Status"" = @Status,
+                        ""Metadata"" = @Metadata,
+                        ""DateSentToProduction"" = @DateSentToProduction,
+                        ""DateFulfilled"" = @DateFulfilled,
+                        ""ProjectId"" = @ProjectId,
+                        ""CollectionId"" = @CollectionId,
+                        ""CollectionProductId"" = @CollectionProductId,
+                        ""CollectionPrintifyProductId"" = @CollectionPrintifyProductId
+                    WHERE ""Id"" = @Id";
+                const string insertItem = @"
+                    INSERT INTO public.""OrderItems"" (""Id"", ""OrderId"", ""ProductId"", ""Quantity"", ""VariantId"", ""PrintProviderId"", ""Cost"", ""ShippingCost"", ""Status"", ""Metadata"", ""DateSentToProduction"", ""DateFulfilled"", ""ProjectId"", ""CollectionId"", ""CollectionProductId"", ""CollectionPrintifyProductId"")
+                    VALUES (@Id, @OrderId, @ProductId, @Quantity, @VariantId, @PrintProviderId, @Cost, @ShippingCost, @Status, @Metadata, @DateSentToProduction, @DateFulfilled, @ProjectId, @CollectionId, @CollectionProductId, @CollectionPrintifyProductId)";
+
+                foreach (var item in items)
+                {
+                    var key = $"{item.ProductId}|{item.VariantId}";
+                    if (existingItemMap.TryGetValue(key, out var existingItem))
+                    {
+                        item.Id = existingItem.Id;
+                        item.OrderId = order.Id;
+                        await _dbConnection.ExecuteAsync(updateItem, item);
+                        existingItemMap.Remove(key);
+                    }
+                    else
+                    {
+                        item.Id = Guid.NewGuid();
+                        item.OrderId = order.Id;
+                        await _dbConnection.ExecuteAsync(insertItem, item);
+                    }
+                }
+
+                const string deleteAnswers = @"DELETE FROM public.""OrderItemAnswers"" WHERE ""OrderItemId"" = @id";
+                const string deleteArtworks = @"DELETE FROM public.""OrderItemArtworks"" WHERE ""OrderItemId"" = @id";
+                const string deleteItem = @"DELETE FROM public.""OrderItems"" WHERE ""Id"" = @id";
+                foreach (var leftover in existingItemMap.Values)
+                {
+                    await _dbConnection.ExecuteAsync(deleteAnswers, new { id = leftover.Id });
+                    await _dbConnection.ExecuteAsync(deleteArtworks, new { id = leftover.Id });
+                    await _dbConnection.ExecuteAsync(deleteItem, new { id = leftover.Id });
+                }
+
+                const string deleteShipments = @"DELETE FROM public.""OrderShipments"" WHERE ""OrderId"" = @id";
+                const string insertShipment = @"
+                    INSERT INTO public.""OrderShipments"" (""Id"", ""OrderId"", ""Carrier"", ""Number"", ""Url"", ""DeliveredAt"")
+                    VALUES (@Id, @OrderId, @Carrier, @Number, @Url, @DeliveredAt)";
+                await _dbConnection.ExecuteAsync(deleteShipments, new { id = order.Id });
+                foreach (var shipment in shipments)
+                {
+                    shipment.Id = Guid.NewGuid();
+                    shipment.OrderId = order.Id;
+                    await _dbConnection.ExecuteAsync(insertShipment, shipment);
+                }
+
                 return new SyncResultItem { IsUpdated = true };
             }
         }

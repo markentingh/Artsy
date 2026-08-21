@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspens
 import { useCollection } from '@/context/collection';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
+import { artworkJpgWithBgThumbUrl } from '@/utils/artworkUrls';
 import ButtonOutline from '@/components/ui/button-outline';
 import Icon from '@/components/ui/icon';
 import Message from '@/components/ui/message';
@@ -38,16 +39,34 @@ export default function PostSocialMedia() {
   }, [items]);
 
   const gridImages = useMemo(() => {
-    const artworkImgs = (collectionArtwork || [])
-      .filter(a => a.accepted && a.active && socialMediaItemIds.has(String(a.itemId)))
-      .map(a => ({
-        id: `artwork-${a.id}`,
-        type: 'artwork',
-        artworkId: a.id,
-        itemId: a.itemId,
-        url: api.getCollectionArtworkJpgWithBgThumbUrl(collectionId, a.itemId, a.id),
-        label: 'Artwork',
-      }));
+    const artworkImgs = [];
+    for (const a of (collectionArtwork || [])) {
+      if (!a.accepted || !a.active || !socialMediaItemIds.has(String(a.itemId))) continue;
+      const totalPlacements = a.totalPlacements || 0;
+      if (totalPlacements > 0) {
+        for (let i = 0; i < totalPlacements; i++) {
+          artworkImgs.push({
+            id: `artwork-${a.id}-${i}`,
+            type: 'artwork',
+            artworkId: a.id,
+            itemId: a.itemId,
+            placementIndex: i,
+            url: artworkJpgWithBgThumbUrl(collectionId, a.itemId, a.id, { placementIndex: i }),
+            label: `Artwork ${i + 1}`,
+          });
+        }
+      } else {
+        artworkImgs.push({
+          id: `artwork-${a.id}`,
+          type: 'artwork',
+          artworkId: a.id,
+          itemId: a.itemId,
+          placementIndex: null,
+          url: artworkJpgWithBgThumbUrl(collectionId, a.itemId, a.id),
+          label: 'Artwork',
+        });
+      }
+    }
 
     const productImgs = (allProductImages || [])
       .filter(img => img.accepted && img.active)

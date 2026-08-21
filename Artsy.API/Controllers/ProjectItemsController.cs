@@ -267,7 +267,7 @@ namespace Artsy.API.Controllers
         }
 
         [HttpGet("estimate-item-tokens")]
-        public async Task<IActionResult> EstimateItemTokens([FromQuery] Guid itemId, [FromQuery] int width = 1024, [FromQuery] int height = 1024, [FromQuery] int modelId = 0)
+        public async Task<IActionResult> EstimateItemTokens([FromQuery] Guid itemId, [FromQuery] int modelId = 0)
         {
             var userId = GetUserId();
             if (userId == Guid.Empty)
@@ -286,21 +286,16 @@ namespace Artsy.API.Controllers
                 if (project == null)
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
-                var artworkList = await _projectItemArtworkRepository.GetByItemIdAsync(itemId);
-                var artwork = artworkList.FirstOrDefault();
-                if (artwork == null || string.IsNullOrWhiteSpace(artwork.ImageModel))
-                    return Json(new ApiResponse { success = false, message = "No image model configured for this item." });
+                // Build the generation plan to get accurate dimensions, reference images, and tasks
+                var plan = await _artworkGenerationPlanService.BuildPlanAsync(item.ProjectId, Guid.Empty, itemId);
 
                 ImageGenerationModel? model;
                 if (modelId > 0)
                     model = await _imageGenerationModelRepository.GetByIdAsync(modelId);
                 else
-                    model = await _imageGenerationModelRepository.GetByModelKeyAsync(artwork.ImageModel);
+                    model = await _imageGenerationModelRepository.GetByModelKeyAsync(plan.Artwork.ImageModel);
                 if (model == null)
                     return Json(new ApiResponse { success = false, message = "Image model not found." });
-
-                var references = await _projectItemReferenceRepository.GetByItemIdAsync(itemId);
-                var inputImages = references.Select(r => (1024, 1024)).ToList() as IReadOnlyList<(int width, int height)>;
 
                 var estImageGen = _imageGenerations.FirstOrDefault(g => g.ModelKey.Equals(model.ModelKey, StringComparison.OrdinalIgnoreCase));
                 if (estImageGen == null)
@@ -308,20 +303,35 @@ namespace Artsy.API.Controllers
 
                 var tokenizer = estImageGen.CreateTokenizer(model);
                 var tokenCost = _tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m;
-                var result = tokenizer.CalculateTokens(
-                    artwork.Prompt ?? "",
-                    width > 0 ? width : 1024,
-                    height > 0 ? height : 1024,
-                    "medium",
-                    inputImages,
-                    "auto",
-                    tokenCost
-                );
+
+                // Use reference image dimensions from the plan
+                var inputImageDimensions = plan.ReferenceImages
+                    .Where(r => r.Width > 0 && r.Height > 0)
+                    .Select(r => (r.Width, r.Height))
+                    .ToList() as IReadOnlyList<(int width, int height)>;
+
+                // Sum tokens across all tasks (variants)
+                var totalTokens = 0m;
+                var totalCost = 0m;
+                foreach (var task in plan.Tasks)
+                {
+                    var result = tokenizer.CalculateTokens(
+                        plan.FinalPrompt,
+                        task.Width,
+                        task.Height,
+                        "medium",
+                        inputImageDimensions,
+                        "auto",
+                        tokenCost
+                    );
+                    totalTokens += result.PlatformTokens;
+                    totalCost += result.EstimatedCostUSD;
+                }
 
                 return Json(new ApiResponse
                 {
                     success = true,
-                    data = result.PlatformTokens
+                    data = (int)Math.Ceiling(totalTokens)
                 });
             }
             catch (Exception ex)

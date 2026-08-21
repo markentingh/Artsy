@@ -23,6 +23,7 @@ ALTER TABLE public."ProjectCollectionArtwork" ADD COLUMN IF NOT EXISTS "Index" I
 ALTER TABLE public."ProjectCollectionArtwork" ALTER COLUMN "ResponseId" TYPE VARCHAR(64);
 ALTER TABLE public."ProjectCollectionArtwork" ADD COLUMN IF NOT EXISTS "PrintifyImageId" VARCHAR(32) NOT NULL DEFAULT '';
 ALTER TABLE public."ProjectCollectionArtwork" ADD COLUMN IF NOT EXISTS "Opacity" BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public."ProjectCollectionArtwork" ADD COLUMN IF NOT EXISTS "TotalPlacements" INT NOT NULL DEFAULT 1;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_ProjectCollectionArtwork_CollectionId_ItemId"
     ON public."ProjectCollectionArtwork" ("CollectionId", "ItemId");

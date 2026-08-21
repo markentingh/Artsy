@@ -125,7 +125,9 @@ namespace Artsy.API.Controllers
                 }
 
                 modelRequest.Prompt = finalPrompt;
-                modelRequest.Size = "1024x1024";
+                // Use the artwork's aspect ratio to determine preview dimensions at 1K
+                var (previewW, previewH) = ImageGenerationForOpenAI.GetDimensionsFromAspectRatio(artwork.AspectRatio, 1);
+                modelRequest.Size = $"{previewW}x{previewH}";
                 modelRequest.Quality = "low";
 
                 var references = await _projectItemReferenceRepository.GetByItemIdAsync(request.ItemId);
@@ -185,8 +187,8 @@ namespace Artsy.API.Controllers
                         Model = genModel.Model,
                         Prompt = finalPrompt,
                         InputImages = inputImages,
-                        Width = 1024,
-                        Height = 1024,
+                        Width = previewW,
+                        Height = previewH,
                         Quality = "low"
                     };
 
@@ -200,7 +202,7 @@ namespace Artsy.API.Controllers
 
                     var previewTokenCost = _tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m;
                     var previewTokenizer = imageGen.CreateTokenizer(genModel);
-                    var previewTokenCalc = previewTokenizer.CalculateTokens(finalPrompt, 1024, 1024, "low", previewInputDimensions, "auto", previewTokenCost);
+                    var previewTokenCalc = previewTokenizer.CalculateTokens(finalPrompt, previewW, previewH, "low", previewInputDimensions, "auto", previewTokenCost);
 
                     if (!await _aiTokenService.UseTokensAsync(userId, previewTokenCalc.PlatformTokens))
                         throw new InvalidOperationException("Not enough tokens to generate the preview. Please purchase more tokens before continuing.");
@@ -220,7 +222,7 @@ namespace Artsy.API.Controllers
                         Tokens = previewTokenCalc.PlatformTokens,
                         Prompt = finalPrompt,
                         Filename = $"{createdPreview.Id}.jpg",
-                        Resolution = "1024x1024",
+                        Resolution = $"{previewW}x{previewH}",
                         InputImages = inputImages.Count,
                         InputImageJson = System.Text.Json.JsonSerializer.Serialize(inputImageRefs),
                         Type = 0,

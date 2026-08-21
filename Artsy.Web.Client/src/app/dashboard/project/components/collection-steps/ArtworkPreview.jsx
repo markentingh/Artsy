@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import { useCollection } from '@/context/collection';
+import { artworkImageUrl, artworkJpgWithBgUrl } from '@/utils/artworkUrls';
 import TextArea from '@/components/forms/textarea';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
@@ -18,17 +19,63 @@ export default function ArtworkPreview() {
     api, onClose, onSaved, setArtworkPreview, setStep, STEPS, goBack,
   } = useCollection();
 
+  const rnd = () => Math.floor(Math.random() * 100000);
+
   const hasOpacity = currentArtwork?.opacity === true;
+  const totalPlacements = currentArtwork?.totalPlacements || 0;
+  const hasVariants = totalPlacements > 0;
 
   const carouselImages = useMemo(() => {
     if (!previewImageData || !currentArtwork || !collectionId) return null;
+
+    // When the artwork has placement variants, show each variant in the carousel
+    if (hasVariants) {
+      const images = [];
+      for (let i = 0; i < totalPlacements; i++) {
+        const url = artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { thumb: true, cacheBust: rnd(), placementIndex: i });
+        images.push(url);
+      }
+      // For opacity artworks, also add the JPG-with-bg version of the first variant
+      if (hasOpacity) {
+        const jpgWithBgUrl = artworkJpgWithBgUrl(collectionId, currentItem.id, currentArtwork.id, { thumb: true, cacheBust: rnd(), placementIndex: 0 });
+        images.push(jpgWithBgUrl);
+      }
+      return images;
+    }
+
+    // Single artwork with opacity: show PNG + JPG with background
     if (hasOpacity) {
       const pngUrl = previewImageData;
-      const jpgWithBgUrl = api.getCollectionArtworkJpgWithBgUrl(collectionId, currentItem.id, currentArtwork.id, false, Math.floor(Math.random() * 100000));
+      const jpgWithBgUrl = artworkJpgWithBgUrl(collectionId, currentItem.id, currentArtwork.id, { thumb: true, cacheBust: rnd() });
       return [pngUrl, jpgWithBgUrl];
     }
     return null;
-  }, [previewImageData, currentArtwork, hasOpacity, collectionId, currentItem, api]);
+  }, [previewImageData, currentArtwork, hasOpacity, hasVariants, totalPlacements, collectionId, currentItem]);
+
+  // Full-size image URLs for the click-to-enlarge preview modal
+  const fullSizeImages = useMemo(() => {
+    if (!currentArtwork || !collectionId) return null;
+
+    if (hasVariants) {
+      const images = [];
+      for (let i = 0; i < totalPlacements; i++) {
+        images.push(artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust: rnd(), placementIndex: i }));
+      }
+      if (hasOpacity) {
+        images.push(artworkJpgWithBgUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust: rnd(), placementIndex: 0 }));
+      }
+      return images;
+    }
+
+    if (hasOpacity) {
+      return [
+        artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust: rnd() }),
+        artworkJpgWithBgUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust: rnd() }),
+      ];
+    }
+
+    return [artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust: rnd() })];
+  }, [currentArtwork, hasOpacity, hasVariants, totalPlacements, collectionId, currentItem]);
 
   const handleTryAgain = useCallback(() => {
     setStep(STEPS.ARTWORK_QUESTIONS);
@@ -79,36 +126,36 @@ export default function ArtworkPreview() {
         Artwork {currentItemIndex + 1} of {aiItems.length}: {currentItem?.title || 'Untitled'}
       </h3>
       <div className="flex flex-col items-center gap-4">
-        <div className="w-[512px] h-[512px] max-w-full flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden">
+        <div className="w-[350px] max-w-full min-h-[100px] flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden">
           {isGenerating ? (
-            <Spinner className="text-3xl" />
-          ) : hasOpacity && carouselImages ? (
+            <Spinner className="text-3xl my-16" />
+          ) : (hasOpacity || hasVariants) && carouselImages ? (
             <div
-              className="w-full h-full"
-              style={{
+              className="w-full"
+              style={hasOpacity ? {
                 backgroundImage: 'url(/checkerboard.png)',
                 backgroundSize: '20px 20px',
                 backgroundRepeat: 'repeat',
-              }}
+              } : undefined}
             >
               <Carousel
                 images={carouselImages}
                 alt="Artwork preview"
                 singleImage
                 infiniteScroll
-                imageClassName="!max-h-none w-full h-[512px] object-contain"
-                onImageClick={(src) => setArtworkPreview({ images: carouselImages, src })}
+                imageClassName="!max-w-[350px] !max-h-[350px] object-contain"
+                onImageClick={(_src, index) => setArtworkPreview({ images: fullSizeImages || carouselImages, src: fullSizeImages?.[index] || _src, _idx: index })}
               />
             </div>
           ) : previewImageData ? (
             <img
               src={previewImageData}
               alt="Preview"
-              className="w-full h-full object-contain cursor-pointer"
-              onClick={() => setArtworkPreview({ images: [previewImageData], src: previewImageData })}
+              className="!max-w-[350px] !max-h-[350px] object-contain cursor-pointer"
+              onClick={() => setArtworkPreview({ images: fullSizeImages || [previewImageData], src: fullSizeImages?.[0] || previewImageData })}
             />
           ) : (
-            <span className="text-sm text-gray-500 dark:text-gray-400">No preview generated yet.</span>
+            <span className="text-sm text-gray-500 dark:text-gray-400 my-16">No preview generated yet.</span>
           )}
         </div>
 

@@ -45,7 +45,7 @@ namespace Artsy.Data.Repositories
                     ""BlueprintId"" = @BlueprintId,
                     ""PrintProviderId"" = @PrintProviderId,
                     ""Color"" = @Color,
-                    ""HexColor"" = @HexColor,
+                    ""HexColor"" = COALESCE(NULLIF(EXCLUDED.""HexColor"", ''), ""PrintifyBlueprintVariants"".""HexColor""),
                     ""Options"" = @Options,
                     ""Size"" = @Size,
                     ""DecorationMethods"" = @DecorationMethods,

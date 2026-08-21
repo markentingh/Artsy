@@ -374,7 +374,7 @@ export default function IdeaModal({ projectId, ideaId, onClose, onIdeaCreated, o
                         singleImage
                         infiniteScroll
                         placeholder="No Previews"
-                        imageClassName="!max-h-none w-full h-full object-cover"
+                        imageClassName="!max-w-[240px] !max-h-[240px] object-contain"
                       />
                     </div>
                     <div className="flex-1 min-w-0">

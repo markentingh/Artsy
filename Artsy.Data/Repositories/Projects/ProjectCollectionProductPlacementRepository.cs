@@ -38,5 +38,21 @@ namespace Artsy.Data.Repositories.Projects
                 }
             });
         }
+
+        public async Task DeleteByProductIdAsync(Guid productId)
+        {
+            const string query = @"DELETE FROM public.""ProjectCollectionProductPlacements""
+                WHERE ""ProductId"" = @productId";
+            await _dbConnection.ExecuteAsync(query, new { productId });
+        }
+
+        public async Task CreateAsync(ProjectCollectionProductPlacement placement)
+        {
+            if (placement.Id == Guid.Empty) placement.Id = Guid.NewGuid();
+            const string query = @"
+                INSERT INTO public.""ProjectCollectionProductPlacements"" (""Id"", ""ProductId"", ""ArtworkId"", ""ArtworkPlacementId"", ""Position"", ""VariantIds"", ""PlacementIndex"")
+                VALUES (@Id, @ProductId, @ArtworkId, @ArtworkPlacementId, @Position, @VariantIds, @PlacementIndex)";
+            await _dbConnection.ExecuteAsync(query, placement);
+        }
     }
 }

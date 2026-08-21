@@ -91,10 +91,11 @@ namespace Artsy.API.Controllers
             try
             {
                 var artwork = await _projectCollectionArtworkRepository.GetByCollectionIdAsync(collectionId);
-                return Json(new ApiResponse
+                var result = new List<object>();
+                foreach (var a in artwork)
                 {
-                    success = true,
-                    data = artwork.Select(a => new
+                    var placements = await _projectCollectionArtworkPlacementRepository.GetByArtworkIdAsync(a.Id);
+                    result.Add(new
                     {
                         id = a.Id,
                         itemId = a.ItemId,
@@ -106,9 +107,20 @@ namespace Artsy.API.Controllers
                         height = a.Height,
                         index = a.Index,
                         printifyImageId = a.PrintifyImageId,
-                        opacity = a.Opacity
-                    })
-                });
+                        opacity = a.Opacity,
+                        totalPlacements = a.TotalPlacements,
+                        placements = placements.Select(p => new
+                        {
+                            id = p.Id,
+                            width = p.Width,
+                            height = p.Height,
+                            index = p.Index,
+                            fullSize = p.FullSize,
+                            printifyImageId = p.PrintifyImageId
+                        })
+                    });
+                }
+                return Json(new ApiResponse { success = true, data = result });
             }
             catch (Exception ex)
             {
@@ -192,10 +204,22 @@ namespace Artsy.API.Controllers
                 if (item == null || item.ProjectId != request.ProjectId)
                     return Json(new ApiResponse { success = false, message = "Item not found." });
 
-                var artworkList = await _projectItemArtworkRepository.GetByItemIdAsync(request.ItemId);
-                var artwork = artworkList.FirstOrDefault();
-                if (artwork == null || string.IsNullOrWhiteSpace(artwork.Prompt))
-                    return Json(new ApiResponse { success = false, message = "No prompt configured for this item." });
+                if (request.ModelId == null || request.ModelId <= 0)
+                    return Json(new ApiResponse { success = false, message = "Image model is required." });
+
+                var genModel = await _imageGenerationModelRepository.GetByIdAsync(request.ModelId.Value);
+                if (genModel == null)
+                    return Json(new ApiResponse { success = false, message = "Image model not found in database." });
+
+                // Build the generation plan (placements, variants, references, prompt, mask requirements)
+                var plan = await _artworkGenerationPlanService.BuildPlanAsync(
+                    request.ProjectId, request.CollectionId, request.ItemId,
+                    request.RequestedChanges, request.Answers);
+
+                if (string.IsNullOrWhiteSpace(plan.FinalPrompt))
+                    return Json(new ApiResponse { success = false, message = "Prompt is required to generate artwork." });
+
+                var opacitySettings = _opacityService.ParseOpacityJson(plan.Artwork.OpacityJson);
 
                 var jsonOptions = new JsonSerializerOptions
                 {
@@ -204,169 +228,14 @@ namespace Artsy.API.Controllers
                     DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
                 };
 
-                if (request.ModelId == null || request.ModelId <= 0)
-                    return Json(new ApiResponse { success = false, message = "Image model is required." });
-
-                var genModel = await _imageGenerationModelRepository.GetByIdAsync(request.ModelId.Value);
-                if (genModel == null)
-                    return Json(new ApiResponse { success = false, message = "Image model not found in database." });
-
                 var modelRequest = new OpenAIImageRequest();
                 modelRequest.Model = genModel.Model;
-
-                var promptBuilder = new StringBuilder(artwork.Prompt ?? "");
-
-                if (request.Answers != null && request.Answers.Count > 0)
-                {
-                    var projectQuestions = await _projectQuestionRepository.GetByProjectIdAsync(request.ProjectId);
-                    var itemQuestions = await _projectItemQuestionRepository.GetByItemIdAsync(request.ItemId);
-
-                    var ignoredQuestionIds = new HashSet<Guid>();
-                    if (!string.IsNullOrWhiteSpace(artwork.IgnoredQuestions))
-                    {
-                        try
-                        {
-                            var ignoredList = JsonSerializer.Deserialize<List<Guid>>(artwork.IgnoredQuestions);
-                            if (ignoredList != null)
-                                ignoredQuestionIds = new HashSet<Guid>(ignoredList);
-                        }
-                        catch { }
-                    }
-
-                    var questionLookup = new Dictionary<Guid, string>();
-                    foreach (var q in projectQuestions)
-                    {
-                        if (ignoredQuestionIds.Contains(q.Id))
-                            continue;
-                        questionLookup[q.Id] = q.Question;
-                    }
-                    foreach (var q in itemQuestions)
-                        questionLookup[q.Id] = q.Question;
-
-                    foreach (var answer in request.Answers)
-                    {
-                        if (string.IsNullOrWhiteSpace(answer.Answer))
-                            continue;
-                        if (questionLookup.TryGetValue(answer.QuestionId, out var questionText))
-                        {
-                            promptBuilder.AppendLine();
-                            promptBuilder.AppendLine($"Question: {questionText}");
-                            promptBuilder.AppendLine($"Answer: {answer.Answer}");
-                        }
-                    }
-                }
-
-                if (!string.IsNullOrWhiteSpace(request.RequestedChanges))
-                {
-                    promptBuilder.AppendLine();
-                    promptBuilder.AppendLine($"Requested Changes: {request.RequestedChanges}");
-                }
-
-                var finalPrompt = promptBuilder.ToString().Trim();
-                if (string.IsNullOrWhiteSpace(finalPrompt))
-                    return Json(new ApiResponse { success = false, message = "Prompt is required to generate artwork." });
-
-                // Append chroma key background instruction if OpacityJson has chroma keys
-                var opacitySettings = _opacityService.ParseOpacityJson(artwork.OpacityJson);
-                if (opacitySettings != null && opacitySettings.ChromaKeys.Count > 0)
-                {
-                    var firstColor = opacitySettings.ChromaKeys[0];
-                    var hexColor = $"#{firstColor.R:X2}{firstColor.G:X2}{firstColor.B:X2}";
-                    finalPrompt += $" the background for this image must be a completely flat, uniform, solid color using {hexColor} hex color with no gradients, textures, shadows, or objects, filling the entire background area, so that we can apply a chroma key to the image later";
-                }
-
-                modelRequest.Prompt = finalPrompt;
-
-                var blueprints = await _projectBlueprintRepository.GetByProjectIdAsync(request.ProjectId);
-                var placementDims = new List<(int W, int H)>();
-                foreach (var bp in blueprints)
-                {
-                    if (string.IsNullOrWhiteSpace(bp.PlacementJson)) continue;
-                    try
-                    {
-                        var placements = JsonSerializer.Deserialize<List<PlacementDto>>(bp.PlacementJson);
-                        if (placements == null) continue;
-                        foreach (var p in placements)
-                        {
-                            if (p.GetItemId() == request.ItemId)
-                                placementDims.Add(p.GetDimensions());
-                        }
-                    }
-                    catch { }
-                }
-
-                int width, height;
-                if (placementDims.Any())
-                {
-                    var maxDim = placementDims.Max(d => Math.Max(d.W, d.H));
-                    if (maxDim <= 1024)
-                    {
-                        width = 1024;
-                        height = 1024;
-                    }
-                    else
-                    {
-                        width = 2048;
-                        height = 2048;
-                    }
-                }
-                else
-                {
-                    width = request.Width > 0 ? request.Width : 2048;
-                    height = request.Height > 0 ? request.Height : 2048;
-                }
-
-                modelRequest.Size = ImageGenerationForOpenAI.FindBestResolution($"{width}x{height}");
+                modelRequest.Prompt = plan.FinalPrompt;
+                modelRequest.Size = ImageGenerationForOpenAI.FindBestResolution($"{plan.Width}x{plan.Height}");
                 modelRequest.Quality = "medium";
 
-                var references = await _projectItemReferenceRepository.GetByItemIdAsync(request.ItemId);
-                var inputImages = new List<byte[]>();
-                var inputImageRefs = new List<object>();
-                if (references != null && references.Any())
-                {
-                    foreach (var reference in references)
-                    {
-                        byte[]? imageBytes = null;
-
-                        if (reference.ArtworkId.HasValue)
-                        {
-                            var refCollectionArtwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(request.CollectionId, reference.ArtworkId.Value);
-                            if (refCollectionArtwork != null)
-                            {
-                                if (refCollectionArtwork.Opacity)
-                                {
-                                    imageBytes = await _imageService.GetProjectCollectionArtworkPngAsync(reference.ProjectId, request.CollectionId, reference.ArtworkId.Value, refCollectionArtwork.Id);
-                                    if (imageBytes == null || imageBytes.Length == 0)
-                                    {
-                                        imageBytes = await _imageService.GetProjectCollectionArtworkFullSizePngAsync(reference.ProjectId, request.CollectionId, reference.ArtworkId.Value, refCollectionArtwork.Id);
-                                    }
-                                }
-                                else
-                                {
-                                    imageBytes = await _imageService.GetProjectCollectionArtworkImageAsync(reference.ProjectId, request.CollectionId, reference.ArtworkId.Value, refCollectionArtwork.Id);
-                                    if (imageBytes == null || imageBytes.Length == 0)
-                                    {
-                                        imageBytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(reference.ProjectId, request.CollectionId, reference.ArtworkId.Value, refCollectionArtwork.Id);
-                                    }
-                                }
-                            }
-                        }
-                        else if (reference.CustomImageId.HasValue)
-                        {
-                            var customImg = await _customImageRepository.GetByIdAsync(reference.CustomImageId.Value);
-                            if (customImg != null)
-                            {
-                                imageBytes = await _imageService.GetCustomImageAsync(customImg.AppUserId, customImg.Id, customImg.Extension);
-                            }
-                        }
-
-                        if (imageBytes != null && imageBytes.Length > 0)
-                        {
-                            inputImages.Add(imageBytes);
-                            inputImageRefs.Add(new { type = reference.ArtworkId.HasValue ? "artwork" : "custom", id = (reference.ArtworkId ?? reference.CustomImageId).ToString() });
-                        }
-                    }
-                }
+                var inputImages = plan.ReferenceImages.Select(r => r.ImageBytes).ToList();
+                var inputImageRefs = plan.ReferenceImages.Select(r => (object)new { type = r.Type, id = r.Id }).ToList();
 
                 var imageModelJson = JsonSerializer.Serialize(modelRequest, jsonOptions);
 
@@ -376,13 +245,17 @@ namespace Artsy.API.Controllers
                     CollectionId = request.CollectionId,
                     ItemId = request.ItemId,
                     Active = true,
-                    Width = width,
-                    Height = height,
+                    Width = plan.Width,
+                    Height = plan.Height,
                     ImageModel = genModel.Model,
-                    Prompt = finalPrompt,
-                    Index = item.Index
+                    Prompt = plan.FinalPrompt,
+                    Index = item.Index,
+                    TotalPlacements = plan.TotalPlacements
                 };
                 var created = await _projectCollectionArtworkRepository.UpsertAsync(collectionArtwork);
+
+                // Delete any existing placement variants for this artwork (regeneration scenario)
+                await _projectCollectionArtworkPlacementRepository.DeleteByArtworkIdAsync(created.Id);
 
                 try
                 {
@@ -397,17 +270,8 @@ namespace Artsy.API.Controllers
                     }
 
                     var genQuality = request.IsFullSize ? "high" : "medium";
-                    var genRequest = new ImageGenerationRequest
-                    {
-                        Model = genModel.Model,
-                        Prompt = finalPrompt,
-                        InputImages = inputImages,
-                        Width = width,
-                        Height = height,
-                        Quality = genQuality,
-                        PreviousResponseId = previousResponseId,
-                        UseResponsesApi = false
-                    };
+                    var tokenCost = _tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m;
+                    var tokenizer = imageGen.CreateTokenizer(genModel);
 
                     var inputImageDimensions = new List<(int width, int height)>();
                     foreach (var img in inputImages)
@@ -417,107 +281,175 @@ namespace Artsy.API.Controllers
                             inputImageDimensions.Add(dims.Value);
                     }
 
-                    var tokenCost = _tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m;
-                    var tokenizer = imageGen.CreateTokenizer(genModel);
-                    var tokenCalc = tokenizer.CalculateTokens(finalPrompt, width, height, genQuality, inputImageDimensions, "auto", tokenCost);
-
-                    if (!await _aiTokenService.UseTokensAsync(userId, tokenCalc.PlatformTokens))
-                        throw new InvalidOperationException("Not enough tokens to generate the artwork. Please purchase more tokens before continuing.");
-
-                    var genResult = await imageGen.GenerateAsync(genRequest);
-                    if (request.IsFullSize)
-                        await _imageService.SaveProjectCollectionArtworkFullSizeAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, genResult.ImageBytes);
-                    else
-                        await _imageService.SaveProjectCollectionArtworkAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, genResult.ImageBytes);
-
-                    // Apply opacity mask (chroma key) processing if configured
-                    if (opacitySettings != null && opacitySettings.ChromaKeys.Count > 0)
+                    // Generate one image per task in the plan (single task if no placements, one per variant otherwise)
+                    for (var i = 0; i < plan.Tasks.Count; i++)
                     {
-                        // Apply chroma keys to create transparent PNG
-                        var pngBytes = await _opacityService.ApplyChromaKeysAsync(genResult.ImageBytes, opacitySettings);
+                        var task = plan.Tasks[i];
+                        var customSize = $"{task.Width}x{task.Height}";
 
-                        // Save the chroma-only PNG before the overlay is applied
-                        await _imageService.SaveProjectCollectionArtworkChromaAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, pngBytes);
-
-                        // Apply overlay color if set (tints all non-transparent pixels)
-                        if (opacitySettings.Overlay != null && !string.IsNullOrWhiteSpace(opacitySettings.Overlay.Color))
+                        var genRequest = new ImageGenerationRequest
                         {
-                            pngBytes = await _opacityService.ApplyOverlayAsync(pngBytes, opacitySettings.Overlay.Color);
+                            Model = genModel.Model,
+                            Prompt = plan.FinalPrompt,
+                            InputImages = inputImages,
+                            CustomSize = plan.TotalPlacements > 0 ? customSize : null,
+                            Width = task.Width,
+                            Height = task.Height,
+                            Quality = genQuality,
+                            PreviousResponseId = i == 0 ? previousResponseId : null,
+                            UseResponsesApi = false
+                        };
+
+                        // Token calculation per task
+                        var tokenCalc = tokenizer.CalculateTokens(plan.FinalPrompt, task.Width, task.Height, genQuality, inputImageDimensions, "auto", tokenCost);
+                        if (!await _aiTokenService.UseTokensAsync(userId, tokenCalc.PlatformTokens))
+                            throw new InvalidOperationException("Not enough tokens to generate the artwork. Please purchase more tokens before continuing.");
+
+                        var genResult = await imageGen.GenerateAsync(genRequest);
+
+                        // Crop the generated image to the placement's actual aspect ratio
+                        // (only needed when the ratio exceeds 3:1 and was clamped for generation)
+                        byte[] finalImageBytes = genResult.ImageBytes;
+                        if (task.NeedsCrop)
+                        {
+                            finalImageBytes = await _imageService.CropToPlacementAsync(genResult.ImageBytes, task.PlacementWidth, task.PlacementHeight, task.CropX, task.CropY);
                         }
 
-                        if (request.IsFullSize)
-                            await _imageService.SaveProjectCollectionArtworkFullSizePngAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, pngBytes);
-                        else
-                            await _imageService.SaveProjectCollectionArtworkPngAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, pngBytes);
-
-                        // Resolve background image bytes
-                        byte[]? bgBytes = null;
-                        string? bgColor = null;
-                        if (opacitySettings.Background != null)
+                        if (plan.TotalPlacements == 0)
                         {
-                            if (!string.IsNullOrWhiteSpace(opacitySettings.Background.Id))
+                            // Single artwork (no placements) — save as the main artwork image
+                            await SaveArtworkImageAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, finalImageBytes, request.IsFullSize, opacitySettings);
+
+                            created.Active = true;
+                            created.ResponseId = genResult.ResponseId ?? "";
+                            if (request.IsFullSize)
+                                created.FullSize = true;
+                            await _projectCollectionArtworkRepository.UpdateAsync(created);
+                            await _projectCollectionArtworkRepository.SetPrintifyImageIdAsync(created.Id, "");
+
+                            await _projectImageGenerationRepository.CreateAsync(new ProjectImageGeneration
                             {
-                                try
+                                ProjectId = request.ProjectId,
+                                CollectionId = request.CollectionId,
+                                ItemId = request.ItemId,
+                                AppUserId = userId,
+                                ImageGenerationId = genModel.Id,
+                                InputTextTokens = genResult.InputTokens,
+                                InputImageTokens = 0,
+                                OutputTokens = genResult.OutputTokens,
+                                Tokens = tokenCalc.PlatformTokens,
+                                Prompt = plan.FinalPrompt,
+                                Filename = request.IsFullSize ? $"{created.Id}_fullsize.jpg" : $"{created.Id}.jpg",
+                                Resolution = $"{task.Width}x{task.Height}",
+                                InputImages = inputImages.Count,
+                                InputImageJson = System.Text.Json.JsonSerializer.Serialize(inputImageRefs),
+                                Type = 1,
+                                Cost = (int)Math.Round(tokenCalc.EstimatedCostUSD * 100)
+                            });
+                        }
+                        else
+                        {
+                            // Variant artwork — save as a placement variant
+                            if (request.IsFullSize)
+                                await _imageService.SaveProjectCollectionArtworkPlacementFullSizeAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, i, finalImageBytes);
+                            else
+                                await _imageService.SaveProjectCollectionArtworkPlacementAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, i, finalImageBytes);
+
+                            // Apply opacity processing for this variant
+                            if (opacitySettings != null && opacitySettings.ChromaKeys.Count > 0)
+                            {
+                                var pngBytes = await _opacityService.ApplyChromaKeysAsync(finalImageBytes, opacitySettings);
+                                if (opacitySettings.Overlay != null && !string.IsNullOrWhiteSpace(opacitySettings.Overlay.Color))
+                                    pngBytes = await _opacityService.ApplyOverlayAsync(pngBytes, opacitySettings.Overlay.Color);
+
+                                if (request.IsFullSize)
+                                    await _imageService.SaveProjectCollectionArtworkPlacementFullSizePngAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, i, pngBytes);
+                                else
+                                    await _imageService.SaveProjectCollectionArtworkPlacementPngAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, i, pngBytes);
+
+                                // Generate the JPG with background composited for this placement variant
+                                byte[]? bgBytes = null;
+                                string? bgColor = null;
+                                if (opacitySettings.Background != null)
                                 {
-                                    var bgId = Guid.Parse(opacitySettings.Background.Id);
-                                    if (opacitySettings.Background.Type == "custom")
+                                    if (!string.IsNullOrWhiteSpace(opacitySettings.Background.Id))
                                     {
-                                        var customImg = await _customImageRepository.GetByIdAsync(bgId);
-                                        if (customImg != null)
-                                            bgBytes = await _imageService.GetCustomImageAsync(customImg.AppUserId, customImg.Id, customImg.Extension);
-                                    }
-                                    else if (opacitySettings.Background.Type == "artwork")
-                                    {
-                                        var bgCollectionArtwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(request.CollectionId, bgId);
-                                        if (bgCollectionArtwork != null)
+                                        try
                                         {
-                                            bgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, bgId, bgCollectionArtwork.Id);
-                                            if (bgBytes == null || bgBytes.Length == 0)
-                                                bgBytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(request.ProjectId, request.CollectionId, bgId, bgCollectionArtwork.Id);
+                                            var bgId = Guid.Parse(opacitySettings.Background.Id);
+                                            if (opacitySettings.Background.Type == "custom")
+                                            {
+                                                var customImg = await _customImageRepository.GetByIdAsync(bgId);
+                                                if (customImg != null)
+                                                    bgBytes = await _imageService.GetCustomImageAsync(customImg.AppUserId, customImg.Id, customImg.Extension);
+                                            }
+                                            else if (opacitySettings.Background.Type == "artwork")
+                                            {
+                                                var bgCollectionArtwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(request.CollectionId, bgId);
+                                                if (bgCollectionArtwork != null)
+                                                {
+                                                    bgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, bgId, bgCollectionArtwork.Id);
+                                                    if (bgBytes == null || bgBytes.Length == 0)
+                                                        bgBytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(request.ProjectId, request.CollectionId, bgId, bgCollectionArtwork.Id);
+                                                }
+                                            }
                                         }
+                                        catch { }
                                     }
+
+                                    if (bgBytes == null && !string.IsNullOrWhiteSpace(opacitySettings.Background.Color))
+                                        bgColor = opacitySettings.Background.Color;
                                 }
-                                catch { /* ignore background resolution errors, fall back to color or black */ }
+
+                                var jpgWithBgBytes = await _opacityService.CompositeOverBackgroundAsync(pngBytes, bgBytes, bgColor);
+                                await _imageService.SaveProjectCollectionArtworkPlacementJpgWithBgAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, i, jpgWithBgBytes);
                             }
 
-                            // Fall back to the configured background color if no image was resolved
-                            if (bgBytes == null && !string.IsNullOrWhiteSpace(opacitySettings.Background.Color))
-                                bgColor = opacitySettings.Background.Color;
+                            // Create the placement variant record
+                            var placementVariant = new ProjectCollectionArtworkPlacement
+                            {
+                                CollectionArtworkId = created.Id,
+                                Width = task.PlacementWidth,
+                                Height = task.PlacementHeight,
+                                Index = i,
+                                FullSize = request.IsFullSize,
+                                ResponseId = genResult.ResponseId ?? ""
+                            };
+                            await _projectCollectionArtworkPlacementRepository.CreateAsync(placementVariant);
+
+                            // Track the first variant's response ID on the artwork for "make changes" flow
+                            if (i == 0)
+                            {
+                                created.ResponseId = genResult.ResponseId ?? "";
+                                created.Opacity = opacitySettings != null && opacitySettings.ChromaKeys.Count > 0;
+                            }
+
+                            await _projectImageGenerationRepository.CreateAsync(new ProjectImageGeneration
+                            {
+                                ProjectId = request.ProjectId,
+                                CollectionId = request.CollectionId,
+                                ItemId = request.ItemId,
+                                AppUserId = userId,
+                                ImageGenerationId = genModel.Id,
+                                InputTextTokens = genResult.InputTokens,
+                                InputImageTokens = 0,
+                                OutputTokens = genResult.OutputTokens,
+                                Tokens = tokenCalc.PlatformTokens,
+                                Prompt = plan.FinalPrompt,
+                                Filename = request.IsFullSize ? $"{created.Id}_{i}_fullsize.jpg" : $"{created.Id}_{i}.jpg",
+                                Resolution = customSize,
+                                InputImages = inputImages.Count,
+                                InputImageJson = System.Text.Json.JsonSerializer.Serialize(inputImageRefs),
+                                Type = 1,
+                                Cost = (int)Math.Round(tokenCalc.EstimatedCostUSD * 100)
+                            });
                         }
-
-                        // Composite PNG over background to create JPG with background
-                        var jpgWithBgBytes = await _opacityService.CompositeOverBackgroundAsync(pngBytes, bgBytes, bgColor);
-                        await _imageService.SaveProjectCollectionArtworkJpgWithBgAsync(request.ProjectId, request.CollectionId, request.ItemId, created.Id, jpgWithBgBytes);
-
-                        created.Opacity = true;
                     }
 
-                    created.Active = true;
-                    created.ResponseId = genResult.ResponseId ?? "";
                     if (request.IsFullSize)
                         created.FullSize = true;
                     await _projectCollectionArtworkRepository.UpdateAsync(created);
                     await _projectCollectionArtworkRepository.SetPrintifyImageIdAsync(created.Id, "");
-
-                    await _projectImageGenerationRepository.CreateAsync(new ProjectImageGeneration
-                    {
-                        ProjectId = request.ProjectId,
-                        CollectionId = request.CollectionId,
-                        ItemId = request.ItemId,
-                        AppUserId = userId,
-                        ImageGenerationId = genModel.Id,
-                        InputTextTokens = genResult.InputTokens,
-                        InputImageTokens = 0,
-                        OutputTokens = genResult.OutputTokens,
-                        Tokens = tokenCalc.PlatformTokens,
-                        Prompt = finalPrompt,
-                        Filename = request.IsFullSize ? $"{created.Id}_fullsize.jpg" : $"{created.Id}.jpg",
-                        Resolution = $"{width}x{height}",
-                        InputImages = inputImages.Count,
-                        InputImageJson = System.Text.Json.JsonSerializer.Serialize(inputImageRefs),
-                        Type = 1,
-                        Cost = (int)Math.Round(tokenCalc.EstimatedCostUSD * 100)
-                    });
                 }
                 catch (Exception genEx)
                 {
@@ -529,6 +461,64 @@ namespace Artsy.API.Controllers
             catch (Exception ex)
             {
                 return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        async Task SaveArtworkImageAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, byte[] imageBytes, bool isFullSize, OpacitySettings? opacitySettings)
+        {
+            if (isFullSize)
+                await _imageService.SaveProjectCollectionArtworkFullSizeAsync(projectId, collectionId, itemId, artworkId, imageBytes);
+            else
+                await _imageService.SaveProjectCollectionArtworkAsync(projectId, collectionId, itemId, artworkId, imageBytes);
+
+            if (opacitySettings != null && opacitySettings.ChromaKeys.Count > 0)
+            {
+                var pngBytes = await _opacityService.ApplyChromaKeysAsync(imageBytes, opacitySettings);
+                await _imageService.SaveProjectCollectionArtworkChromaAsync(projectId, collectionId, itemId, artworkId, pngBytes);
+
+                if (opacitySettings.Overlay != null && !string.IsNullOrWhiteSpace(opacitySettings.Overlay.Color))
+                    pngBytes = await _opacityService.ApplyOverlayAsync(pngBytes, opacitySettings.Overlay.Color);
+
+                if (isFullSize)
+                    await _imageService.SaveProjectCollectionArtworkFullSizePngAsync(projectId, collectionId, itemId, artworkId, pngBytes);
+                else
+                    await _imageService.SaveProjectCollectionArtworkPngAsync(projectId, collectionId, itemId, artworkId, pngBytes);
+
+                byte[]? bgBytes = null;
+                string? bgColor = null;
+                if (opacitySettings.Background != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(opacitySettings.Background.Id))
+                    {
+                        try
+                        {
+                            var bgId = Guid.Parse(opacitySettings.Background.Id);
+                            if (opacitySettings.Background.Type == "custom")
+                            {
+                                var customImg = await _customImageRepository.GetByIdAsync(bgId);
+                                if (customImg != null)
+                                    bgBytes = await _imageService.GetCustomImageAsync(customImg.AppUserId, customImg.Id, customImg.Extension);
+                            }
+                            else if (opacitySettings.Background.Type == "artwork")
+                            {
+                                var bgCollectionArtwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(collectionId, bgId);
+                                if (bgCollectionArtwork != null)
+                                {
+                                    bgBytes = await _imageService.GetProjectCollectionArtworkImageAsync(projectId, collectionId, bgId, bgCollectionArtwork.Id);
+                                    if (bgBytes == null || bgBytes.Length == 0)
+                                        bgBytes = await _imageService.GetProjectCollectionArtworkFullSizeAsync(projectId, collectionId, bgId, bgCollectionArtwork.Id);
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if (bgBytes == null && !string.IsNullOrWhiteSpace(opacitySettings.Background.Color))
+                        bgColor = opacitySettings.Background.Color;
+                }
+
+                var jpgWithBgBytes = await _opacityService.CompositeOverBackgroundAsync(pngBytes, bgBytes, bgColor);
+                await _imageService.SaveProjectCollectionArtworkJpgWithBgAsync(projectId, collectionId, itemId, artworkId, jpgWithBgBytes);
             }
         }
 
@@ -561,55 +551,154 @@ namespace Artsy.API.Controllers
                 if (artwork.FullSize)
                     return Json(new ApiResponse { success = true, data = artwork });
 
-                if (!await _aiTokenService.UseTokensAsync(userId, 2))
+                // Get placement variants for this artwork
+                var placements = await _projectCollectionArtworkPlacementRepository.GetByArtworkIdAsync(artwork.Id);
+                var placementList = placements.ToList();
+
+                // Determine token cost: 2 tokens per variant (or 2 for single artwork)
+                var variantCount = Math.Max(1, placementList.Count);
+                if (!await _aiTokenService.UseTokensAsync(userId, 2 * variantCount))
                     return Json(new ApiResponse { success = false, message = "Not enough tokens to generate the artwork. Please purchase more tokens before continuing." });
 
-                byte[] previewBytes;
+                // Parse opacity settings for re-applying chroma key after upscale
+                OpacitySettings? opacitySettings = null;
                 if (artwork.Opacity)
                 {
-                    // For opacity artworks, upscale the transparent PNG, not the JPG
-                    previewBytes = await _imageService.GetProjectCollectionArtworkPngAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id);
-                }
-                else
-                {
-                    previewBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id);
-                }
-                if (previewBytes == null || previewBytes.Length == 0)
-                    return Json(new ApiResponse { success = false, message = "Preview image data not found." });
-
-                var upscaledBytes = await _imageUpscaler.UpscaleAsync(previewBytes);
-
-                if (artwork.Opacity)
-                {
-                    // The upscaler returns the original background, so re-apply chroma/overlay to get a transparent PNG
                     var itemArtworkList = await _projectItemArtworkRepository.GetByItemIdAsync(request.ItemId);
                     var itemArtwork = itemArtworkList.FirstOrDefault();
-                    var opacitySettings = _opacityService.ParseOpacityJson(itemArtwork?.OpacityJson) ?? new OpacitySettings();
-                    var pngBytes = await _opacityService.ApplyChromaKeysAsync(upscaledBytes, opacitySettings);
-                    if (!string.IsNullOrWhiteSpace(opacitySettings.Overlay?.Color))
-                        pngBytes = await _opacityService.ApplyOverlayAsync(pngBytes, opacitySettings.Overlay.Color);
+                    opacitySettings = _opacityService.ParseOpacityJson(itemArtwork?.OpacityJson) ?? new OpacitySettings();
+                }
 
-                    await _imageService.SaveProjectCollectionArtworkFullSizePngAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id, pngBytes);
+                if (placementList.Count > 0)
+                {
+                    // Upscale each placement variant
+                    foreach (var placement in placementList)
+                    {
+                        byte[] previewBytes;
+                        if (artwork.Opacity)
+                            previewBytes = await _imageService.GetProjectCollectionArtworkPlacementPngAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id, placement.Index);
+                        else
+                            previewBytes = await _imageService.GetProjectCollectionArtworkPlacementImageAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id, placement.Index);
+
+                        if (previewBytes == null || previewBytes.Length == 0)
+                            continue;
+
+                        // Determine scale: use x4 if any placement dimension exceeds 4096, otherwise x2
+                        var maxPlacementDim = Math.Max(placement.Width, placement.Height);
+                        var scale = maxPlacementDim > 4096 ? 4 : 2;
+
+                        var upscaledBytes = await _imageUpscaler.UpscaleAsync(previewBytes, scale);
+
+                        // If x4 was used and the result exceeds the placement dimensions, resize down
+                        if (scale == 4 && maxPlacementDim > 0)
+                        {
+                            // Get the upscaled dimensions
+                            var upscaledDims = await _imageService.GetImageDimensionsAsync(upscaledBytes);
+                            if (upscaledDims.HasValue)
+                            {
+                                var (uw, uh) = upscaledDims.Value;
+                                // Calculate target dimensions maintaining the placement's aspect ratio
+                                var placementRatio = (double)placement.Width / placement.Height;
+                                int targetW, targetH;
+                                if (placement.Width >= placement.Height)
+                                {
+                                    targetW = placement.Width;
+                                    targetH = (int)Math.Round(placement.Width / placementRatio);
+                                }
+                                else
+                                {
+                                    targetH = placement.Height;
+                                    targetW = (int)Math.Round(placement.Height * placementRatio);
+                                }
+
+                                // Only resize if the upscaled image is larger than target
+                                if (uw > targetW || uh > targetH)
+                                {
+                                    using var img = SixLabors.ImageSharp.Image.Load(upscaledBytes);
+                                    img.Mutate(x => x.Resize(new SixLabors.ImageSharp.Processing.ResizeOptions
+                                    {
+                                        Size = new SixLabors.ImageSharp.Size(targetW, targetH),
+                                        Mode = SixLabors.ImageSharp.Processing.ResizeMode.Stretch
+                                    }));
+                                    using var ms = new MemoryStream();
+                                    if (artwork.Opacity)
+                                        img.Save(ms, new SixLabors.ImageSharp.Formats.Png.PngEncoder());
+                                    else
+                                        img.Save(ms, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder { Quality = 95 });
+                                    upscaledBytes = ms.ToArray();
+                                }
+                            }
+                        }
+
+                        if (artwork.Opacity && opacitySettings != null)
+                        {
+                            var pngBytes = await _opacityService.ApplyChromaKeysAsync(upscaledBytes, opacitySettings);
+                            if (!string.IsNullOrWhiteSpace(opacitySettings.Overlay?.Color))
+                                pngBytes = await _opacityService.ApplyOverlayAsync(pngBytes, opacitySettings.Overlay.Color);
+                            await _imageService.SaveProjectCollectionArtworkPlacementFullSizePngAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id, placement.Index, pngBytes);
+                        }
+                        else
+                        {
+                            await _imageService.SaveProjectCollectionArtworkPlacementFullSizeAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id, placement.Index, upscaledBytes);
+                        }
+
+                        // Mark this placement as full size
+                        await _projectCollectionArtworkPlacementRepository.SetFullSizeAsync(placement.Id, true);
+
+                        await _projectImageUpscaleRepository.CreateAsync(new ProjectImageUpscale
+                        {
+                            ProjectId = request.ProjectId,
+                            CollectionId = request.CollectionId,
+                            ItemId = request.ItemId,
+                            ArtworkId = artwork.Id,
+                            Width = placement.Width,
+                            Height = placement.Height,
+                            Scale = scale,
+                            Created = DateTime.UtcNow
+                        });
+                    }
                 }
                 else
                 {
-                    await _imageService.SaveProjectCollectionArtworkFullSizeAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id, upscaledBytes);
+                    // No placement variants — upscale the single artwork (backward compatible)
+                    byte[] previewBytes;
+                    if (artwork.Opacity)
+                        previewBytes = await _imageService.GetProjectCollectionArtworkPngAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id);
+                    else
+                        previewBytes = await _imageService.GetProjectCollectionArtworkImageAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id);
+
+                    if (previewBytes == null || previewBytes.Length == 0)
+                        return Json(new ApiResponse { success = false, message = "Preview image data not found." });
+
+                    var upscaledBytes = await _imageUpscaler.UpscaleAsync(previewBytes);
+
+                    if (artwork.Opacity && opacitySettings != null)
+                    {
+                        var pngBytes = await _opacityService.ApplyChromaKeysAsync(upscaledBytes, opacitySettings);
+                        if (!string.IsNullOrWhiteSpace(opacitySettings.Overlay?.Color))
+                            pngBytes = await _opacityService.ApplyOverlayAsync(pngBytes, opacitySettings.Overlay.Color);
+                        await _imageService.SaveProjectCollectionArtworkFullSizePngAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id, pngBytes);
+                    }
+                    else
+                    {
+                        await _imageService.SaveProjectCollectionArtworkFullSizeAsync(request.ProjectId, request.CollectionId, request.ItemId, artwork.Id, upscaledBytes);
+                    }
+
+                    await _projectImageUpscaleRepository.CreateAsync(new ProjectImageUpscale
+                    {
+                        ProjectId = request.ProjectId,
+                        CollectionId = request.CollectionId,
+                        ItemId = request.ItemId,
+                        ArtworkId = artwork.Id,
+                        Width = artwork.Width * 2,
+                        Height = artwork.Height * 2,
+                        Scale = 2,
+                        Created = DateTime.UtcNow
+                    });
                 }
 
                 artwork.FullSize = true;
                 await _projectCollectionArtworkRepository.UpdateAsync(artwork);
-
-                await _projectImageUpscaleRepository.CreateAsync(new ProjectImageUpscale
-                {
-                    ProjectId = request.ProjectId,
-                    CollectionId = request.CollectionId,
-                    ItemId = request.ItemId,
-                    ArtworkId = artwork.Id,
-                    Width = artwork.Width * 2,
-                    Height = artwork.Height * 2,
-                    Scale = 2,
-                    Created = DateTime.UtcNow
-                });
 
                 var upscaledImageModel = await _imageGenerationModelRepository.GetByModelKeyAsync(artwork.ImageModel);
 
@@ -623,14 +712,14 @@ namespace Artsy.API.Controllers
                     InputTextTokens = 0,
                     InputImageTokens = 0,
                     OutputTokens = 0,
-                    Tokens = 2,
+                    Tokens = 2 * variantCount,
                     Prompt = "",
                     Filename = artwork.Opacity ? $"{artwork.Id}_fullsize.png" : $"{artwork.Id}_fullsize.jpg",
-                    Resolution = $"{artwork.Width * 2}x{artwork.Height * 2}",
+                    Resolution = $"{artwork.Width}x{artwork.Height}",
                     InputImages = 0,
                     InputImageJson = "[]",
                     Type = 3,
-                    Cost = (int)Math.Round(2 * (_tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m) * 100)
+                    Cost = (int)Math.Round(2 * variantCount * (_tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m) * 100)
                 });
 
                 return Json(new ApiResponse { success = true, data = artwork });
@@ -908,7 +997,7 @@ namespace Artsy.API.Controllers
         }
 
         [HttpGet("collection/{collectionId}/item/{itemId}/artwork/{artworkId}")]
-        public async Task<IActionResult> GetCollectionArtworkImage(Guid collectionId, Guid itemId, Guid artworkId, [FromQuery] bool fullSize = false, [FromQuery] bool thumb = false, [FromQuery] bool jpgWithBg = false)
+        public async Task<IActionResult> GetCollectionArtworkImage(Guid collectionId, Guid itemId, Guid artworkId, [FromQuery] bool fullSize = false, [FromQuery] bool thumb = false, [FromQuery] bool jpgWithBg = false, [FromQuery] int? placementIndex = null)
         {
             var userId = GetUserId();
             if (userId == Guid.Empty)
@@ -926,6 +1015,69 @@ namespace Artsy.API.Controllers
                 var project = await _projectRepository.GetByIdAsync(artwork.ProjectId, userId);
                 if (project == null)
                     return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                // If a placement index is specified, serve the per-variant image
+                if (placementIndex.HasValue && artwork.TotalPlacements > 0)
+                {
+                    var idx = placementIndex.Value;
+                    byte[]? variantBytes = null;
+
+                    // Handle jpgWithBg request for placement variants
+                    if (jpgWithBg)
+                    {
+                        if (thumb)
+                            variantBytes = await _imageService.GetProjectCollectionArtworkPlacementJpgWithBgThumbAsync(artwork.ProjectId, collectionId, itemId, artworkId, idx);
+                        else
+                            variantBytes = await _imageService.GetProjectCollectionArtworkPlacementJpgWithBgAsync(artwork.ProjectId, collectionId, itemId, artworkId, idx);
+
+                        if (variantBytes != null && variantBytes.Length > 0)
+                            return File(variantBytes, "image/jpeg");
+                        // Fall through to base artwork bg below if not found
+                    }
+                    else if (artwork.Opacity)
+                    {
+                        if (thumb)
+                        {
+                            variantBytes = await _imageService.GetProjectCollectionArtworkPlacementPngAsync(artwork.ProjectId, collectionId, itemId, artworkId, idx);
+                            // Fall back to generating thumb from full image
+                            if (variantBytes == null || variantBytes.Length == 0)
+                            {
+                                var fullPng = await _imageService.GetProjectCollectionArtworkPlacementFullSizePngAsync(artwork.ProjectId, collectionId, itemId, artworkId, idx);
+                                if (fullPng != null && fullPng.Length > 0)
+                                    variantBytes = fullPng;
+                            }
+                        }
+                        else if (fullSize)
+                        {
+                            variantBytes = await _imageService.GetProjectCollectionArtworkPlacementFullSizePngAsync(artwork.ProjectId, collectionId, itemId, artworkId, idx);
+                            if (variantBytes == null || variantBytes.Length == 0)
+                                variantBytes = await _imageService.GetProjectCollectionArtworkPlacementPngAsync(artwork.ProjectId, collectionId, itemId, artworkId, idx);
+                        }
+                        else
+                        {
+                            variantBytes = await _imageService.GetProjectCollectionArtworkPlacementPngAsync(artwork.ProjectId, collectionId, itemId, artworkId, idx);
+                        }
+
+                        if (variantBytes != null && variantBytes.Length > 0)
+                            return File(variantBytes, "image/png");
+                    }
+                    else
+                    {
+                        if (thumb)
+                            variantBytes = await _imageService.GetProjectCollectionArtworkPlacementThumbAsync(artwork.ProjectId, collectionId, itemId, artworkId, idx);
+                        else if (fullSize)
+                        {
+                            variantBytes = await _imageService.GetProjectCollectionArtworkPlacementFullSizeAsync(artwork.ProjectId, collectionId, itemId, artworkId, idx);
+                            if (variantBytes == null || variantBytes.Length == 0)
+                                variantBytes = await _imageService.GetProjectCollectionArtworkPlacementImageAsync(artwork.ProjectId, collectionId, itemId, artworkId, idx);
+                        }
+                        else
+                            variantBytes = await _imageService.GetProjectCollectionArtworkPlacementImageAsync(artwork.ProjectId, collectionId, itemId, artworkId, idx);
+
+                        if (variantBytes != null && variantBytes.Length > 0)
+                            return File(variantBytes, "image/jpeg");
+                    }
+                }
 
                 // When a JPG with background is requested, try it first (regardless of opacity), then fall back
                 if (jpgWithBg)
@@ -1034,62 +1186,35 @@ namespace Artsy.API.Controllers
                 var customItemIds = artworkList.Where(a => a.ArtworkType == "custom").Select(a => a.ItemId).ToHashSet();
                 var aiItems = items.Where(i => !customItemIds.Contains(i.Id)).OrderBy(i => i.Index).ToList();
 
-                var blueprints = await _projectBlueprintRepository.GetByProjectIdAsync(request.ProjectId);
-
                 var generations = new List<CollectionArtworkGenerationDto>();
-                var seen = new HashSet<string>();
+                var totalTokens = 0m;
 
-                foreach (var bp in blueprints)
+                // Build a plan per AI item to get accurate task count, dimensions, and token cost
+                foreach (var aiItem in aiItems)
                 {
-                    if (string.IsNullOrWhiteSpace(bp.PlacementJson))
-                        continue;
-
                     try
                     {
-                        var placementsList = JsonSerializer.Deserialize<List<PlacementDto>>(bp.PlacementJson);
-                        if (placementsList == null) continue;
+                        var plan = await _artworkGenerationPlanService.BuildPlanAsync(request.ProjectId, Guid.Empty, aiItem.Id);
+                        var itemTokens = 0m;
 
-                        foreach (var placement in placementsList)
+                        foreach (var task in plan.Tasks)
                         {
-                            var itemId = placement.GetItemId();
-                            if (itemId == Guid.Empty) continue;
-
-                            var aiItem = aiItems.FirstOrDefault(i => i.Id == itemId);
-                            if (aiItem == null) continue;
-
-                            var (pw, ph) = placement.GetDimensions();
-                            var resolution = ImageGenerationForOpenAI.FindBestResolution($"{pw}x{ph}");
-                            var parts = resolution.Split('x');
-                            var w = int.Parse(parts[0]);
-                            var h = int.Parse(parts[1]);
-
-                            var key = $"{itemId}_{w}_{h}";
-                            if (seen.Contains(key)) continue;
-                            seen.Add(key);
-
                             generations.Add(new CollectionArtworkGenerationDto
                             {
-                                ItemId = itemId,
-                                Width = w,
-                                Height = h
+                                ItemId = aiItem.Id,
+                                Width = task.Width,
+                                Height = task.Height,
+                                NeedsUpscale = plan.NeedsUpscale
                             });
+                            // Estimate tokens per task using a rough heuristic if no model is configured
+                            // The plan gives us accurate dimensions; token cost scales with resolution
+                            var taskTokens = task.Width * task.Height / (1024.0 * 1024) * 2; // ~2 tokens per 1K image
+                            itemTokens += (decimal)taskTokens;
                         }
+
+                        totalTokens += itemTokens;
                     }
                     catch { continue; }
-                }
-
-                var totalTokens = generations.Count * 2;
-
-                var socialMediaItems = aiItems.Where(i => i.SocialMedia && !seen.Any(s => s.StartsWith($"{i.Id}_")));
-                foreach (var item in socialMediaItems)
-                {
-                    generations.Add(new CollectionArtworkGenerationDto
-                    {
-                        ItemId = item.Id,
-                        Width = 1024,
-                        Height = 1024
-                    });
-                    totalTokens += 2;
                 }
 
                 var itemIndexMap = aiItems.ToDictionary(i => i.Id, i => i.Index);
@@ -1101,7 +1226,7 @@ namespace Artsy.API.Controllers
                     data = new EstimateCollectionTokensResponse
                     {
                         Generations = generations,
-                        TotalTokens = totalTokens,
+                        TotalTokens = (int)Math.Ceiling(totalTokens),
                         ArtworkCount = generations.Count
                     }
                 });

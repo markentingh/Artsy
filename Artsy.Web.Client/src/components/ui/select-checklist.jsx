@@ -141,15 +141,7 @@ export default function SelectChecklist({
     return () => destroyDropdown();
   }, [open]);
 
-  const selectedLabels = options
-    .filter((o) => values.includes(o.value))
-    .map((o) => o.label);
-
-  const displayText = selectedLabels.length === 0
-    ? placeholder
-    : selectedLabels.length <= 2
-      ? selectedLabels.join(', ')
-      : `${selectedLabels.length} selected`;
+  const selectedOptions = options.filter((o) => values.includes(o.value));
 
   return (
     <div className={`relative ${className}`}>
@@ -160,8 +152,32 @@ export default function SelectChecklist({
         onClick={() => setOpen((prev) => !prev)}
         className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 text-left text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 border-gray-300 dark:border-gray-600 disabled:opacity-50 flex items-center justify-between"
       >
-        <span className={`truncate whitespace-nowrap ${selectedLabels.length === 0 ? 'text-gray-400' : ''}`}>
-          {displayText}
+        <span className={`flex-1 min-w-0 truncate whitespace-nowrap ${selectedOptions.length === 0 ? 'text-gray-400' : ''}`}>
+          {selectedOptions.length === 0
+            ? placeholder
+            : selectedOptions.length === 1
+              ? (
+                <span className="inline-flex items-center gap-1">
+                  {selectedOptions[0].hexColor && (
+                    <span className="flex items-center gap-1">
+                      {selectedOptions[0].hexColor.split(',').map((h, i) => {
+                        const hc = h.trim();
+                        if (!hc) return null;
+                        return (
+                          <span
+                            key={i}
+                            className="w-5 h-5 rounded-full border border-gray-300 dark:border-gray-600 flex-shrink-0"
+                            style={{ backgroundColor: `#${hc}` }}
+                            title={`#${hc}`}
+                          />
+                        );
+                      })}
+                    </span>
+                  )}
+                  <span className="text-sm whitespace-nowrap">{selectedOptions[0].label}</span>
+                </span>
+              )
+              : 'Multiple Variant Colors'}
         </span>
         <Icon name="expand_more" className="text-gray-400 text-sm" />
       </button>

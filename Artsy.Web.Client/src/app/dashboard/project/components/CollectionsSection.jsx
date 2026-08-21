@@ -1,6 +1,7 @@
 import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
+import { artworkThumbUrl } from '@/utils/artworkUrls';
 import Icon from '@/components/ui/icon';
 import ButtonOutline from '@/components/ui/button-outline';
 import ButtonIcon from '@/components/ui/button-icon';
@@ -13,7 +14,7 @@ const ConfirmModal = lazy(() => import('@/components/ui/confirm-modal'));
 
 export default function CollectionsSection({ projectId, project, showNewButton = true, refreshKey, onOpenCollection }) {
   const session = useSession();
-  const { getCollections, getItems, getCollectionArtworkThumbUrl, deleteCollection, updateCollectionTitle } = Projects(session);
+  const { getCollections, getItems, deleteCollection, updateCollectionTitle } = Projects(session);
   const [collections, setCollections] = useState([]);
   const [items, setItems] = useState([]);
   const [mount, setMount] = useState(false);
@@ -146,7 +147,7 @@ export default function CollectionsSection({ projectId, project, showNewButton =
           elements={collections.map((collection) => {
             const artworkImages = (collection.artwork || [])
               .filter(a => a.active)
-              .map(a => getCollectionArtworkThumbUrl(collection.id, a.itemId, a.id));
+              .map(a => artworkThumbUrl(collection.id, a.itemId, a.id));
             const productImages = (collection.productImages || [])
               .filter(p => p.active)
               .map(p => p.imageUrl);
@@ -168,7 +169,7 @@ export default function CollectionsSection({ projectId, project, showNewButton =
                     singleImage
                     infiniteScroll
                     placeholder="No Artwork"
-                    imageClassName="!max-h-none w-full h-full object-contain"
+                    imageClassName="!max-w-[260px] !max-h-[260px] object-contain"
                   />
                 </div>
                 <div className="flex items-center justify-between">

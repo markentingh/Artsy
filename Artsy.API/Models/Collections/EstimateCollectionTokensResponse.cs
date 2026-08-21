@@ -12,6 +12,9 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("height")]
         public int Height { get; set; }
+
+        [JsonPropertyName("needsUpscale")]
+        public bool NeedsUpscale { get; set; } = true;
     }
 
     public class EstimateCollectionTokensResponse

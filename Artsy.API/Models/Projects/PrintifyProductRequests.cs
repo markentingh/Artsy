@@ -39,6 +39,11 @@ namespace Artsy.API.Models.Projects
     {
         public Guid CollectionId { get; set; }
         public Guid ArtworkId { get; set; }
+        /// <summary>
+        /// When set, uploads the specific placement variant instead of the base artwork.
+        /// The PrintifyImageId is stored on the ProjectCollectionArtworkPlacement record.
+        /// </summary>
+        public int? PlacementIndex { get; set; }
     }
 
     public class DownloadMockupsRequest
