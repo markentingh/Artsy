@@ -119,7 +119,8 @@ namespace Artsy.API.Controllers
                     ItemId = created.Id,
                     ProjectId = created.ProjectId,
                     ImageModel = "openai",
-                    Prompt = ""
+                    Prompt = "",
+                    AspectRatio = string.IsNullOrWhiteSpace(request.AspectRatio) ? "1:1" : request.AspectRatio
                 };
                 await _projectItemArtworkRepository.CreateAsync(artwork);
 

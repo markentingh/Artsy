@@ -20,6 +20,8 @@ namespace Artsy.Data.Entities.Orders
         public string PrintifyImageId { get; set; } = "";
         public bool Opacity { get; set; }
         public string RequestText { get; set; } = "";
+        public int PlacementIndex { get; set; }
+        public int TotalPlacements { get; set; } = 1;
         public DateTime Created { get; set; }
         public DateTime Updated { get; set; }
     }

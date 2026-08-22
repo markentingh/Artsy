@@ -37,6 +37,8 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<IProjectCollectionArtworkPlacementRepository, ProjectCollectionArtworkPlacementRepository>();
             builder.Services.AddTransient<IProjectCollectionProductImageRepository, ProjectCollectionProductImageRepository>();
             builder.Services.AddTransient<IProjectBlueprintProductImageRepository, ProjectBlueprintProductImageRepository>();
+            builder.Services.AddTransient<IProjectBlueprintPlacementGroupRepository, ProjectBlueprintPlacementGroupRepository>();
+            builder.Services.AddTransient<IProjectBlueprintPlacementGroupImageRepository, ProjectBlueprintPlacementGroupImageRepository>();
             builder.Services.AddTransient<IProjectCollectionPrintifyProductRepository, ProjectCollectionPrintifyProductRepository>();
             builder.Services.AddTransient<IProjectCollectionPrintifyProductMockupRepository, ProjectCollectionPrintifyProductMockupRepository>();
             builder.Services.AddTransient<IProjectCollectionProductRepository, ProjectCollectionProductRepository>();
@@ -62,6 +64,7 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<IOrderRepository, OrderRepository>();
             builder.Services.AddTransient<IOrderItemAnswerRepository, OrderItemAnswerRepository>();
             builder.Services.AddTransient<IOrderItemArtworkRepository, OrderItemArtworkRepository>();
+            builder.Services.AddTransient<IOrderItemArtworkPlacementRepository, OrderItemArtworkPlacementRepository>();
             builder.Services.AddTransient<IHangfireOrderRepository, HangfireOrderRepository>();
             builder.Services.AddTransient<ICustomImageRepository, CustomImageRepository>();
             builder.Services.AddTransient<IProductRepository, ProductRepository>();

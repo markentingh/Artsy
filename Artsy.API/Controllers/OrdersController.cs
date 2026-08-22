@@ -137,20 +137,41 @@ namespace Artsy.API.Controllers
 
         [AllowAnonymous]
         [HttpGet("order-items/{orderItemId}/artworks/{artworkId}")]
-        public async Task<IActionResult> GetOrderItemArtwork(Guid orderItemId, Guid artworkId)
+        public async Task<IActionResult> GetOrderItemArtwork(Guid orderItemId, Guid artworkId, [FromQuery] int? placementIndex)
         {
             var artwork = await _orderItemArtworkRepository.GetByIdAsync(artworkId);
             if (artwork == null || artwork.OrderItemId != orderItemId)
                 return NotFound();
 
             byte[]? imgBytes = null;
-            if (artwork.Opacity)
-            {
-                imgBytes = await _imageService.GetOrderItemArtworkPngAsync(artwork.ProjectId, artwork.CollectionId, artwork.OrderId, artwork.Id);
-            }
 
-            if (imgBytes == null || imgBytes.Length == 0)
-                imgBytes = await _imageService.GetOrderItemArtworkImageAsync(artwork.ProjectId, artwork.CollectionId, artwork.OrderId, artwork.Id);
+            // If placementIndex is specified, serve the placement-specific image
+            if (placementIndex.HasValue && placementIndex.Value >= 0)
+            {
+                if (artwork.Opacity)
+                {
+                    imgBytes = await _imageService.GetOrderItemArtworkPlacementPngAsync(artwork.ProjectId, artwork.CollectionId, artwork.OrderId, artwork.Id, placementIndex.Value);
+                    if (imgBytes == null || imgBytes.Length == 0)
+                        imgBytes = await _imageService.GetOrderItemArtworkPngAsync(artwork.ProjectId, artwork.CollectionId, artwork.OrderId, artwork.Id);
+                }
+
+                if (imgBytes == null || imgBytes.Length == 0)
+                {
+                    imgBytes = await _imageService.GetOrderItemArtworkPlacementImageAsync(artwork.ProjectId, artwork.CollectionId, artwork.OrderId, artwork.Id, placementIndex.Value);
+                    if (imgBytes == null || imgBytes.Length == 0)
+                        imgBytes = await _imageService.GetOrderItemArtworkImageAsync(artwork.ProjectId, artwork.CollectionId, artwork.OrderId, artwork.Id);
+                }
+            }
+            else
+            {
+                if (artwork.Opacity)
+                {
+                    imgBytes = await _imageService.GetOrderItemArtworkPngAsync(artwork.ProjectId, artwork.CollectionId, artwork.OrderId, artwork.Id);
+                }
+
+                if (imgBytes == null || imgBytes.Length == 0)
+                    imgBytes = await _imageService.GetOrderItemArtworkImageAsync(artwork.ProjectId, artwork.CollectionId, artwork.OrderId, artwork.Id);
+            }
 
             if (imgBytes == null || imgBytes.Length == 0)
                 return NotFound();
@@ -158,6 +179,35 @@ namespace Artsy.API.Controllers
             var contentType = artwork.Opacity ? "image/png" : "image/jpeg";
             var fileName = artwork.Opacity ? "artwork.png" : "artwork.jpg";
             Response.Headers["Content-Disposition"] = $"inline; filename=\"{fileName}\"";
+            Response.Headers["Cache-Control"] = "public, max-age=86400";
+            return File(imgBytes, contentType);
+        }
+
+        [HttpGet("order-items/{orderItemId}/artworks/{artworkId}/group/{groupId}/{position}")]
+        public async Task<IActionResult> GetOrderItemArtworkGroupImage(Guid orderItemId, Guid artworkId, Guid groupId, string position, [FromQuery] bool png = false)
+        {
+            var artwork = await _orderItemArtworkRepository.GetByIdAsync(artworkId);
+            if (artwork == null || artwork.OrderItemId != orderItemId)
+                return NotFound();
+
+            byte[]? imgBytes = null;
+            var contentType = "image/jpeg";
+
+            if (png || artwork.Opacity)
+            {
+                contentType = "image/png";
+                imgBytes = await _imageService.GetOrderItemArtworkGroupImagePngAsync(artwork.ProjectId, artwork.CollectionId, artwork.OrderId, artwork.Id, groupId, position);
+            }
+
+            if (imgBytes == null || imgBytes.Length == 0)
+            {
+                imgBytes = await _imageService.GetOrderItemArtworkGroupImageAsync(artwork.ProjectId, artwork.CollectionId, artwork.OrderId, artwork.Id, groupId, position);
+            }
+
+            if (imgBytes == null || imgBytes.Length == 0)
+                return NotFound();
+
+            Response.Headers["Content-Disposition"] = $"inline; filename=\"{position}.jpg\"";
             Response.Headers["Cache-Control"] = "public, max-age=86400";
             return File(imgBytes, contentType);
         }

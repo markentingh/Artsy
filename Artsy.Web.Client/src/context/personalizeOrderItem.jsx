@@ -83,17 +83,50 @@ export function PersonalizeOrderItemProvider({ children, order, orderItem, colle
 
   useEffect(() => {
     if (usedArtworks.length === 0 || !orderItem?.id) return;
-    const byArtworkItemId = new Map(orderItemArtworks.map((a) => [a.itemId, a]));
+    // Group order item artworks by itemId (multiple variants per item)
+    const byArtworkItemId = new Map();
+    for (const a of orderItemArtworks) {
+      if (!byArtworkItemId.has(a.itemId)) {
+        byArtworkItemId.set(a.itemId, []);
+      }
+      byArtworkItemId.get(a.itemId).push(a);
+    }
     const next = usedArtworks.map((u) => {
-      const a = byArtworkItemId.get(u.artworkItemId);
-      if (!a) return undefined;
+      const variants = byArtworkItemId.get(u.artworkItemId);
+      if (!variants || variants.length === 0) return undefined;
+      // Sort variants by placementIndex
+      variants.sort((a, b) => (a.placementIndex ?? 0) - (b.placementIndex ?? 0));
+      const first = variants[0];
+      const allAccepted = variants.every(v => v.accepted);
+      // Check if any placement has a group
+      const hasGroups = variants.some(v => (v.placements || []).some(p => p.groupId));
       return {
-        id: a.id,
-        url: `/api/orders/order-items/${orderItem.id}/artworks/${a.id}`,
-        prompt: a.prompt,
-        width: a.width,
-        height: a.height,
-        status: a.accepted ? 'accepted' : 'done',
+        id: first.id,
+        url: `/api/orders/order-items/${orderItem.id}/artworks/${first.id}`,
+        prompt: first.prompt,
+        width: first.width,
+        height: first.height,
+        hasGroups,
+        variants: variants.map(v => {
+          // Find group placement info if any
+          const groupPlacement = (v.placements || []).find(p => p.groupId);
+          const groupId = groupPlacement?.groupId;
+          const position = groupPlacement?.position;
+          return {
+            id: v.id,
+            url: groupId
+              ? `/api/orders/order-items/${orderItem.id}/artworks/${v.id}/group/${groupId}/${position}`
+              : `/api/orders/order-items/${orderItem.id}/artworks/${v.id}?placementIndex=${v.placementIndex ?? 0}`,
+            width: v.width,
+            height: v.height,
+            placementIndex: v.placementIndex ?? 0,
+            totalPlacements: v.totalPlacements ?? 1,
+            groupId,
+            position,
+            placements: v.placements || [],
+          };
+        }),
+        status: allAccepted ? 'accepted' : 'done',
       };
     });
     setArtworks(next);

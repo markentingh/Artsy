@@ -4,6 +4,19 @@ using Artsy.Data.Entities.Projects;
 namespace Artsy.API.Services
 {
     /// <summary>
+    /// Describes a single placement within a seamless placement group.
+    /// </summary>
+    public class SeamlessGroupPlacement
+    {
+        public string Position { get; set; } = "";
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public bool Flipped { get; set; }
+        public string CropX { get; set; } = "center";
+        public string CropY { get; set; } = "center";
+    }
+
+    /// <summary>
     /// Describes a single image generation that must be performed for an artwork.
     /// An artwork may require multiple generations if it has placements with different aspect ratios.
     /// </summary>
@@ -35,6 +48,12 @@ namespace Artsy.API.Services
 
         /// <summary>0-based variant index for this task.</summary>
         public int VariantIndex { get; set; }
+
+        /// <summary>If non-null, this task is a seamless placement group task. The generated image will be cut up into individual placements.</summary>
+        public Guid? GroupId { get; set; }
+
+        /// <summary>Placements within the seamless group (only set when GroupId is non-null).</summary>
+        public List<SeamlessGroupPlacement> GroupPlacements { get; set; } = new();
     }
 
     /// <summary>

@@ -5,6 +5,7 @@ using Artsy.API.Models.Projects;
 using Artsy.Data.Entities.Projects;
 using Artsy.Data.Interfaces;
 using Artsy.Data.Interfaces.Projects;
+using Artsy.Data.Entities.Projects;
 
 namespace Artsy.API.Services
 {
@@ -20,6 +21,8 @@ namespace Artsy.API.Services
         readonly IProjectItemQuestionRepository _projectItemQuestionRepository;
         readonly IImageService _imageService;
         readonly IOpacityService _opacityService;
+        readonly IProjectBlueprintPlacementGroupRepository _placementGroupRepository;
+        readonly IProjectBlueprintPlacementGroupImageRepository _placementGroupImageRepository;
 
         public ArtworkGenerationPlanService(
             IProjectItemRepository projectItemRepository,
@@ -31,7 +34,9 @@ namespace Artsy.API.Services
             IProjectQuestionRepository projectQuestionRepository,
             IProjectItemQuestionRepository projectItemQuestionRepository,
             IImageService imageService,
-            IOpacityService opacityService)
+            IOpacityService opacityService,
+            IProjectBlueprintPlacementGroupRepository placementGroupRepository,
+            IProjectBlueprintPlacementGroupImageRepository placementGroupImageRepository)
         {
             _projectItemRepository = projectItemRepository;
             _projectItemArtworkRepository = projectItemArtworkRepository;
@@ -43,6 +48,8 @@ namespace Artsy.API.Services
             _projectItemQuestionRepository = projectItemQuestionRepository;
             _imageService = imageService;
             _opacityService = opacityService;
+            _placementGroupRepository = placementGroupRepository;
+            _placementGroupImageRepository = placementGroupImageRepository;
         }
 
         public async Task<ArtworkGenerationPlan> BuildPlanAsync(
@@ -120,7 +127,7 @@ namespace Artsy.API.Services
 
             // --- Collect blueprint placements for this item ---
             var blueprints = await _projectBlueprintRepository.GetByProjectIdAsync(projectId);
-            var itemPlacements = new List<(int W, int H, string CropX, string CropY)>();
+            var itemPlacements = new List<(string Position, int W, int H, string CropX, string CropY, int BlueprintId)>();
             foreach (var bp in blueprints)
             {
                 if (string.IsNullOrWhiteSpace(bp.PlacementJson)) continue;
@@ -134,17 +141,49 @@ namespace Artsy.API.Services
                         {
                             var (pw, ph) = p.GetDimensions();
                             if (pw > 0 && ph > 0)
-                                itemPlacements.Add((pw, ph, p.CropX ?? "center", p.CropY ?? "center"));
+                                itemPlacements.Add((p.Position ?? "", pw, ph, p.CropX ?? "center", p.CropY ?? "center", bp.BlueprintId));
                         }
                     }
                 }
                 catch { }
             }
 
-            // --- Group placements by aspect ratio into variant groups ---
+            // --- Check for seamless placement groups ---
+            // A placement group defines a set of placements that should share one seamless artwork.
+            // We collect all group images that reference this item's artwork, grouped by group ID.
+            var seamlessGroups = new Dictionary<Guid, List<(string Position, int W, int H, string CropX, string CropY, bool Flipped)>>();
+            var groupedPositions = new HashSet<string>();
+            foreach (var bp in blueprints)
+            {
+                var groups = await _placementGroupRepository.GetByProjectAndBlueprintAsync(projectId, bp.BlueprintId);
+                foreach (var group in groups)
+                {
+                    var groupImages = await _placementGroupImageRepository.GetByGroupIdAsync(group.Id);
+                    // Only include groups where at least one image references this item
+                    if (!groupImages.Any(gi => gi.ArtworkId == itemId)) continue;
+
+                    var placements = new List<(string Position, int W, int H, string CropX, string CropY, bool Flipped)>();
+                    foreach (var gi in groupImages.OrderBy(g => g.Index))
+                    {
+                        if (gi.ArtworkId != itemId) continue;
+                        // Find the placement dimensions for this position
+                        var placement = itemPlacements.FirstOrDefault(ip => ip.Position == gi.Position);
+                        if (placement.W > 0 && placement.H > 0)
+                        {
+                            placements.Add((gi.Position, placement.W, placement.H, placement.CropX, placement.CropY, gi.Flipped));
+                            groupedPositions.Add(gi.Position);
+                        }
+                    }
+                    if (placements.Count > 0)
+                        seamlessGroups[group.Id] = placements;
+                }
+            }
+
+            // --- Non-grouped placements: group by aspect ratio into variant groups ---
+            var nonGroupedPlacements = itemPlacements.Where(ip => !groupedPositions.Contains(ip.Position)).ToList();
             var variantGroups = new List<(int W, int H, string CropX, string CropY)>();
             var seenRatios = new HashSet<string>();
-            foreach (var (w, h, cx, cy) in itemPlacements)
+            foreach (var (_, w, h, cx, cy, _) in nonGroupedPlacements)
             {
                 var ratio = (double)w / h;
                 var key = $"{ratio:F4}";
@@ -156,7 +195,56 @@ namespace Artsy.API.Services
             // --- Build generation tasks ---
             var tasks = new List<ArtworkGenerationTask>();
             int baseWidth, baseHeight;
+            int variantIdx = 0;
 
+            // Seamless group tasks: one task per group, with combined dimensions
+            foreach (var (groupId, groupPlacements) in seamlessGroups)
+            {
+                // Combined dimensions: width = max width, height = sum of all heights
+                var combinedWidth = groupPlacements.Max(p => p.W);
+                var combinedHeight = groupPlacements.Sum(p => p.H);
+
+                // Calculate generation dimensions at 2K, clamped to 3:1 ratio
+                var ratio = (double)combinedWidth / combinedHeight;
+                double genRatio;
+                if (ratio > 3.0) genRatio = 3.0;
+                else if (ratio < 1.0 / 3.0) genRatio = 1.0 / 3.0;
+                else genRatio = ratio;
+
+                var maxDim = Math.Max(combinedWidth, combinedHeight);
+                var targetArea = maxDim > 1024 ? 2048.0 * 2048 : 1024.0 * 1024;
+                var w = Math.Sqrt(targetArea * genRatio);
+                var h = Math.Sqrt(targetArea / genRatio);
+                var genW = (int)Math.Round(w / 16) * 16;
+                var genH = (int)Math.Round(h / 16) * 16;
+                if (genW < 64) genW = 64;
+                if (genH < 64) genH = 64;
+
+                tasks.Add(new ArtworkGenerationTask
+                {
+                    Width = genW,
+                    Height = genH,
+                    NeedsCrop = false,
+                    PlacementWidth = combinedWidth,
+                    PlacementHeight = combinedHeight,
+                    CropX = "center",
+                    CropY = "center",
+                    NeedsMask = false,
+                    VariantIndex = variantIdx++,
+                    GroupId = groupId,
+                    GroupPlacements = groupPlacements.Select(p => new SeamlessGroupPlacement
+                    {
+                        Position = p.Position,
+                        Width = p.W,
+                        Height = p.H,
+                        Flipped = p.Flipped,
+                        CropX = p.CropX,
+                        CropY = p.CropY
+                    }).ToList()
+                });
+            }
+
+            // Non-grouped variant tasks
             if (variantGroups.Count > 0)
             {
                 for (var i = 0; i < variantGroups.Count; i++)
@@ -173,11 +261,14 @@ namespace Artsy.API.Services
                         PlacementHeight = ph,
                         CropX = cx,
                         CropY = cy,
-                        NeedsMask = needsCrop, // Mask needed when crop is required
-                        VariantIndex = i
+                        NeedsMask = needsCrop,
+                        VariantIndex = variantIdx++
                     });
                 }
+            }
 
+            if (tasks.Count > 0)
+            {
                 baseWidth = tasks[0].Width;
                 baseHeight = tasks[0].Height;
             }
@@ -248,9 +339,9 @@ namespace Artsy.API.Services
             }
 
             // Determine if this artwork needs upscaling.
-            // An artwork needs upscaling if it has product placements,
+            // An artwork needs upscaling if it has product placements or seamless groups,
             // OR if it's not solely used as a reference by other items.
-            var needsUpscale = variantGroups.Count > 0;
+            var needsUpscale = variantGroups.Count > 0 || seamlessGroups.Count > 0;
             if (!needsUpscale)
             {
                 // Check if any other item references this item's artwork
@@ -267,7 +358,7 @@ namespace Artsy.API.Services
                 HasOpacity = hasOpacity,
                 ReferenceImages = referenceImages,
                 Tasks = tasks,
-                TotalPlacements = variantGroups.Count,
+                TotalPlacements = variantGroups.Count + seamlessGroups.Sum(g => g.Value.Count),
                 NeedsUpscale = needsUpscale,
                 Width = baseWidth,
                 Height = baseHeight

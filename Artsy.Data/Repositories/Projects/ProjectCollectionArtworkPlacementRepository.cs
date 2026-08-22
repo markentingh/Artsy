@@ -32,10 +32,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             if (placement.Id == Guid.Empty) placement.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectCollectionArtworkPlacements"" (""Id"", ""CollectionArtworkId"", ""Width"", ""Height"", ""Index"", ""FullSize"", ""PrintifyImageId"", ""ResponseId"")
-                VALUES (@Id, @CollectionArtworkId, @Width, @Height, @Index, @FullSize, @PrintifyImageId, @ResponseId)
-                ON CONFLICT (""CollectionArtworkId"", ""Index"")
-                DO UPDATE SET ""Width"" = EXCLUDED.""Width"", ""Height"" = EXCLUDED.""Height"", ""FullSize"" = EXCLUDED.""FullSize"", ""PrintifyImageId"" = EXCLUDED.""PrintifyImageId"", ""ResponseId"" = EXCLUDED.""ResponseId""
+                INSERT INTO public.""ProjectCollectionArtworkPlacements"" (""Id"", ""CollectionArtworkId"", ""Width"", ""Height"", ""Index"", ""FullSize"", ""PrintifyImageId"", ""ResponseId"", ""GroupId"", ""Position"")
+                VALUES (@Id, @CollectionArtworkId, @Width, @Height, @Index, @FullSize, @PrintifyImageId, @ResponseId, @GroupId, @Position)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectCollectionArtworkPlacement>(query, placement);
         }
@@ -44,7 +42,7 @@ namespace Artsy.Data.Repositories.Projects
         {
             const string query = @"
                 UPDATE public.""ProjectCollectionArtworkPlacements""
-                SET ""Width"" = @Width, ""Height"" = @Height, ""Index"" = @Index, ""FullSize"" = @FullSize, ""PrintifyImageId"" = @PrintifyImageId, ""ResponseId"" = @ResponseId
+                SET ""Width"" = @Width, ""Height"" = @Height, ""Index"" = @Index, ""FullSize"" = @FullSize, ""PrintifyImageId"" = @PrintifyImageId, ""ResponseId"" = @ResponseId, ""GroupId"" = @GroupId, ""Position"" = @Position
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, placement);
         }

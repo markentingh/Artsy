@@ -3,8 +3,10 @@ import Modal from '@/components/ui/modal';
 import Input from '@/components/forms/input';
 import ButtonOutline from '@/components/ui/button-outline';
 import Message from '@/components/ui/message';
+import SelectGrid from '@/components/ui/select-grid';
+import { aspectRatioOptions } from '@/components/ui/aspect-ratio-icons';
 
-export default function NewArtworkModal({ show, onClose, onSave }) {
+export default function NewArtworkModal({ show, onClose, onSave, aspectRatio = '1:1', onAspectRatioChange }) {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState(null);
 
@@ -41,6 +43,19 @@ export default function NewArtworkModal({ show, onClose, onSave }) {
         placeholder="Enter artwork title"
         required
       />
+      {onAspectRatioChange && (
+        <SelectGrid
+          name="aspectRatio"
+          label="Aspect Ratio"
+          options={aspectRatioOptions}
+          value={aspectRatio}
+          onChange={(val) => onAspectRatioChange(val)}
+          columns={6}
+          buttonWidth={250}
+          dropdownWidth={400}
+          placeholder="Select aspect ratio..."
+        />
+      )}
       <div className="buttons flex justify-end gap-2">
         <ButtonOutline onClick={onClose} className="cancel">
           Cancel

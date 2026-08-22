@@ -143,6 +143,48 @@ namespace Artsy.API.Controllers
                         return Json(new ApiResponse { success = true, data = new { printifyImageId = placement.PrintifyImageId, placementIndex = idx } });
 
                     byte[] variantBytes;
+
+                    // Check if this placement belongs to a seamless group
+                    if (placement.GroupId.HasValue && !string.IsNullOrWhiteSpace(placement.Position))
+                    {
+                        var groupId = placement.GroupId.Value;
+                        var position = placement.Position;
+
+                        if (artwork.Opacity)
+                        {
+                            variantBytes = await _imageService.GetProjectCollectionArtworkGroupImageFullSizePngAsync(
+                                artwork.ProjectId, request.CollectionId, artwork.ItemId, artwork.Id, groupId, position);
+                            if (variantBytes == null || variantBytes.Length == 0)
+                            {
+                                variantBytes = await _imageService.GetProjectCollectionArtworkGroupImagePngAsync(
+                                    artwork.ProjectId, request.CollectionId, artwork.ItemId, artwork.Id, groupId, position);
+                            }
+                        }
+                        else
+                        {
+                            variantBytes = await _imageService.GetProjectCollectionArtworkGroupImageFullSizeAsync(
+                                artwork.ProjectId, request.CollectionId, artwork.ItemId, artwork.Id, groupId, position);
+                            if (variantBytes == null || variantBytes.Length == 0)
+                            {
+                                variantBytes = await _imageService.GetProjectCollectionArtworkGroupImageAsync(
+                                    artwork.ProjectId, request.CollectionId, artwork.ItemId, artwork.Id, groupId, position);
+                            }
+                        }
+                        if (variantBytes == null || variantBytes.Length == 0)
+                            return Json(new ApiResponse { success = false, message = $"Group placement {position} file not found." });
+
+                        var variantBase64 = Convert.ToBase64String(variantBytes);
+                        var variantFileName = artwork.Opacity ? $"{artwork.Id}_{position}.png" : $"{artwork.Id}_{position}.jpg";
+                        var variantUploadResp = await _printifyService.UploadImageAsync(userId, variantFileName, variantBase64);
+                        if (variantUploadResp == null || string.IsNullOrWhiteSpace(variantUploadResp.Id))
+                            return Json(new ApiResponse { success = false, message = $"Failed to upload group placement {position} to Printify." });
+
+                        await _artworkPlacementRepository.SetPrintifyImageIdAsync(placement.Id, variantUploadResp.Id);
+
+                        return Json(new ApiResponse { success = true, data = new { printifyImageId = variantUploadResp.Id, placementIndex = idx } });
+                    }
+
+                    // Standard placement variant upload
                     if (artwork.Opacity)
                     {
                         variantBytes = await _imageService.GetProjectCollectionArtworkPlacementFullSizePngAsync(
@@ -166,15 +208,15 @@ namespace Artsy.API.Controllers
                     if (variantBytes == null || variantBytes.Length == 0)
                         return Json(new ApiResponse { success = false, message = $"Placement variant {idx} file not found." });
 
-                    var variantBase64 = Convert.ToBase64String(variantBytes);
-                    var variantFileName = artwork.Opacity ? $"{artwork.Id}_{idx}.png" : $"{artwork.Id}_{idx}.jpg";
-                    var variantUploadResp = await _printifyService.UploadImageAsync(userId, variantFileName, variantBase64);
-                    if (variantUploadResp == null || string.IsNullOrWhiteSpace(variantUploadResp.Id))
+                    var stdBase64 = Convert.ToBase64String(variantBytes);
+                    var stdFileName = artwork.Opacity ? $"{artwork.Id}_{idx}.png" : $"{artwork.Id}_{idx}.jpg";
+                    var stdUploadResp = await _printifyService.UploadImageAsync(userId, stdFileName, stdBase64);
+                    if (stdUploadResp == null || string.IsNullOrWhiteSpace(stdUploadResp.Id))
                         return Json(new ApiResponse { success = false, message = $"Failed to upload placement variant {idx} to Printify." });
 
-                    await _artworkPlacementRepository.SetPrintifyImageIdAsync(placement.Id, variantUploadResp.Id);
+                    await _artworkPlacementRepository.SetPrintifyImageIdAsync(placement.Id, stdUploadResp.Id);
 
-                    return Json(new ApiResponse { success = true, data = new { printifyImageId = variantUploadResp.Id, placementIndex = idx } });
+                    return Json(new ApiResponse { success = true, data = new { printifyImageId = stdUploadResp.Id, placementIndex = idx } });
                 }
 
                 // Standard single-artwork upload (backward compatible)

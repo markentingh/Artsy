@@ -4,5 +4,6 @@ namespace Artsy.API.Models.Projects
     {
         public Guid ProjectId { get; set; }
         public string? Title { get; set; }
+        public string? AspectRatio { get; set; }
     }
 }

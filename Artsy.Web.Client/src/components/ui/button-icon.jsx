@@ -1,7 +1,7 @@
 import React from 'react';
 import Icon from '@/components/ui/icon';
 
-export default function ButtonIcon({ name, onClick, title, color, className = '' }) {
+export default function ButtonIcon({ name, onClick, title, color, className = '', disabled = false }) {
   const colorClasses = color === 'red'
     ? 'text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
     : color === 'green'
@@ -17,7 +17,8 @@ export default function ButtonIcon({ name, onClick, title, color, className = ''
       type="button"
       onClick={onClick}
       title={title}
-      className={`icon w-8 h-8 flex items-center justify-center ${colorClasses} rounded transition ${className}`}
+      disabled={disabled}
+      className={`icon w-8 h-8 flex items-center justify-center ${colorClasses} rounded transition ${disabled ? 'opacity-40 cursor-not-allowed' : ''} ${className}`}
     >
       <Icon name={name} />
     </button>

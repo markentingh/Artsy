@@ -37,8 +37,9 @@ export default function ReadyToGenerate() {
   const retryRef = useRef({});
 
   const artworkImages = acceptedArtworks.map(a => {
+    // For group artworks, show the main combined image (no placement index)
     // For variant artworks, show the first placement variant thumbnail
-    const placementIndex = a.totalPlacements > 0 ? 0 : null;
+    const placementIndex = a.hasGroups ? null : (a.totalPlacements > 0 ? 0 : null);
     return artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex, cacheBust: Math.floor(Math.random() * 1000000) });
   });
 

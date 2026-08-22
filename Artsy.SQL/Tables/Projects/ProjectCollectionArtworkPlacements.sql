@@ -10,8 +10,15 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionArtworkPlacements"
     "ResponseId" VARCHAR(64) NOT NULL DEFAULT ''
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "UX_ProjectCollectionArtworkPlacements_ArtworkId_Index"
-    ON public."ProjectCollectionArtworkPlacements" ("CollectionArtworkId", "Index");
+-- Drop old unique index that conflicts with multi-group placements
+DROP INDEX IF EXISTS "UX_ProjectCollectionArtworkPlacements_ArtworkId_Index";
+
+-- Add GroupId and Position columns for seamless placement group support
+ALTER TABLE public."ProjectCollectionArtworkPlacements" ADD COLUMN IF NOT EXISTS "GroupId" UUID;
+ALTER TABLE public."ProjectCollectionArtworkPlacements" ADD COLUMN IF NOT EXISTS "Position" VARCHAR(64) NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS "IX_ProjectCollectionArtworkPlacements_ArtworkId"
     ON public."ProjectCollectionArtworkPlacements" ("CollectionArtworkId");
+
+CREATE INDEX IF NOT EXISTS "IX_ProjectCollectionArtworkPlacements_GroupId"
+    ON public."ProjectCollectionArtworkPlacements" ("GroupId");

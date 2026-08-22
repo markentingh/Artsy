@@ -152,11 +152,33 @@ export default function CreateProducts() {
   }, [activeBlueprints, createdBlueprints]);
 
   const artworkImages = useMemo(() =>
-    acceptedArtwork.map(a => ({
-      ...a,
-      imageUrl: artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex: a.totalPlacements > 0 ? 0 : null }),
-      type: 'artwork',
-    })),
+    acceptedArtwork.flatMap(a => {
+      // For artworks with seamless groups, show each group placement as a separate thumbnail
+      if (a.hasGroups && a.groupPlacements && a.groupPlacements.length > 0) {
+        const groupThumbs = [];
+        for (const grp of a.groupPlacements) {
+          for (const gp of grp.placements) {
+            groupThumbs.push({
+              ...a,
+              id: `${a.id}_group_${grp.groupId}_${gp.index}`,
+              artworkId: a.id,
+              groupId: grp.groupId,
+              groupPosition: gp.position,
+              groupIndex: gp.index,
+              imageUrl: `/api/projects/collection/${collectionId}/item/${a.itemId}/artwork/${a.id}/group/${grp.groupId}/${gp.position}`,
+              type: 'artwork',
+            });
+          }
+        }
+        return groupThumbs;
+      }
+      // For variant artworks, show the first placement as thumbnail
+      return [{
+        ...a,
+        imageUrl: artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex: a.totalPlacements > 0 ? 0 : null }),
+        type: 'artwork',
+      }];
+    }),
     [acceptedArtwork, collectionId, api]
   );
 
@@ -181,11 +203,23 @@ export default function CreateProducts() {
       setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'uploading' } }));
 
       try {
-        // For variant artworks, upload each placement variant separately
-        const totalPlacements = art.totalPlacements || 0;
-        if (totalPlacements > 0) {
+        // For seamless group artworks, upload via placement index (backend resolves group)
+        if (art.groupId && art.groupPosition) {
+          const response = await printifyProductsApi.uploadArtworkImage({
+            collectionId,
+            artworkId: art.artworkId,
+            placementIndex: art.groupIndex,
+          });
+          if (response.data.success) {
+            setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'done' } }));
+          } else {
+            setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'error' } }));
+            setMessage({ type: 'error', text: response.data.message || 'Failed to upload group placement' });
+          }
+        } else if (art.totalPlacements > 0) {
+          // For variant artworks, upload each placement variant separately
           let allVariantSuccess = true;
-          for (let i = 0; i < totalPlacements; i++) {
+          for (let i = 0; i < art.totalPlacements; i++) {
             const variantResponse = await printifyProductsApi.uploadArtworkImage({
               collectionId,
               artworkId: art.id,
@@ -444,9 +478,13 @@ export default function CreateProducts() {
   }, [artworkImages, allImages]);
 
   const fullSizePreviewImages = useMemo(() => {
-    const artworkFull = artworkImages.map(a => artworkImageUrl(collectionId, a.itemId, a.id, {
-      placementIndex: a.totalPlacements > 0 ? 0 : null,
-    }));
+    const artworkFull = artworkImages.map(a => {
+      // For group artworks, the imageUrl is already the full URL
+      if (a.groupId && a.groupPosition) return a.imageUrl;
+      return artworkImageUrl(collectionId, a.itemId, a.id, {
+        placementIndex: a.totalPlacements > 0 ? 0 : null,
+      });
+    });
     const productFull = allImages.map(img => (img.imageUrl || '').replace('?thumb=true', ''));
     return [...artworkFull, ...productFull];
   }, [artworkImages, allImages, collectionId]);

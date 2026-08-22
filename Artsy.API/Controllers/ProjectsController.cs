@@ -44,6 +44,8 @@ namespace Artsy.API.Controllers
         readonly IProjectImageUpscaleRepository _projectImageUpscaleRepository;
         readonly IPrintifyService _printifyService;
         readonly IProjectBlueprintProductImageRepository _projectBlueprintProductImageRepository;
+        readonly IProjectBlueprintPlacementGroupRepository _placementGroupRepository;
+        readonly IProjectBlueprintPlacementGroupImageRepository _placementGroupImageRepository;
         readonly IProjectCollectionPrintifyProductRepository _printifyProductRepository;
         readonly IProjectCollectionPrintifyProductMockupRepository _mockupRepository;
         readonly IProjectCollectionProductRepository _productRepository;
@@ -81,6 +83,8 @@ namespace Artsy.API.Controllers
             IProjectImageUpscaleRepository projectImageUpscaleRepository,
             IPrintifyService printifyService,
             IProjectBlueprintProductImageRepository projectBlueprintProductImageRepository,
+            IProjectBlueprintPlacementGroupRepository placementGroupRepository,
+            IProjectBlueprintPlacementGroupImageRepository placementGroupImageRepository,
             IProjectCollectionPrintifyProductRepository printifyProductRepository,
             IProjectCollectionPrintifyProductMockupRepository mockupRepository,
             IProjectCollectionProductRepository productRepository,
@@ -117,6 +121,8 @@ namespace Artsy.API.Controllers
             _projectImageUpscaleRepository = projectImageUpscaleRepository;
             _printifyService = printifyService;
             _projectBlueprintProductImageRepository = projectBlueprintProductImageRepository;
+            _placementGroupRepository = placementGroupRepository;
+            _placementGroupImageRepository = placementGroupImageRepository;
             _printifyProductRepository = printifyProductRepository;
             _mockupRepository = mockupRepository;
             _productRepository = productRepository;

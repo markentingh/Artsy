@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS public."OrderItemArtworks"
     "PrintifyImageId" VARCHAR(64) NOT NULL DEFAULT '',
     "Opacity" BOOLEAN NOT NULL DEFAULT FALSE,
     "RequestText" TEXT NOT NULL DEFAULT '',
+    "PlacementIndex" INT NOT NULL DEFAULT 0,
+    "TotalPlacements" INT NOT NULL DEFAULT 1,
     "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "Updated" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -25,3 +27,14 @@ CREATE TABLE IF NOT EXISTS public."OrderItemArtworks"
 CREATE INDEX IF NOT EXISTS "IX_OrderItemArtworks_OrderId" ON public."OrderItemArtworks" ("OrderId");
 CREATE INDEX IF NOT EXISTS "IX_OrderItemArtworks_OrderItemId" ON public."OrderItemArtworks" ("OrderItemId");
 CREATE INDEX IF NOT EXISTS "IX_OrderItemArtworks_CollectionId" ON public."OrderItemArtworks" ("CollectionId");
+
+-- Add columns for existing databases (safe to run multiple times)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'OrderItemArtworks' AND column_name = 'PlacementIndex') THEN
+        ALTER TABLE public."OrderItemArtworks" ADD COLUMN "PlacementIndex" INT NOT NULL DEFAULT 0;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'OrderItemArtworks' AND column_name = 'TotalPlacements') THEN
+        ALTER TABLE public."OrderItemArtworks" ADD COLUMN "TotalPlacements" INT NOT NULL DEFAULT 1;
+    END IF;
+END $$;

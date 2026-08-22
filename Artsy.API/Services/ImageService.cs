@@ -83,6 +83,39 @@ namespace Artsy.API.Services
         Task<byte[]> GetOrderItemArtworkPngAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId);
         Task SaveOrderItemArtworkFullSizeAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, byte[] imageData);
         Task<byte[]> GetOrderItemArtworkFullSizeAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId);
+
+        // Order item artwork placement images (per-variant)
+        Task SaveOrderItemArtworkPlacementAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, int placementIndex, byte[] imageData);
+        Task<byte[]> GetOrderItemArtworkPlacementImageAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, int placementIndex);
+        Task SaveOrderItemArtworkPlacementPngAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, int placementIndex, byte[] imageData);
+        Task<byte[]> GetOrderItemArtworkPlacementPngAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, int placementIndex);
+
+        // Seamless placement group images (stored in groups/{groupId}/ subfolder)
+        Task SaveProjectCollectionArtworkGroupImageAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkGroupImageAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position);
+        Task SaveProjectCollectionArtworkGroupImagePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkGroupImagePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position);
+        Task SaveProjectCollectionArtworkGroupImageFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkGroupImageFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position);
+        Task SaveProjectCollectionArtworkGroupImageFullSizePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position, byte[] imageData);
+        Task<byte[]> GetProjectCollectionArtworkGroupImageFullSizePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position);
+
+        // Order item group images (for personalize order flow)
+        Task SaveOrderItemArtworkGroupImageAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, Guid groupId, string position, byte[] imageData);
+        Task<byte[]> GetOrderItemArtworkGroupImageAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, Guid groupId, string position);
+        Task SaveOrderItemArtworkGroupImagePngAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, Guid groupId, string position, byte[] imageData);
+        Task<byte[]> GetOrderItemArtworkGroupImagePngAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, Guid groupId, string position);
+
+        /// <summary>
+        /// Cuts a tall image vertically into segments at the specified heights.
+        /// Returns one image per segment, in order.
+        /// </summary>
+        Task<List<byte[]>> CutImageVerticalAsync(byte[] imageBytes, List<int> segmentHeights);
+
+        /// <summary>
+        /// Flips an image 180 degrees (rotates 180).
+        /// </summary>
+        Task<byte[]> Flip180Async(byte[] imageBytes);
     }
 
     public class ImageService : IImageService
@@ -1583,5 +1616,242 @@ namespace Artsy.API.Services
 
             return await GetFromFileSystemAsync(relativePath);
         }
+
+        public async Task SaveOrderItemArtworkPlacementAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, int placementIndex, byte[] imageData)
+        {
+            var fileName = $"{artworkId}_{placementIndex}.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "orders", orderId.ToString(), artworkId.ToString(), fileName);
+            var thumbFileName = $"{artworkId}_{placementIndex}_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "orders", orderId.ToString(), artworkId.ToString(), thumbFileName);
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+        }
+
+        public async Task<byte[]> GetOrderItemArtworkPlacementImageAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, int placementIndex)
+        {
+            var fileName = $"{artworkId}_{placementIndex}.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "orders", orderId.ToString(), artworkId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveOrderItemArtworkPlacementPngAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, int placementIndex, byte[] imageData)
+        {
+            var fileName = $"{artworkId}_{placementIndex}.png";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "orders", orderId.ToString(), artworkId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+        }
+
+        public async Task<byte[]> GetOrderItemArtworkPlacementPngAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, int placementIndex)
+        {
+            var fileName = $"{artworkId}_{placementIndex}.png";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "orders", orderId.ToString(), artworkId.ToString(), fileName);
+
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        #region Seamless Placement Group Images
+
+        private string GetGroupImagePath(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position, string suffix, string extension)
+        {
+            var fileName = $"{position}{suffix}.{extension}";
+            return Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), itemId.ToString(), "groups", groupId.ToString(), fileName);
+        }
+
+        private string GetOrderGroupImagePath(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, Guid groupId, string position, string suffix, string extension)
+        {
+            var fileName = $"{position}{suffix}.{extension}";
+            return Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "orders", orderId.ToString(), artworkId.ToString(), "groups", groupId.ToString(), fileName);
+        }
+
+        public async Task SaveProjectCollectionArtworkGroupImageAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position, byte[] imageData)
+        {
+            var relativePath = GetGroupImagePath(projectId, collectionId, itemId, artworkId, groupId, position, "", "jpg");
+            var thumbRelativePath = GetGroupImagePath(projectId, collectionId, itemId, artworkId, groupId, position, "_thumb", "jpg");
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkGroupImageAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position)
+        {
+            var relativePath = GetGroupImagePath(projectId, collectionId, itemId, artworkId, groupId, position, "", "jpg");
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveProjectCollectionArtworkGroupImagePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position, byte[] imageData)
+        {
+            var relativePath = GetGroupImagePath(projectId, collectionId, itemId, artworkId, groupId, position, "", "png");
+            var thumbRelativePath = GetGroupImagePath(projectId, collectionId, itemId, artworkId, groupId, position, "_thumb", "png");
+            var thumbImageData = await GenerateThumbnailAsync(imageData);
+
+            if (_activeStorage == "azure")
+            {
+                await SaveToAzureBlobAsync(relativePath, imageData);
+                await SaveToAzureBlobAsync(thumbRelativePath, thumbImageData);
+                return;
+            }
+
+            await SaveToFileSystemAsync(relativePath, imageData);
+            await SaveToFileSystemAsync(thumbRelativePath, thumbImageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkGroupImagePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position)
+        {
+            var relativePath = GetGroupImagePath(projectId, collectionId, itemId, artworkId, groupId, position, "", "png");
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveProjectCollectionArtworkGroupImageFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position, byte[] imageData)
+        {
+            var relativePath = GetGroupImagePath(projectId, collectionId, itemId, artworkId, groupId, position, "_fullsize", "jpg");
+            if (_activeStorage == "azure")
+                await SaveToAzureBlobAsync(relativePath, imageData);
+            else
+                await SaveToFileSystemAsync(relativePath, imageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkGroupImageFullSizeAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position)
+        {
+            var relativePath = GetGroupImagePath(projectId, collectionId, itemId, artworkId, groupId, position, "_fullsize", "jpg");
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveProjectCollectionArtworkGroupImageFullSizePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position, byte[] imageData)
+        {
+            var relativePath = GetGroupImagePath(projectId, collectionId, itemId, artworkId, groupId, position, "_fullsize", "png");
+            if (_activeStorage == "azure")
+                await SaveToAzureBlobAsync(relativePath, imageData);
+            else
+                await SaveToFileSystemAsync(relativePath, imageData);
+        }
+
+        public async Task<byte[]> GetProjectCollectionArtworkGroupImageFullSizePngAsync(Guid projectId, Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position)
+        {
+            var relativePath = GetGroupImagePath(projectId, collectionId, itemId, artworkId, groupId, position, "_fullsize", "png");
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveOrderItemArtworkGroupImageAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, Guid groupId, string position, byte[] imageData)
+        {
+            var relativePath = GetOrderGroupImagePath(projectId, collectionId, orderId, artworkId, groupId, position, "", "jpg");
+            if (_activeStorage == "azure")
+                await SaveToAzureBlobAsync(relativePath, imageData);
+            else
+                await SaveToFileSystemAsync(relativePath, imageData);
+        }
+
+        public async Task<byte[]> GetOrderItemArtworkGroupImageAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, Guid groupId, string position)
+        {
+            var relativePath = GetOrderGroupImagePath(projectId, collectionId, orderId, artworkId, groupId, position, "", "jpg");
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public async Task SaveOrderItemArtworkGroupImagePngAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, Guid groupId, string position, byte[] imageData)
+        {
+            var relativePath = GetOrderGroupImagePath(projectId, collectionId, orderId, artworkId, groupId, position, "", "png");
+            if (_activeStorage == "azure")
+                await SaveToAzureBlobAsync(relativePath, imageData);
+            else
+                await SaveToFileSystemAsync(relativePath, imageData);
+        }
+
+        public async Task<byte[]> GetOrderItemArtworkGroupImagePngAsync(Guid projectId, Guid collectionId, Guid orderId, Guid artworkId, Guid groupId, string position)
+        {
+            var relativePath = GetOrderGroupImagePath(projectId, collectionId, orderId, artworkId, groupId, position, "", "png");
+            if (_activeStorage == "azure")
+                return await GetFromAzureBlobAsync(relativePath);
+            return await GetFromFileSystemAsync(relativePath);
+        }
+
+        public Task<List<byte[]>> CutImageVerticalAsync(byte[] imageBytes, List<int> segmentHeights)
+        {
+            var results = new List<byte[]>();
+            using var image = Image.Load(imageBytes);
+            var srcW = image.Width;
+            var srcH = image.Height;
+
+            // Calculate the total target height and scale factor
+            var totalTargetHeight = segmentHeights.Sum();
+            if (totalTargetHeight <= 0 || segmentHeights.Count == 0)
+            {
+                results.Add(imageBytes);
+                return Task.FromResult(results);
+            }
+
+            // Scale segment heights proportionally to the image height
+            var scaleY = (double)srcH / totalTargetHeight;
+            var yOffset = 0;
+
+            foreach (var segHeight in segmentHeights)
+            {
+                var scaledHeight = (int)Math.Round(segHeight * scaleY);
+                // Ensure we don't exceed the image bounds
+                if (yOffset + scaledHeight > srcH)
+                    scaledHeight = srcH - yOffset;
+                if (scaledHeight <= 0) break;
+
+                // Clone and crop the segment
+                using var segImage = image.Clone(ctx => ctx.Crop(new Rectangle(0, yOffset, srcW, scaledHeight)));
+                using var ms = new MemoryStream();
+                segImage.Save(ms, new JpegEncoder { Quality = 95 });
+                results.Add(ms.ToArray());
+
+                yOffset += scaledHeight;
+            }
+
+            return Task.FromResult(results);
+        }
+
+        public Task<byte[]> Flip180Async(byte[] imageBytes)
+        {
+            using var image = Image.Load(imageBytes);
+            image.Mutate(ctx => ctx.Rotate(RotateMode.Rotate180));
+            using var ms = new MemoryStream();
+            image.Save(ms, new JpegEncoder { Quality = 95 });
+            return Task.FromResult(ms.ToArray());
+        }
+
+        #endregion
     }
 }

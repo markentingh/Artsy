@@ -32,8 +32,8 @@ namespace Artsy.Data.Repositories.Orders
             artwork.Created = DateTime.UtcNow;
             artwork.Updated = DateTime.UtcNow;
             const string query = @"
-                INSERT INTO public.""OrderItemArtworks"" (""Id"", ""OrderId"", ""OrderItemId"", ""ProjectId"", ""CollectionId"", ""ItemId"", ""Active"", ""Width"", ""Height"", ""ImageModel"", ""Prompt"", ""Accepted"", ""ResponseId"", ""FullSize"", ""Index"", ""PrintifyImageId"", ""Opacity"", ""RequestText"", ""Created"", ""Updated"")
-                VALUES (@Id, @OrderId, @OrderItemId, @ProjectId, @CollectionId, @ItemId, @Active, @Width, @Height, @ImageModel, @Prompt, @Accepted, @ResponseId, @FullSize, @Index, @PrintifyImageId, @Opacity, @RequestText, @Created, @Updated)
+                INSERT INTO public.""OrderItemArtworks"" (""Id"", ""OrderId"", ""OrderItemId"", ""ProjectId"", ""CollectionId"", ""ItemId"", ""Active"", ""Width"", ""Height"", ""ImageModel"", ""Prompt"", ""Accepted"", ""ResponseId"", ""FullSize"", ""Index"", ""PrintifyImageId"", ""Opacity"", ""RequestText"", ""PlacementIndex"", ""TotalPlacements"", ""Created"", ""Updated"")
+                VALUES (@Id, @OrderId, @OrderItemId, @ProjectId, @CollectionId, @ItemId, @Active, @Width, @Height, @ImageModel, @Prompt, @Accepted, @ResponseId, @FullSize, @Index, @PrintifyImageId, @Opacity, @RequestText, @PlacementIndex, @TotalPlacements, @Created, @Updated)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<OrderItemArtwork>(query, artwork);
         }
@@ -59,6 +59,8 @@ namespace Artsy.Data.Repositories.Orders
                     ""PrintifyImageId"" = @PrintifyImageId,
                     ""Opacity"" = @Opacity,
                     ""RequestText"" = @RequestText,
+                    ""PlacementIndex"" = @PlacementIndex,
+                    ""TotalPlacements"" = @TotalPlacements,
                     ""Updated"" = @Updated
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, artwork);

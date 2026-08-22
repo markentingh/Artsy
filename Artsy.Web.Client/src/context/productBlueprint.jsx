@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { useSession } from '@/context/session';
 import { Printify } from '@/api/admin/printify';
 import { Printify as PrintifyPublic } from '@/api/user/printify';
@@ -25,6 +25,10 @@ export function ProductBlueprintProvider({
     getItemArtwork, getProductBlueprintImages,
     createBlueprint, updateBlueprint, updateBlueprintVariants, updateBlueprintPricing,
     updateBlueprintDetails, updateBlueprintPlacement, updateProductBlueprintImage,
+    createItem,
+    getPlacementGroups, createPlacementGroup, deletePlacementGroup,
+    savePlacementGroupImage, deletePlacementGroupImage,
+    generateBlueprintInfo,
   } = Projects(session);
   const { getCustomImageUrl } = CustomImages(session);
 
@@ -53,6 +57,8 @@ export function ProductBlueprintProvider({
   const [safetyInfo, setSafetyInfo] = useState('');
   const [variantPrices, setVariantPrices] = useState({});
   const [productBlueprintImages, setProductBlueprintImages] = useState([]);
+  const [placementGroups, setPlacementGroups] = useState([]);
+  const [generatingInfo, setGeneratingInfo] = useState(false);
 
   const initialSelectedVariants = useRef([]);
   const initialPlacementSettings = useRef([]);
@@ -179,6 +185,13 @@ export function ProductBlueprintProvider({
                 }
               } catch { /* ignore */ }
             }
+            // Load placement groups for this project + blueprint
+            try {
+              const pgResp = await getPlacementGroups(projectId, blueprint.id);
+              if (pgResp.data.success) {
+                setPlacementGroups(pgResp.data.data || []);
+              }
+            } catch { /* ignore */ }
           } else if (data.blueprint?.printProviderId) {
             setSelectedProvider(String(data.blueprint.printProviderId));
             await loadVariants(blueprint.id, data.blueprint.printProviderId);
@@ -361,8 +374,161 @@ export function ProductBlueprintProvider({
         value: item.id,
         label: item.title || 'Untitled Artwork',
       })),
+      { value: '__new__', label: 'New Artwork...' },
     ];
   }, [projectItems]);
+
+  const handleCreateArtwork = useCallback(async (title, aspectRatio) => {
+    const response = await createItem({ projectId, title, aspectRatio });
+    if (response.data.success) {
+      const newItem = response.data.data;
+      setProjectItems((prev) => [...prev, newItem]);
+      return newItem;
+    }
+    throw new Error(response.data.message || 'Failed to create artwork');
+  }, [createItem, projectId]);
+
+  const refreshItemPreviews = useCallback(async (itemId) => {
+    try {
+      const prevResp = await getItemPreviews(itemId);
+      if (prevResp.data.success) {
+        setItemPreviews((prev) => ({ ...prev, [itemId]: prevResp.data.data || [] }));
+      }
+    } catch { /* ignore */ }
+    try {
+      const artResp = await getItemArtwork(itemId);
+      if (artResp.data.success) {
+        setItemArtworkMap((prev) => ({ ...prev, [itemId]: artResp.data.data || null }));
+      }
+    } catch { /* ignore */ }
+  }, [getItemPreviews, getItemArtwork]);
+
+  // --- Placement Groups ---
+  const handleCreatePlacementGroup = useCallback(async () => {
+    const response = await createPlacementGroup({ projectId, blueprintId: blueprint.id });
+    if (response.data.success) {
+      const newGroup = response.data.data;
+      setPlacementGroups((prev) => [...prev, newGroup]);
+      return newGroup;
+    }
+    throw new Error(response.data.message || 'Failed to create group');
+  }, [createPlacementGroup, projectId, blueprint]);
+
+  const handleDeletePlacementGroup = useCallback(async (groupId) => {
+    await deletePlacementGroup({ groupId });
+    setPlacementGroups((prev) => prev.filter(g => g.id !== groupId));
+  }, [deletePlacementGroup]);
+
+  const handleSavePlacementGroupImage = useCallback(async (imageData) => {
+    const response = await savePlacementGroupImage(imageData);
+    if (response.data.success) {
+      const savedId = response.data.data.id;
+      // Update local state
+      setPlacementGroups((prev) => prev.map(g => {
+        if (g.id !== imageData.groupId) return g;
+        const images = [...(g.images || [])];
+        const existingIdx = images.findIndex(i => i.id === (imageData.id || savedId));
+        const newImage = {
+          id: imageData.id || savedId,
+          groupId: imageData.groupId,
+          index: imageData.index,
+          artworkId: imageData.artworkId,
+          customId: imageData.customId,
+          position: imageData.position || null,
+          flipped: imageData.flipped || false,
+        };
+        if (existingIdx >= 0) {
+          images[existingIdx] = newImage;
+        } else {
+          images.push(newImage);
+        }
+        images.sort((a, b) => a.index - b.index);
+        return { ...g, images };
+      }));
+      return savedId;
+    }
+    throw new Error(response.data.message || 'Failed to save group image');
+  }, [savePlacementGroupImage]);
+
+  const handleDeletePlacementGroupImage = useCallback(async (imageId, groupId) => {
+    await deletePlacementGroupImage({ id: imageId });
+    setPlacementGroups((prev) => prev.map(g => {
+      if (g.id !== groupId) return g;
+      return { ...g, images: (g.images || []).filter(i => i.id !== imageId) };
+    }));
+  }, [deletePlacementGroupImage]);
+
+  const handleReorderPlacementGroupImages = useCallback(async (groupId, reorderedImages) => {
+    // Update local state immediately
+    setPlacementGroups((prev) => prev.map(g => g.id === groupId ? { ...g, images: reorderedImages } : g));
+    // Save each image's new index
+    for (let i = 0; i < reorderedImages.length; i++) {
+      const img = reorderedImages[i];
+      await savePlacementGroupImage({
+        id: img.id,
+        projectId,
+        blueprintId: blueprint.id,
+        groupId,
+        index: i,
+        artworkId: img.artworkId,
+        customId: img.customId,
+        position: img.position || null,
+        flipped: img.flipped || false,
+      });
+    }
+  }, [savePlacementGroupImage, projectId, blueprint]);
+
+  const handleToggleFlip = useCallback(async (groupId, imageId) => {
+    let updatedImage = null;
+    setPlacementGroups((prev) => prev.map(g => {
+      if (g.id !== groupId) return g;
+      return {
+        ...g,
+        images: (g.images || []).map(img => {
+          if (img.id !== imageId) return img;
+          updatedImage = { ...img, flipped: !img.flipped };
+          return updatedImage;
+        }),
+      };
+    }));
+    if (updatedImage) {
+      await savePlacementGroupImage({
+        id: updatedImage.id,
+        projectId,
+        blueprintId: blueprint.id,
+        groupId,
+        index: updatedImage.index,
+        artworkId: updatedImage.artworkId,
+        customId: updatedImage.customId,
+        position: updatedImage.position || null,
+        flipped: updatedImage.flipped,
+      });
+    }
+  }, [savePlacementGroupImage, projectId, blueprint]);
+
+  const handleGenerateInfo = useCallback(async () => {
+    if (!projectBlueprintId) {
+      setMessage({ type: 'error', text: 'Please save the blueprint first before generating info.' });
+      return;
+    }
+    setGeneratingInfo(true);
+    try {
+      const resp = await generateBlueprintInfo({ id: projectBlueprintId });
+      if (resp.data.success) {
+        const data = resp.data.data;
+        if (data?.title) setProductName(data.title);
+        if (data?.description) setProductDescription(data.description);
+        setSaveMessage('Info generated successfully');
+        setTimeout(() => setSaveMessage(null), 5000);
+      } else {
+        setMessage({ type: 'error', text: resp.data.message || 'Failed to generate info' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to generate info' });
+    } finally {
+      setGeneratingInfo(false);
+    }
+  }, [projectBlueprintId, generateBlueprintInfo, setProductName, setProductDescription, setMessage, setSaveMessage]);
 
   const handleSave = async () => {
     if (!selectedProvider) {
@@ -580,6 +746,18 @@ export function ProductBlueprintProvider({
     imagesByColor,
     allPlaceholders,
     artworkOptions,
+    handleCreateArtwork,
+    placementGroups,
+    setPlacementGroups,
+    handleCreatePlacementGroup,
+    handleDeletePlacementGroup,
+    handleSavePlacementGroupImage,
+    handleDeletePlacementGroupImage,
+    handleReorderPlacementGroupImages,
+    handleToggleFlip,
+    handleGenerateInfo,
+    generatingInfo,
+    refreshItemPreviews,
     formatDecorationMethod,
     formatPosition,
     getPlacementCarouselImages,

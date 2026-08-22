@@ -24,6 +24,7 @@ SELECT 'CREATE DATABASE artsy' WHERE NOT EXISTS (SELECT FROM pg_database WHERE d
 \i Tables/Orders/Orders.sql
 \i Tables/Orders/OrderItems.sql
 \i Tables/Orders/OrderItemArtworks.sql
+\i Tables/Orders/OrderItemArtworkPlacements.sql
 \i Tables/Orders/OrderShipments.sql
 \i Tables/Printify/PrintifyBlueprintPrintProviders.sql
 \i Tables/Printify/PrintifyBlueprintShipping.sql
@@ -33,6 +34,8 @@ SELECT 'CREATE DATABASE artsy' WHERE NOT EXISTS (SELECT FROM pg_database WHERE d
 \i Tables/Printify/PrintifyBlueprintImages.sql
 \i Tables/Printify/PrintifyBlueprintImageVariants.sql
 \i Tables/Projects/Projects.sql
+\i Tables/Projects/ProjectBlueprintPlacementGroups.sql
+\i Tables/Projects/ProjectBlueprintPlacementGroupImages.sql
 \i Tables/Projects/ProjectBlueprints.sql
 \i Tables/Projects/ProjectBlueprintProductImages.sql
 \i Tables/Projects/ProjectCollections.sql

@@ -177,15 +177,16 @@ function GenerateStep() {
       const generationText = [requestText, changes].filter(Boolean).join('\n');
       const res = await personalizeApi.generateOrderItemArtwork(order.order.id, orderItem.id, currentUsedArtwork.artworkItemId, selectedImageModel.id, generationText);
       if (res.data?.success) {
-        const artwork = res.data.data.artwork;
+        const artworksList = res.data.data.artworks || [res.data.data.artwork];
         setArtworks((prev) => {
           const next = [...prev];
           next[currentArtworkIndex] = {
-            id: artwork.id,
-            url: artwork.url,
-            prompt: artwork.prompt,
-            width: artwork.width,
-            height: artwork.height,
+            id: artworksList[0].id,
+            url: artworksList[0].url,
+            prompt: artworksList[0].prompt,
+            width: artworksList[0].width,
+            height: artworksList[0].height,
+            variants: artworksList,
             status: 'done',
           };
           return next;
@@ -218,8 +219,12 @@ function GenerateStep() {
   const handleAccept = useCallback(async () => {
     if (currentArtwork?.id && order?.order?.id && orderItem?.id) {
       try {
-        const res = await personalizeApi.acceptOrderItemArtwork(order.order.id, orderItem.id, currentArtwork.id);
-        if (!res.data?.success) return;
+        // Accept all variant artworks for this item
+        const variants = currentArtwork.variants || [currentArtwork];
+        for (const v of variants) {
+          const res = await personalizeApi.acceptOrderItemArtwork(order.order.id, orderItem.id, v.id);
+          if (!res.data?.success) return;
+        }
         setArtworks((prev) => {
           const next = [...prev];
           next[currentArtworkIndex] = { ...next[currentArtworkIndex], status: 'accepted' };
@@ -294,9 +299,22 @@ function GenerateStep() {
       {(view === 'preview' || view === 'changes') && !generating && (
         <div className="space-y-4 flex-1">
           {view === 'preview' && (
-            <div className="w-[512px] h-[512px] max-w-full flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden mx-auto">
+            <div className="flex flex-col items-center gap-2">
               {currentArtwork ? (
-                <img src={cacheBustUrl(currentArtwork.url)} alt="Generated artwork" className="w-full h-full object-contain cursor-pointer" />
+                <>
+                  <div className="w-full max-w-[512px] flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden mx-auto">
+                    <img
+                      src={cacheBustUrl(currentArtwork.url)}
+                      alt="Generated artwork"
+                      className="!max-w-[512px] !max-h-[512px] object-contain cursor-pointer"
+                    />
+                  </div>
+                  {currentArtwork.variants && currentArtwork.variants.length > 1 && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {currentArtwork.variants.length} variants generated for different product placements
+                    </p>
+                  )}
+                </>
               ) : (
                 <span className="text-sm text-gray-500 dark:text-gray-400">No preview generated yet.</span>
               )}
@@ -367,7 +385,12 @@ function DownloadStep() {
   const printifyUrl = order?.order?.printifyShopId && order?.order?.orderId
     ? `https://printify.com/app/store/${order.order.printifyShopId}/order/${order.order.orderId}`
     : null;
-  const imageUrls = artworks.filter(Boolean).map((a) => cacheBustUrl(a.url));
+  const imageUrls = artworks.filter(Boolean).flatMap((a) => {
+    if (a.variants && a.variants.length > 0) {
+      return a.variants.map((v) => cacheBustUrl(v.url));
+    }
+    return [cacheBustUrl(a.url)];
+  });
 
   return (
     <div className="flex flex-col h-full space-y-4">

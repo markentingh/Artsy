@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Artsy.API.Models;
 using Artsy.API.Models.Projects;
+using Artsy.AI;
 using Artsy.Data.Entities.Projects;
 using Artsy.Data.Interfaces.Projects;
 
@@ -435,6 +437,164 @@ namespace Artsy.API.Controllers
             {
                 return Json(new ApiResponse { success = false, message = ex.Message });
             }
+        }
+
+        [HttpPost("generate-blueprint-info")]
+        public async Task<IActionResult> GenerateBlueprintInfo([FromBody] GenerateBlueprintInfoRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.Id == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Blueprint ID is required." });
+
+            try
+            {
+                var blueprint = await _projectBlueprintRepository.GetByIdAsync(request.Id);
+                if (blueprint == null)
+                    return Json(new ApiResponse { success = false, message = "Blueprint not found." });
+
+                var project = await _projectRepository.GetByIdAsync(blueprint.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                // Get the Printify blueprint for its title/description
+                var printifyBlueprint = await _printifyBlueprintRepository.GetByBlueprintIdAsync(blueprint.BlueprintId);
+                var bpTitle = printifyBlueprint?.Title ?? "";
+                var bpDescription = printifyBlueprint?.Description ?? "";
+
+                // Parse selected variant IDs from blueprintJson
+                var selectedColors = new List<string>();
+                try
+                {
+                    var cfg = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(blueprint.BlueprintJson);
+                    if (cfg != null && cfg.TryGetValue("variantIds", out var variantEl) && variantEl.ValueKind == JsonValueKind.Array)
+                    {
+                        var variantIds = variantEl.EnumerateArray().Select(v => v.GetInt32()).ToList();
+                        var allVariants = await _variantRepository.GetByBlueprintIdAsync(blueprint.BlueprintId);
+                        var variantMap = allVariants.ToDictionary(v => v.VariantId);
+                        var colorSet = new HashSet<string>();
+                        foreach (var vid in variantIds)
+                        {
+                            if (variantMap.TryGetValue(vid, out var v) && !string.IsNullOrWhiteSpace(v.Color))
+                                colorSet.Add(v.Color);
+                        }
+                        selectedColors = colorSet.OrderBy(c => c).ToList();
+                    }
+                }
+                catch { /* ignore parse errors */ }
+
+                var colorsDelimited = selectedColors.Count > 0 ? string.Join(", ", selectedColors) : "N/A";
+
+                var systemPrompt = "You are a product copywriter for a print-on-demand store. " +
+                    "Given context about a product, generate a compelling product title and description. " +
+                    "The title should be concise (max 80 characters) and suitable for an e-commerce listing. " +
+                    "The description should be 2-4 short paragraphs, written in plain text (no HTML), highlighting the product's appeal. " +
+                    "Return ONLY a JSON object with no markdown formatting, in the following structure:\n" +
+                    "{\"title\":\"\",\"description\":\"\"}";
+
+                var userPrompt = $"We are generating a title & description for a product.\n\n" +
+                    $"Printify Blueprint Name: {bpTitle}\n" +
+                    $"Printify Blueprint Description: {bpDescription}\n\n" +
+                    $"Project Name: {project.Title}\n" +
+                    $"Project Description: {project.Description ?? "N/A"}\n\n" +
+                    $"Selected Variant Colors: {colorsDelimited}\n\n" +
+                    $"Generate a product title and description that would appeal to buyers of this print-on-demand product.";
+
+                string llmOutput;
+                try
+                {
+                    llmOutput = await OpenAI.Prompt(systemPrompt, "", userPrompt, seed: (long)Random.Shared.Next(1, int.MaxValue));
+                }
+                catch (Exception ex)
+                {
+                    return Json(new ApiResponse { success = false, message = $"LLM generation failed: {ex.Message}" });
+                }
+
+                var rawJson = ExtractFirstJsonObject(llmOutput) ?? llmOutput.Trim();
+                string genTitle = "";
+                string genDescription = "";
+                try
+                {
+                    using var doc = JsonDocument.Parse(rawJson);
+                    if (doc.RootElement.TryGetProperty("title", out var tEl))
+                        genTitle = tEl.GetString() ?? "";
+                    if (doc.RootElement.TryGetProperty("description", out var dEl))
+                        genDescription = dEl.GetString() ?? "";
+                }
+                catch
+                {
+                    return Json(new ApiResponse { success = false, message = "Failed to parse LLM response." });
+                }
+
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = new GenerateBlueprintInfoResponse
+                    {
+                        Title = genTitle,
+                        Description = genDescription
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        private static string? ExtractFirstJsonObject(string input)
+        {
+            var start = input.IndexOf('{');
+            if (start < 0) return null;
+
+            int depth = 0;
+            bool inString = false;
+            bool escaped = false;
+
+            for (int i = start; i < input.Length; i++)
+            {
+                var c = input[i];
+
+                if (inString)
+                {
+                    if (escaped)
+                    {
+                        escaped = false;
+                        continue;
+                    }
+
+                    if (c == '\\')
+                    {
+                        escaped = true;
+                        continue;
+                    }
+
+                    if (c == '"')
+                    {
+                        inString = false;
+                    }
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    inString = true;
+                    continue;
+                }
+
+                if (c == '{')
+                    depth++;
+                else if (c == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                        return input.Substring(start, i - start + 1);
+                }
+            }
+
+            return null;
         }
     }
 }

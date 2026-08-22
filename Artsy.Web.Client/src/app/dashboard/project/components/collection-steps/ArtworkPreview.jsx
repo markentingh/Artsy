@@ -23,10 +23,21 @@ export default function ArtworkPreview() {
 
   const hasOpacity = currentArtwork?.opacity === true;
   const totalPlacements = currentArtwork?.totalPlacements || 0;
-  const hasVariants = totalPlacements > 0;
+  const hasVariants = totalPlacements > 0 && !currentArtwork?.hasGroups;
+  const isGroupArtwork = !!currentArtwork?.hasGroups;
 
   const carouselImages = useMemo(() => {
     if (!previewImageData || !currentArtwork || !collectionId) return null;
+
+    // For seamless group artworks, show the main combined image (not individual cut-ups)
+    if (isGroupArtwork) {
+      if (hasOpacity) {
+        const pngUrl = previewImageData;
+        const jpgWithBgUrl = artworkJpgWithBgUrl(collectionId, currentItem.id, currentArtwork.id, { thumb: true, cacheBust: rnd() });
+        return [pngUrl, jpgWithBgUrl];
+      }
+      return null; // Single image, no carousel needed
+    }
 
     // When the artwork has placement variants, show each variant in the carousel
     if (hasVariants) {
@@ -50,11 +61,22 @@ export default function ArtworkPreview() {
       return [pngUrl, jpgWithBgUrl];
     }
     return null;
-  }, [previewImageData, currentArtwork, hasOpacity, hasVariants, totalPlacements, collectionId, currentItem]);
+  }, [previewImageData, currentArtwork, hasOpacity, hasVariants, isGroupArtwork, totalPlacements, collectionId, currentItem]);
 
   // Full-size image URLs for the click-to-enlarge preview modal
   const fullSizeImages = useMemo(() => {
     if (!currentArtwork || !collectionId) return null;
+
+    // For group artworks, show the main image
+    if (isGroupArtwork) {
+      if (hasOpacity) {
+        return [
+          artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust: rnd() }),
+          artworkJpgWithBgUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust: rnd() }),
+        ];
+      }
+      return [artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust: rnd() })];
+    }
 
     if (hasVariants) {
       const images = [];
