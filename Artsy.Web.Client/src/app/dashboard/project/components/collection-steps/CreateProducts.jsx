@@ -117,19 +117,57 @@ export default function CreateProducts() {
   useEffect(() => {
     if (collectionId) {
       loadMockups(collectionId);
+      // Refresh artwork data to get current printifyImageId values
+      api.getCollectionArtwork(collectionId).then(res => {
+        if (res.data.success) {
+          setCollectionArtwork(res.data.data || []);
+        }
+      }).catch(() => {});
     }
-  }, [collectionId, loadMockups]);
+  }, [collectionId, loadMockups, api, setCollectionArtwork]);
 
   useEffect(() => {
     const existing = {};
     for (const art of collectionArtwork) {
-      if (art.printifyImageId) {
+      // Group placements
+      if (art.groupPlacements) {
+        for (const grp of art.groupPlacements) {
+          for (const gp of grp.placements) {
+            if (gp.printifyImageId) {
+              existing[`${art.id}_group_${grp.groupId}_${gp.index}`] = { status: 'done' };
+            }
+          }
+        }
+      }
+      // Non-group placements
+      if (art.placements) {
+        for (const p of art.placements) {
+          if (!p.groupId && p.printifyImageId) {
+            existing[`${art.id}_placement_${p.index}`] = { status: 'done' };
+          }
+        }
+      }
+      // Base artwork (no placements)
+      if ((!art.groupPlacements || art.groupPlacements.length === 0) &&
+          (!art.placements || art.placements.length === 0) &&
+          art.printifyImageId) {
         existing[art.id] = { status: 'done' };
       }
     }
-    if (Object.keys(existing).length > 0) {
-      setArtworkUploadState(prev => ({ ...existing, ...prev }));
-    }
+    // Replace state entirely: keep only entries that still have printifyImageId,
+    // preserve uploading/error status for in-progress items
+    setArtworkUploadState(prev => {
+      const next = {};
+      // Carry over uploading/error states (in-progress operations)
+      for (const [key, val] of Object.entries(prev)) {
+        if (val.status === 'uploading' || val.status === 'error') {
+          next[key] = val;
+        }
+      }
+      // Apply current done states from data
+      Object.assign(next, existing);
+      return next;
+    });
   }, [collectionArtwork]);
 
   useEffect(() => {
@@ -153,12 +191,13 @@ export default function CreateProducts() {
 
   const artworkImages = useMemo(() =>
     acceptedArtwork.flatMap(a => {
-      // For artworks with seamless groups, show each group placement as a separate thumbnail
-      if (a.hasGroups && a.groupPlacements && a.groupPlacements.length > 0) {
-        const groupThumbs = [];
+      const thumbs = [];
+
+      // Show group placements as separate thumbnails
+      if (a.hasGroups && a.groupPlacements) {
         for (const grp of a.groupPlacements) {
           for (const gp of grp.placements) {
-            groupThumbs.push({
+            thumbs.push({
               ...a,
               id: `${a.id}_group_${grp.groupId}_${gp.index}`,
               artworkId: a.id,
@@ -170,14 +209,33 @@ export default function CreateProducts() {
             });
           }
         }
-        return groupThumbs;
       }
-      // For variant artworks, show the first placement as thumbnail
-      return [{
-        ...a,
-        imageUrl: artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex: a.totalPlacements > 0 ? 0 : null }),
-        type: 'artwork',
-      }];
+
+      // Show non-group (variant) placements as separate thumbnails
+      const nonGroupPlacements = (a.placements || []).filter(p => !p.groupId);
+      if (nonGroupPlacements.length > 0) {
+        for (const p of nonGroupPlacements) {
+          thumbs.push({
+            ...a,
+            id: `${a.id}_placement_${p.index}`,
+            artworkId: a.id,
+            placementIndex: p.index,
+            imageUrl: artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex: p.index }),
+            type: 'artwork',
+          });
+        }
+      }
+
+      // If no placements at all, show the base artwork
+      if (thumbs.length === 0) {
+        thumbs.push({
+          ...a,
+          imageUrl: artworkThumbUrl(collectionId, a.itemId, a.id),
+          type: 'artwork',
+        });
+      }
+
+      return thumbs;
     }),
     [acceptedArtwork, collectionId, api]
   );
@@ -198,17 +256,30 @@ export default function CreateProducts() {
 
     for (const art of activeArtworkImages) {
       const artKey = art.id;
-      if (artworkUploadState[artKey]?.status === 'done') continue;
+      const artwork = acceptedArtwork.find(a => a.id === art.artworkId);
+
+      // Skip only if the actual PrintifyImageId is set in the data
+      if (art.groupId && art.groupPosition) {
+        const gp = artwork?.groupPlacements?.flatMap(g => g.placements).find(p => p.position === art.groupPosition);
+        if (gp?.printifyImageId) continue;
+      } else if (art.placementIndex != null) {
+        const p = artwork?.placements?.find(pl => pl.index === art.placementIndex);
+        if (p?.printifyImageId) continue;
+      } else if (art.printifyImageId) {
+        continue;
+      }
 
       setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'uploading' } }));
 
       try {
-        // For seamless group artworks, upload via placement index (backend resolves group)
         if (art.groupId && art.groupPosition) {
+          // Seamless group placement upload
           const response = await printifyProductsApi.uploadArtworkImage({
             collectionId,
             artworkId: art.artworkId,
             placementIndex: art.groupIndex,
+            groupId: art.groupId,
+            position: art.groupPosition,
           });
           if (response.data.success) {
             setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'done' } }));
@@ -216,33 +287,25 @@ export default function CreateProducts() {
             setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'error' } }));
             setMessage({ type: 'error', text: response.data.message || 'Failed to upload group placement' });
           }
-        } else if (art.totalPlacements > 0) {
-          // For variant artworks, upload each placement variant separately
-          let allVariantSuccess = true;
-          for (let i = 0; i < art.totalPlacements; i++) {
-            const variantResponse = await printifyProductsApi.uploadArtworkImage({
-              collectionId,
-              artworkId: art.id,
-              placementIndex: i,
-            });
-            if (!variantResponse.data.success) {
-              allVariantSuccess = false;
-              setMessage({ type: 'error', text: variantResponse.data.message || `Failed to upload placement variant ${i}` });
-              break;
-            }
-          }
-          if (allVariantSuccess) {
+        } else if (art.placementIndex != null) {
+          // Non-group placement variant upload
+          const response = await printifyProductsApi.uploadArtworkImage({
+            collectionId,
+            artworkId: art.artworkId,
+            placementIndex: art.placementIndex,
+          });
+          if (response.data.success) {
             setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'done' } }));
           } else {
             setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'error' } }));
+            setMessage({ type: 'error', text: response.data.message || 'Failed to upload placement' });
           }
         } else {
           // Standard single artwork upload
           const response = await printifyProductsApi.uploadArtworkImage({
             collectionId,
-            artworkId: art.id,
+            artworkId: art.artworkId || art.id,
           });
-
           if (response.data.success) {
             setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'done' } }));
           } else {
@@ -260,10 +323,24 @@ export default function CreateProducts() {
   }, [collectionId, project, activeArtworkImages, artworkUploadState, printifyProductsApi, setMessage]);
 
   const allImagesUploaded = useMemo(() => {
-    const artworkDone = activeArtworkImages.length > 0 && activeArtworkImages.every(art => artworkUploadState[art.id]?.status === 'done');
-    const artworkReady = activeArtworkImages.length === 0 || artworkDone;
-    return artworkReady;
-  }, [activeArtworkImages, artworkUploadState]);
+    if (activeArtworkImages.length === 0) return true;
+    // Check actual printifyImageId from artwork data, not just component state
+    return activeArtworkImages.every(art => {
+      const artwork = acceptedArtwork.find(a => a.id === art.artworkId);
+      // For group placements, check the specific group placement's printifyImageId
+      if (art.groupId && art.groupPosition) {
+        const gp = artwork?.groupPlacements?.flatMap(g => g.placements).find(p => p.position === art.groupPosition);
+        return !!gp?.printifyImageId;
+      }
+      // For non-group placement variants, check the specific placement's printifyImageId
+      if (art.placementIndex != null) {
+        const p = artwork?.placements?.find(pl => pl.index === art.placementIndex);
+        return !!p?.printifyImageId;
+      }
+      // Standard single artwork
+      return !!art.printifyImageId;
+    });
+  }, [activeArtworkImages, acceptedArtwork]);
 
   const handleCreateProducts = useCallback(async () => {
     if (!collectionId || !project?.printifyStoreId) {
@@ -420,6 +497,13 @@ export default function CreateProducts() {
       const response = await printifyProductsApi.delete({ collectionId, productId: pp.productId });
       if (response.data.success) {
         setPrintifyProducts(prev => prev.filter(p => p.id !== pp.id));
+        // Refresh artwork data since PrintifyImageId values were cleared on the backend
+        try {
+          const artRes = await api.getCollectionArtwork(collectionId);
+          if (artRes.data.success) {
+            setCollectionArtwork(artRes.data.data || []);
+          }
+        } catch { /* ignore */ }
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to delete product' });
       }
@@ -428,7 +512,7 @@ export default function CreateProducts() {
     } finally {
       setDeletingProduct(prev => ({ ...prev, [pp.id]: false }));
     }
-  }, [collectionId, printifyProductsApi, setMessage, setPrintifyProducts]);
+  }, [collectionId, printifyProductsApi, api, setCollectionArtwork, setMessage, setPrintifyProducts]);
 
   const handleArchiveUpload = useCallback(async (art) => {
     if (!collectionId || !art?.id || archivingUpload[art.id]) return;
@@ -481,9 +565,12 @@ export default function CreateProducts() {
     const artworkFull = artworkImages.map(a => {
       // For group artworks, the imageUrl is already the full URL
       if (a.groupId && a.groupPosition) return a.imageUrl;
-      return artworkImageUrl(collectionId, a.itemId, a.id, {
-        placementIndex: a.totalPlacements > 0 ? 0 : null,
-      });
+      // For non-group placement variants, use the actual placement index
+      if (a.placementIndex != null) {
+        return artworkImageUrl(collectionId, a.itemId, a.artworkId, { placementIndex: a.placementIndex });
+      }
+      // Standard single artwork
+      return artworkImageUrl(collectionId, a.itemId, a.artworkId || a.id);
     });
     const productFull = allImages.map(img => (img.imageUrl || '').replace('?thumb=true', ''));
     return [...artworkFull, ...productFull];

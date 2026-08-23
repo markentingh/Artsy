@@ -2,7 +2,6 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useCollection } from '@/context/collection';
 import { useSession } from '@/context/session';
 import { Projects } from '@/api/user/projects';
-import { artworkThumbUrl, artworkImageUrl } from '@/utils/artworkUrls';
 import ButtonOutline from '@/components/ui/button-outline';
 import List, { Item } from '@/components/ui/list';
 import Checked from '@/components/ui/checked';
@@ -15,8 +14,8 @@ export default function PublishProductsStep() {
     project, blueprints, allProductImages, collectionId,
     productImageVariants, STEPS, setStep,
     setMessage, printifyProducts, goBack,
-    collectionArtwork, api, onClose,
-    collectionProducts, setArtworkPreview,
+    api, onClose,
+    collectionProducts, setArtworkPreview, mockups,
   } = useCollection();
 
   const printifyApi = Projects(session);
@@ -128,59 +127,21 @@ export default function PublishProductsStep() {
     return new Set(printifyProducts.map(pp => pp.projectBlueprintId));
   }, [printifyProducts]);
 
-  const placementItemIds = useMemo(() => {
-    const used = new Set();
-    const blueprintIds = new Set((allProductImages || []).map(img => img.projectBlueprintId));
-    for (const bp of blueprints || []) {
-      if (!blueprintIds.has(bp.id) || !bp.placementJson) continue;
-      try {
-        const placements = typeof bp.placementJson === 'string' ? JSON.parse(bp.placementJson) : bp.placementJson;
-        for (const p of placements || []) {
-          const id = p.source === 'item' ? p.itemId : p.source === 'custom' ? p.customItemId : null;
-          if (id) used.add(String(id));
-        }
-      } catch { /* ignore invalid json */ }
-    }
-    return used;
-  }, [allProductImages, blueprints]);
-
   const allImages = useMemo(() => {
     const productImgs = (allProductImages || [])
       .filter(img => img.accepted && img.active)
       .map(img => img.imageUrl);
-    const artworkImgs = [];
-    for (const a of (collectionArtwork || [])) {
-      if (!a.accepted || !a.active || !placementItemIds.has(String(a.itemId))) continue;
-      const totalPlacements = a.totalPlacements || 0;
-      if (totalPlacements > 0) {
-        for (let i = 0; i < totalPlacements; i++) {
-          artworkImgs.push(artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex: i }));
-        }
-      } else {
-        artworkImgs.push(artworkThumbUrl(collectionId, a.itemId, a.id));
-      }
-    }
-    return [...productImgs, ...artworkImgs];
-  }, [allProductImages, collectionArtwork, collectionId, placementItemIds]);
+    const mockupImgs = (mockups || []).map(m => m.imageUrl);
+    return [...productImgs, ...mockupImgs];
+  }, [allProductImages, mockups]);
 
   const allFullImages = useMemo(() => {
     const productImgs = (allProductImages || [])
       .filter(img => img.accepted && img.active)
       .map(img => (img.imageUrl || '').replace('?thumb=true', ''));
-    const artworkImgs = [];
-    for (const a of (collectionArtwork || [])) {
-      if (!a.accepted || !a.active || !placementItemIds.has(String(a.itemId))) continue;
-      const totalPlacements = a.totalPlacements || 0;
-      if (totalPlacements > 0) {
-        for (let i = 0; i < totalPlacements; i++) {
-          artworkImgs.push(artworkImageUrl(collectionId, a.itemId, a.id, { placementIndex: i }));
-        }
-      } else {
-        artworkImgs.push(artworkImageUrl(collectionId, a.itemId, a.id));
-      }
-    }
-    return [...productImgs, ...artworkImgs];
-  }, [allProductImages, collectionArtwork, collectionId, placementItemIds]);
+    const mockupImgs = (mockups || []).map(m => (m.imageUrl || '').replace('?thumb=true', ''));
+    return [...productImgs, ...mockupImgs];
+  }, [allProductImages, mockups]);
 
   const apiBase = import.meta.env.VITE_API_URL || '';
   const downloadUrl = collectionId ? `${apiBase}/printify/image/download/${collectionId}` : null;

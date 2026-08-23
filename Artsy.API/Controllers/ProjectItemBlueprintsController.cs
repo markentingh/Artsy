@@ -487,6 +487,44 @@ namespace Artsy.API.Controllers
 
                 var colorsDelimited = selectedColors.Count > 0 ? string.Join(", ", selectedColors) : "N/A";
 
+                // Collect artwork prompts for all items assigned to placements (distinct artwork IDs only)
+                var artworkPrompts = new List<string>();
+                try
+                {
+                    var placements = JsonSerializer.Deserialize<List<JsonElement>>(blueprint.PlacementJson);
+                    if (placements != null)
+                    {
+                        var itemIds = new HashSet<Guid>();
+                        foreach (var p in placements)
+                        {
+                            if (p.TryGetProperty("source", out var srcEl) && srcEl.GetString() == "item" &&
+                                p.TryGetProperty("itemId", out var itemEl) && itemEl.ValueKind != JsonValueKind.Null)
+                            {
+                                var itemIdStr = itemEl.GetString();
+                                if (Guid.TryParse(itemIdStr, out var itemId))
+                                    itemIds.Add(itemId);
+                            }
+                        }
+
+                        var seenArtworkIds = new HashSet<Guid>();
+                        foreach (var itemId in itemIds)
+                        {
+                            var itemArtworks = await _projectItemArtworkRepository.GetByItemIdAsync(itemId);
+                            foreach (var a in itemArtworks)
+                            {
+                                if (string.IsNullOrWhiteSpace(a.Prompt) || !seenArtworkIds.Add(a.Id))
+                                    continue;
+                                artworkPrompts.Add(a.Prompt);
+                            }
+                        }
+                    }
+                }
+                catch { /* ignore parse errors */ }
+
+                var artworkPromptsText = artworkPrompts.Count > 0
+                    ? string.Join("\n", artworkPrompts.Select((p, i) => $"{i + 1}. {p}"))
+                    : "N/A";
+
                 var systemPrompt = "You are a product copywriter for a print-on-demand store. " +
                     "Given context about a product, generate a compelling product title and description. " +
                     "The title should be concise (max 80 characters) and suitable for an e-commerce listing. " +
@@ -500,6 +538,7 @@ namespace Artsy.API.Controllers
                     $"Project Name: {project.Title}\n" +
                     $"Project Description: {project.Description ?? "N/A"}\n\n" +
                     $"Selected Variant Colors: {colorsDelimited}\n\n" +
+                    $"Artwork Prompts:\n{artworkPromptsText}\n\n" +
                     $"Generate a product title and description that would appeal to buyers of this print-on-demand product.";
 
                 string llmOutput;

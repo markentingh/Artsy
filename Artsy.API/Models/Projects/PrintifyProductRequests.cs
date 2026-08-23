@@ -44,6 +44,12 @@ namespace Artsy.API.Models.Projects
         /// The PrintifyImageId is stored on the ProjectCollectionArtworkPlacement record.
         /// </summary>
         public int? PlacementIndex { get; set; }
+        /// <summary>
+        /// When set along with Position, used to find the exact placement for a seamless group.
+        /// This avoids index collisions when multiple groups exist for the same artwork.
+        /// </summary>
+        public Guid? GroupId { get; set; }
+        public string? Position { get; set; }
     }
 
     public class DownloadMockupsRequest

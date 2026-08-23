@@ -134,6 +134,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   // Product image state
   const [productImageVariants, setProductImageVariants] = useState([]);
   const [productImagePrompt, setProductImagePrompt] = useState('');
+  const [productImageGenerateTrigger, setProductImageGenerateTrigger] = useState(0);
   const [selectedProductCombos, setSelectedProductCombos] = useState([]);
   const [currentProductComboIndex, setCurrentProductComboIndex] = useState(0);
   const [allProductImages, setAllProductImages] = useState([]);
@@ -231,14 +232,14 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
   const fetchEstimate = useCallback(async () => {
     try {
-      const res = await api.estimateCollectionTokens({ projectId });
+      const res = await api.estimateCollectionTokens({ projectId, collectionId });
       if (res.data.success) {
         setEstimate(res.data.data);
       }
     } catch (error) {
       // non-critical
     }
-  }, [projectId, api]);
+  }, [projectId, collectionId, api]);
 
   const doGeneratePreview = useCallback(async (colId) => {
     const item = aiItems[currentItemIndex];
@@ -676,7 +677,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         let savedAnsMap = {};
         let artworkList = [];
 
-        const [ansRes, artRes, ppRes, mkRes, igRes, igPostRes, cpRes] = await Promise.all([
+        const [ansRes, artRes, ppRes, mkRes, igRes, igPostRes, cpRes, pbImgRes, prodImgRes] = await Promise.all([
           api.getCollectionAnswers(existingCollectionId),
           api.getCollectionArtwork(existingCollectionId),
           printifyProductsApi.getByCollection(existingCollectionId),
@@ -684,6 +685,8 @@ export function CollectionProvider({ children, projectId, project, collectionId:
           instagramApi.checkPosted(existingCollectionId),
           instagramApi.getPost(existingCollectionId),
           api.getCollectionProducts(existingCollectionId),
+          api.getAllProductBlueprintImages(projectId),
+          api.getProductImages(existingCollectionId),
         ]);
 
         if (ansRes.data.success) {
@@ -707,18 +710,19 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
         let estimateData = null;
         try {
-          const estRes = await api.estimateCollectionTokens({ projectId });
+          const estRes = await api.estimateCollectionTokens({ projectId, collectionId: existingCollectionId });
           if (estRes.data.success) {
             estimateData = estRes.data.data;
             setEstimate(estimateData);
           }
         } catch { /* non-critical */ }
 
-        const pendingUpscale = (estimateData?.generations || []).filter(gen =>
+        const generations = estimateData?.generations || [];
+        const pendingUpscale = generations.filter(gen =>
           gen.needsUpscale !== false &&
           !artworkList.some(a => String(a.itemId) === String(gen.itemId) && a.fullSize)
         ).length;
-        setUpscaleComplete(pendingUpscale === 0);
+        setUpscaleComplete(generations.length > 0 && pendingUpscale === 0);
 
         if (ppRes.data.success) {
           setPrintifyProducts(ppRes.data.data || []);
@@ -730,6 +734,14 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
         if (cpRes.data.success) {
           setCollectionProducts(cpRes.data.data || []);
+        }
+
+        if (pbImgRes.data.success) {
+          setProductBlueprintImages(pbImgRes.data.data || []);
+        }
+
+        if (prodImgRes.data.success) {
+          setAllProductImages((prodImgRes.data.data || []).filter(img => img.active));
         }
 
         if (igRes.data.success) {
@@ -835,8 +847,9 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       return;
     }
 
-    if ((step === STEPS.PRODUCT_IMAGE_PREVIEW || step === STEPS.PRODUCT_IMAGE_PROMPT) && selectedProductCombos.length > 0) {
+    if (step === STEPS.PRODUCT_IMAGE_PROMPT && selectedProductCombos.length > 0) {
       if (currentProductComboIndex > 0) {
+        // Back from prompt (combo N) → preview of combo N-1
         const prevIndex = currentProductComboIndex - 1;
         const prevCombo = selectedProductCombos[prevIndex];
         setCurrentProductComboIndex(prevIndex);
@@ -847,8 +860,21 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         setProductImagePrompt(existing?.prompt || prevCombo.prompt || '');
         setStep(STEPS.PRODUCT_IMAGE_PREVIEW);
       } else {
+        // Back from prompt (combo 0) → create products
         setStep(STEPS.CREATE_PRODUCTS);
       }
+      return;
+    }
+
+    if (step === STEPS.PRODUCT_IMAGE_PREVIEW && selectedProductCombos.length > 0) {
+      // Back from preview → prompt of same combo
+      const currCombo = selectedProductCombos[currentProductComboIndex];
+      const existing = allProductImages.find(img =>
+        img.projectBlueprintId === currCombo.projectBlueprintId &&
+        img.productImageId === currCombo.productImageId
+      );
+      setProductImagePrompt(existing?.prompt || currCombo.prompt || '');
+      setStep(STEPS.PRODUCT_IMAGE_PROMPT);
       return;
     }
 
@@ -915,6 +941,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     doGenerateAll, reviewStep,
     // product image
     productImageVariants, productImagePrompt, setProductImagePrompt,
+    productImageGenerateTrigger, setProductImageGenerateTrigger,
     selectedProductCombos, setSelectedProductCombos,
     currentProductComboIndex, setCurrentProductComboIndex,
     allProductImages, setAllProductImages,

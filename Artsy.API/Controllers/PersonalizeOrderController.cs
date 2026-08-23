@@ -313,7 +313,7 @@ namespace Artsy.API.Controllers
                 return Json(new { success = false, message = "Collection product not found." });
 
             // Build the generation plan using the plan service
-            var plan = await _artworkGenerationPlanService.BuildPlanAsync(cp.ProjectId, cp.CollectionId, artworkItemId);
+            var plan = await _artworkGenerationPlanService.BuildPlanAsync(cp.ProjectId, cp.CollectionId, artworkItemId, resolutionTier: 2);
 
             ImageGenerationModel? model = null;
             if (modelId > 0)
@@ -402,7 +402,7 @@ namespace Artsy.API.Controllers
             // Build the generation plan using the plan service
             var plan = await _artworkGenerationPlanService.BuildPlanAsync(
                 cp.ProjectId, cp.CollectionId, request.ArtworkItemId,
-                request.RequestText, answers);
+                request.RequestText, answers, resolutionTier: 2);
 
             if (string.IsNullOrWhiteSpace(plan.FinalPrompt))
                 return Json(new { success = false, message = "Prompt is required to generate artwork." });
@@ -503,9 +503,11 @@ namespace Artsy.API.Controllers
                         var placement = task.GroupPlacements[segIdx];
                         var segBytes = segments[segIdx];
 
-                        // Flip 180 if needed
-                        if (placement.Flipped)
-                            segBytes = await _imageService.Flip180Async(segBytes);
+                        // Apply flips: FlipX = top/bottom mirror, FlipY = left/right mirror
+                        if (placement.FlipX)
+                            segBytes = await _imageService.MirrorXAsync(segBytes);
+                        if (placement.FlipY)
+                            segBytes = await _imageService.MirrorYAsync(segBytes);
 
                         if (created.Opacity)
                             await _imageService.SaveOrderItemArtworkGroupImagePngAsync(cp.ProjectId, cp.CollectionId, orderId, created.Id, groupId, placement.Position, segBytes);

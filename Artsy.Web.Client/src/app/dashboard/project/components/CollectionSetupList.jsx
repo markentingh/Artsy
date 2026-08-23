@@ -28,7 +28,7 @@ export default function CollectionSetupList() {
   const acceptedArtwork = aiArtworks.filter(a => a.accepted).length;
   const allArtworksUpscaled = aiBlueprintItems.length > 0 && aiBlueprintItems.every(item => {
     const art = collectionArtwork.find(a => String(a.itemId) === String(item.id));
-    return !art || (art.accepted && art.fullSize);
+    return art && art.accepted && art.fullSize;
   });
   const upscaleDone = allArtworksUpscaled || upscaleComplete;
 
@@ -231,7 +231,7 @@ export default function CollectionSetupList() {
     {
       title: renderTitle('Upscale Artworks to 4K', upscaleDone, null, isCurrent(STEPS.READY_TO_GENERATE)),
       content: null,
-      action: !upscaleDone && aiArtworks.filter(a => a.accepted).some(a => !a.fullSize) ? (
+      action: isComplete(STEPS.ARTWORK_PREVIEW) && !isCurrent(STEPS.READY_TO_GENERATE) ? (
         <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.READY_TO_GENERATE)}>
           Review
         </ButtonOutline>

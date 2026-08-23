@@ -57,7 +57,8 @@ namespace Artsy.API.Services
             Guid collectionId,
             Guid itemId,
             string? requestedChanges = null,
-            List<GenerateProjectItemPreviewAnswer>? answers = null)
+            List<GenerateProjectItemPreviewAnswer>? answers = null,
+            int resolutionTier = 1)
         {
             var artworkList = await _projectItemArtworkRepository.GetByItemIdAsync(itemId);
             var artwork = artworkList.FirstOrDefault();
@@ -151,7 +152,7 @@ namespace Artsy.API.Services
             // --- Check for seamless placement groups ---
             // A placement group defines a set of placements that should share one seamless artwork.
             // We collect all group images that reference this item's artwork, grouped by group ID.
-            var seamlessGroups = new Dictionary<Guid, List<(string Position, int W, int H, string CropX, string CropY, bool Flipped)>>();
+            var seamlessGroups = new Dictionary<Guid, List<(string Position, int W, int H, string CropX, string CropY, bool FlipX, bool FlipY)>>();
             var groupedPositions = new HashSet<string>();
             foreach (var bp in blueprints)
             {
@@ -162,7 +163,7 @@ namespace Artsy.API.Services
                     // Only include groups where at least one image references this item
                     if (!groupImages.Any(gi => gi.ArtworkId == itemId)) continue;
 
-                    var placements = new List<(string Position, int W, int H, string CropX, string CropY, bool Flipped)>();
+                    var placements = new List<(string Position, int W, int H, string CropX, string CropY, bool FlipX, bool FlipY)>();
                     foreach (var gi in groupImages.OrderBy(g => g.Index))
                     {
                         if (gi.ArtworkId != itemId) continue;
@@ -170,7 +171,7 @@ namespace Artsy.API.Services
                         var placement = itemPlacements.FirstOrDefault(ip => ip.Position == gi.Position);
                         if (placement.W > 0 && placement.H > 0)
                         {
-                            placements.Add((gi.Position, placement.W, placement.H, placement.CropX, placement.CropY, gi.Flipped));
+                            placements.Add((gi.Position, placement.W, placement.H, placement.CropX, placement.CropY, gi.FlipX, gi.FlipY));
                             groupedPositions.Add(gi.Position);
                         }
                     }
@@ -211,8 +212,10 @@ namespace Artsy.API.Services
                 else if (ratio < 1.0 / 3.0) genRatio = 1.0 / 3.0;
                 else genRatio = ratio;
 
-                var maxDim = Math.Max(combinedWidth, combinedHeight);
-                var targetArea = maxDim > 1024 ? 2048.0 * 2048 : 1024.0 * 1024;
+                double targetArea;
+                if (resolutionTier >= 4) targetArea = 4096.0 * 4096;
+                else if (resolutionTier >= 2) targetArea = 2048.0 * 2048;
+                else targetArea = 1024.0 * 1024;
                 var w = Math.Sqrt(targetArea * genRatio);
                 var h = Math.Sqrt(targetArea / genRatio);
                 var genW = (int)Math.Round(w / 16) * 16;
@@ -237,7 +240,8 @@ namespace Artsy.API.Services
                         Position = p.Position,
                         Width = p.W,
                         Height = p.H,
-                        Flipped = p.Flipped,
+                        FlipX = p.FlipX,
+                        FlipY = p.FlipY,
                         CropX = p.CropX,
                         CropY = p.CropY
                     }).ToList()
@@ -250,7 +254,7 @@ namespace Artsy.API.Services
                 for (var i = 0; i < variantGroups.Count; i++)
                 {
                     var (pw, ph, cx, cy) = variantGroups[i];
-                    var (genW, genH, needsCrop) = ImageGenerationForOpenAI.CalculateCustomResolution(pw, ph);
+                    var (genW, genH, needsCrop) = ImageGenerationForOpenAI.CalculateCustomResolution(pw, ph, resolutionTier);
 
                     tasks.Add(new ArtworkGenerationTask
                     {

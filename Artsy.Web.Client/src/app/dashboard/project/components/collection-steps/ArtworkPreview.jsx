@@ -1,7 +1,8 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useCollection } from '@/context/collection';
 import { artworkImageUrl, artworkJpgWithBgUrl } from '@/utils/artworkUrls';
 import TextArea from '@/components/forms/textarea';
+import Select from '@/components/forms/select';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 import Spinner from '@/components/ui/spinner';
@@ -13,11 +14,14 @@ export default function ArtworkPreview() {
     isGenerating, previewImageData, currentArtwork,
     showChanges, setShowChanges,
     requestedChanges, setRequestedChanges,
-    collectionId, ensureCollection,
+    collectionId, ensureCollection, projectId,
     doGeneratePreview, advanceToNextItem,
     setCollectionArtwork,
     api, onClose, onSaved, setArtworkPreview, setStep, STEPS, goBack,
   } = useCollection();
+
+  const [changeMode, setChangeMode] = useState('regenerate');
+  const [isFixing, setIsFixing] = useState(false);
 
   const rnd = () => Math.floor(Math.random() * 100000);
 
@@ -108,6 +112,36 @@ export default function ArtworkPreview() {
   }, [setShowChanges]);
 
   const handleSubmitChanges = useCallback(() => {
+    if (changeMode === 'fix') {
+      // Fix seamless placements: re-cut the existing artwork image
+      setIsFixing(true);
+      const doFix = async () => {
+        const colId = collectionId || await ensureCollection();
+        if (!colId) { setIsFixing(false); return; }
+        try {
+          const resp = await api.fixSeamlessPlacements({
+            projectId,
+            collectionId: colId,
+            itemId: currentItem.id,
+          });
+          if (resp.data.success) {
+            // Refresh artwork data to get updated group images
+            const artRes = await api.getCollectionArtwork(colId);
+            if (artRes.data.success) {
+              setCollectionArtwork(artRes.data.data || []);
+            }
+            setShowChanges(false);
+            setChangeMode('regenerate');
+          }
+        } catch (error) {
+          console.error('fixSeamlessPlacements error:', error?.response?.data || error);
+        } finally {
+          setIsFixing(false);
+        }
+      };
+      doFix();
+      return;
+    }
     if (!requestedChanges.trim()) return;
     setShowChanges(false);
     if (collectionId) {
@@ -117,7 +151,7 @@ export default function ArtworkPreview() {
         if (colId) doGeneratePreview(colId);
       });
     }
-  }, [requestedChanges, collectionId, doGeneratePreview, ensureCollection, setShowChanges]);
+  }, [changeMode, requestedChanges, collectionId, doGeneratePreview, ensureCollection, setShowChanges, api, currentItem, setCollectionArtwork, projectId]);
 
   const handleAccept = useCallback(async () => {
     const colId = await ensureCollection();
@@ -183,14 +217,29 @@ export default function ArtworkPreview() {
 
         {showChanges && !isGenerating && (
           <div className="w-full max-w-[512px]">
-            <TextArea
-              name="requestedChanges"
-              label="Requested Changes"
-              value={requestedChanges}
-              onChange={(e) => setRequestedChanges(e.target.value)}
-              placeholder="Describe the changes you want..."
-              rows={4}
-            />
+            {isGroupArtwork && (
+              <Select
+                name="changeMode"
+                label="Action"
+                value={changeMode}
+                onChange={(e) => setChangeMode(e.target.value)}
+                options={[
+                  { value: 'regenerate', label: 'Regenerate Image' },
+                  { value: 'fix', label: 'Fix Seamless Placements' },
+                ]}
+                className="mb-3"
+              />
+            )}
+            {changeMode === 'regenerate' && (
+              <TextArea
+                name="requestedChanges"
+                label="Requested Changes"
+                value={requestedChanges}
+                onChange={(e) => setRequestedChanges(e.target.value)}
+                placeholder="Describe the changes you want..."
+                rows={4}
+              />
+            )}
           </div>
         )}
       </div>
@@ -204,8 +253,11 @@ export default function ArtworkPreview() {
           </>
         )}
         {showChanges && !isGenerating && (
-          <ButtonOutline onClick={handleSubmitChanges} disabled={!requestedChanges.trim()}>
-            Regenerate
+          <ButtonOutline
+            onClick={handleSubmitChanges}
+            disabled={changeMode === 'regenerate' ? !requestedChanges.trim() : isFixing}
+          >
+            {isFixing ? <Spinner className="text-base" /> : changeMode === 'fix' ? 'Fix Placements' : 'Regenerate'}
           </ButtonOutline>
         )}
         <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>

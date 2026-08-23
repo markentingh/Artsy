@@ -135,7 +135,16 @@ namespace Artsy.API.Controllers
                 if (request.PlacementIndex.HasValue && artwork.TotalPlacements > 0)
                 {
                     var idx = request.PlacementIndex.Value;
-                    var placement = await _artworkPlacementRepository.GetByArtworkIdAndIndexAsync(artwork.Id, idx);
+                    // For seamless group placements, find by group ID + position to avoid index collisions
+                    ProjectCollectionArtworkPlacement? placement = null;
+                    if (request.GroupId.HasValue && !string.IsNullOrWhiteSpace(request.Position))
+                    {
+                        placement = await _artworkPlacementRepository.GetByArtworkIdGroupAndPositionAsync(artwork.Id, request.GroupId.Value, request.Position);
+                    }
+                    if (placement == null)
+                    {
+                        placement = await _artworkPlacementRepository.GetByArtworkIdAndIndexAsync(artwork.Id, idx);
+                    }
                     if (placement == null)
                         return Json(new ApiResponse { success = false, message = $"Placement variant {idx} not found." });
 
@@ -655,6 +664,9 @@ namespace Artsy.API.Controllers
                         var placements = JsonSerializer.Deserialize<List<PlacementDto>>(bp.PlacementJson);
                         if (placements != null)
                         {
+                            // Build a single print area with all variant_ids and one placeholder per position
+                            var placeholders = new List<PrintifyPlaceholderRequest>();
+
                             foreach (var placement in placements)
                             {
                                 if (string.IsNullOrWhiteSpace(placement.Source)) continue;
@@ -676,15 +688,26 @@ namespace Artsy.API.Controllers
 
                                 if (art.TotalPlacements > 0 && artworkPlacementsMap.TryGetValue(art.Id, out var placementVariants))
                                 {
-                                    // Find the matching variant by aspect ratio
-                                    var (pw, ph) = placement.GetDimensions();
-                                    var placementRatio = pw > 0 && ph > 0 ? (double)pw / ph : 0;
+                                    // For seamless group placements, match by Position first (case-insensitive)
                                     var matching = placementVariants.FirstOrDefault(v =>
+                                        v.GroupId.HasValue &&
+                                        !string.IsNullOrWhiteSpace(v.Position) &&
+                                        string.Equals(v.Position, placement.Position, StringComparison.OrdinalIgnoreCase) &&
+                                        !string.IsNullOrWhiteSpace(v.PrintifyImageId));
+
+                                    // Fall back to aspect ratio matching for non-group placements
+                                    if (matching == null)
                                     {
-                                        if (v.Width <= 0 || v.Height <= 0) return false;
-                                        var variantRatio = (double)v.Width / v.Height;
-                                        return Math.Abs(variantRatio - placementRatio) < 0.001 && !string.IsNullOrWhiteSpace(v.PrintifyImageId);
-                                    });
+                                        var (pw, ph) = placement.GetDimensions();
+                                        var placementRatio = pw > 0 && ph > 0 ? (double)pw / ph : 0;
+                                        matching = placementVariants.FirstOrDefault(v =>
+                                        {
+                                            if (v.Width <= 0 || v.Height <= 0) return false;
+                                            var variantRatio = (double)v.Width / v.Height;
+                                            return Math.Abs(variantRatio - placementRatio) < 0.001 && !string.IsNullOrWhiteSpace(v.PrintifyImageId);
+                                        });
+                                    }
+
                                     if (matching != null)
                                     {
                                         printifyImageId = matching.PrintifyImageId;
@@ -720,31 +743,34 @@ namespace Artsy.API.Controllers
                                     }
                                 }
 
-                                printAreas.Add(new PrintifyPrintAreaRequest
+                                placeholders.Add(new PrintifyPlaceholderRequest
                                 {
-                                    VariantIds = variantIds,
-                                    Placeholders = new List<PrintifyPlaceholderRequest>
+                                    Position = position,
+                                    Images = new List<PrintifyPlaceholderImageRequest>
                                     {
-                                        new PrintifyPlaceholderRequest
+                                        new PrintifyPlaceholderImageRequest
                                         {
-                                            Position = position,
-                                            Images = new List<PrintifyPlaceholderImageRequest>
-                                            {
-                                                new PrintifyPlaceholderImageRequest
-                                                {
-                                                    Id = printifyImageId,
-                                                    X = x,
-                                                    Y = y,
-                                                    Scale = scale,
-                                                    Angle = 0,
-                                                }
-                                            },
+                                            Id = printifyImageId,
+                                            X = x,
+                                            Y = y,
+                                            Scale = scale,
+                                            Angle = 0,
                                         }
-                                    }
+                                    },
                                 });
 
                                 // Track placement for saving to DB
                                 savedPlacements.Add((art.Id, artworkPlacementId, placementIndex, position, JsonSerializer.Serialize(variantIds)));
+                            }
+
+                            // Create a single print area with all variant_ids and all placeholders
+                            if (placeholders.Count > 0)
+                            {
+                                printAreas.Add(new PrintifyPrintAreaRequest
+                                {
+                                    VariantIds = variantIds,
+                                    Placeholders = placeholders,
+                                });
                             }
                         }
                     }
@@ -1053,6 +1079,72 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Failed to delete product on Printify." });
 
                 await _printifyProductRepository.DeleteAsync(record.Id);
+
+                // Delete mockup records and images associated with this product
+                try
+                {
+                    var mockups = await _mockupRepository.GetByPrintifyProductIdAsync(record.Id);
+                    foreach (var mockup in mockups)
+                    {
+                        try { await _imageService.DeleteProjectCollectionMockupAsync(mockup.ProjectId, mockup.CollectionId, mockup.Id); } catch { }
+                    }
+                    await _mockupRepository.DeleteByPrintifyProductIdAsync(record.Id);
+                }
+                catch { /* mockup cleanup is best-effort */ }
+
+                // Archive uploaded Printify images for artworks used by this blueprint and clear PrintifyImageId
+                try
+                {
+                    var collection = await _projectCollectionRepository.GetByIdAsync(request.CollectionId);
+                    if (collection != null)
+                    {
+                        var product = await _productRepository.GetByIdAsync(record.ProductId);
+                    var blueprint = product != null ? await _blueprintRepository.GetByIdAsync(product.ProjectBlueprintId) : null;
+                        if (blueprint != null && !string.IsNullOrWhiteSpace(blueprint.PlacementJson))
+                        {
+                            var placements = JsonSerializer.Deserialize<List<PlacementDto>>(blueprint.PlacementJson);
+                            if (placements != null)
+                            {
+                                // Collect all item IDs used by this blueprint's placements
+                                var itemIds = placements
+                                    .Select(p => p.GetItemId())
+                                    .Where(id => id != Guid.Empty)
+                                    .Distinct()
+                                    .ToHashSet();
+
+                                var collectionArtwork = (await _artworkRepository.GetByCollectionIdAsync(request.CollectionId))
+                                    .Where(a => a.Accepted && a.Active && itemIds.Contains(a.ItemId))
+                                    .ToList();
+
+                                foreach (var artwork in collectionArtwork)
+                                {
+                                    // Archive placement-level images
+                                    if (artwork.TotalPlacements > 0)
+                                    {
+                                        var placementVariants = await _artworkPlacementRepository.GetByArtworkIdAsync(artwork.Id);
+                                        foreach (var pv in placementVariants)
+                                        {
+                                            if (!string.IsNullOrWhiteSpace(pv.PrintifyImageId))
+                                            {
+                                                try { await _printifyService.ArchiveImageAsync(userId, pv.PrintifyImageId); } catch { }
+                                                await _artworkPlacementRepository.SetPrintifyImageIdAsync(pv.Id, "");
+                                            }
+                                        }
+                                    }
+
+                                    // Archive the base artwork image
+                                    if (!string.IsNullOrWhiteSpace(artwork.PrintifyImageId))
+                                    {
+                                        try { await _printifyService.ArchiveImageAsync(userId, artwork.PrintifyImageId); } catch { }
+                                        await _artworkRepository.SetPrintifyImageIdAsync(artwork.Id, "");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { /* archiving is best-effort; don't fail the delete */ }
+
                 return Json(new ApiResponse { success = true });
             }
             catch (Exception ex)

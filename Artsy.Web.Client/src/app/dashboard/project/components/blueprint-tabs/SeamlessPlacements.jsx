@@ -16,7 +16,8 @@ export default function SeamlessPlacements() {
     handleSavePlacementGroupImage,
     handleDeletePlacementGroupImage,
     handleReorderPlacementGroupImages,
-    handleToggleFlip,
+    handleToggleFlipX,
+    handleToggleFlipY,
     getPlacementCarouselImages,
     formatPosition,
     projectId,
@@ -177,7 +178,8 @@ export default function SeamlessPlacements() {
           artworkId: remaining[i].artworkId,
           customId: remaining[i].customId,
           position: remaining[i].position || null,
-          flipped: remaining[i].flipped || false,
+          flipX: remaining[i].flipX || false,
+          flipY: remaining[i].flipY || false,
         });
       }
     } catch (e) {
@@ -278,7 +280,7 @@ export default function SeamlessPlacements() {
       const ratio = w / h;
       // Width = container width, height = containerWidth / ratio
       const overlayHeight = containerWidth / ratio;
-      return { index: i, height: overlayHeight, position: img.position, flipped: img.flipped, imageId: img.id };
+      return { index: i, height: overlayHeight, position: img.position, flipX: img.flipX, flipY: img.flipY, imageId: img.id };
     }).filter(Boolean);
 
     // Total height of the image container = sum of overlay heights (or 200 if no images)
@@ -286,57 +288,86 @@ export default function SeamlessPlacements() {
       ? Math.max(200, overlays.reduce((sum, o) => sum + o.height, 0))
       : 200;
 
+    // GPT Image 2.0 max aspect ratio is 1:3. If the combined image is taller than 1:3,
+    // add a black padding column to the right so the total container is 1:3.
+    const maxRatio = 3; // height / width max = 3 (i.e. 1:3)
+    const exceedsMaxRatio = containerHeight > containerWidth * maxRatio;
+    const totalWidth = exceedsMaxRatio ? containerHeight / maxRatio : containerWidth;
+    const blackColumnWidth = exceedsMaxRatio ? totalWidth - containerWidth : 0;
+
     return (
       <div key={group.id} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700 flex gap-3">
-        {/* Image container */}
+        {/* Image container (image + black padding column) */}
         <div
-          className="relative rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 flex-shrink-0"
-          style={{ width: containerWidth, height: containerHeight }}
+          className="relative rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 flex-shrink-0 flex"
+          style={{ width: totalWidth, height: containerHeight }}
         >
-          {artworkUrl ? (
-            <div
-              className="absolute inset-0"
-              style={{
-                backgroundImage: `url(${artworkUrl})`,
-                backgroundRepeat: 'repeat-y',
-                backgroundSize: `${containerWidth}px auto`,
-                backgroundPosition: 'top center',
-              }}
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
-              No Image
-            </div>
-          )}
-          {/* Dashed overlays for each placement */}
-          {overlays.map((overlay, i) => {
-            let topOffset = 0;
-            for (let j = 0; j < overlay.index; j++) {
-              topOffset += overlays[j].height;
-            }
-            return (
+          {/* Repeating artwork image */}
+          <div
+            className="relative flex-shrink-0"
+            style={{ width: containerWidth, height: containerHeight }}
+          >
+            {artworkUrl ? (
               <div
-                key={i}
-                className="absolute border-2 border-dashed border-yellow-400 rounded-sm pointer-events-none"
+                className="absolute inset-0"
                 style={{
-                  left: 0,
-                  top: topOffset,
-                  width: containerWidth,
-                  height: overlay.height,
-                  boxShadow: '0 0 0 1px rgba(0,0,0,0.3)',
+                  backgroundImage: `url(${artworkUrl})`,
+                  backgroundRepeat: 'repeat-y',
+                  backgroundSize: `${containerWidth}px auto`,
+                  backgroundPosition: 'top center',
                 }}
-              >
-                <span className="absolute top-1 left-1 text-[10px] bg-yellow-400/80 text-black px-1 rounded">
-                  {formatPosition(overlay.position)}
-                </span>
-                {overlay.flipped && (
-                  <span className="absolute bottom-1 right-1 text-yellow-400 bg-black/50 rounded-full w-5 h-5 flex items-center justify-center">
-                    <Icon name="autorenew" className="text-sm" />
-                  </span>
-                )}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                No Image
               </div>
-            );
-          })}
+            )}
+            {/* Dashed overlays for each placement */}
+            {overlays.map((overlay, i) => {
+              let topOffset = 0;
+              for (let j = 0; j < overlay.index; j++) {
+                topOffset += overlays[j].height;
+              }
+              return (
+                <div
+                  key={i}
+                  className="absolute border-2 border-dashed border-yellow-400 rounded-sm pointer-events-none"
+                  style={{
+                    left: 0,
+                    top: topOffset,
+                    width: containerWidth,
+                    height: overlay.height,
+                    boxShadow: '0 0 0 1px rgba(0,0,0,0.3)',
+                  }}
+                >
+                  <span className="absolute top-1 left-1 text-[10px] bg-yellow-400/80 text-black px-1 rounded">
+                    {formatPosition(overlay.position)}
+                  </span>
+                  {(overlay.flipX || overlay.flipY) && (
+                    <div className="absolute bottom-1 right-1 flex gap-0.5">
+                      {overlay.flipX && (
+                        <span className="text-yellow-400 bg-black/50 rounded-full w-5 h-5 flex items-center justify-center" title="Flip X (top/bottom)">
+                          <Icon name="swap_vert" className="text-sm" />
+                        </span>
+                      )}
+                      {overlay.flipY && (
+                        <span className="text-yellow-400 bg-black/50 rounded-full w-5 h-5 flex items-center justify-center" title="Flip Y (left/right)">
+                          <Icon name="swap_horiz" className="text-sm" />
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {/* Black padding column for 1:3 aspect ratio */}
+          {exceedsMaxRatio && (
+            <div
+              className="bg-black flex-shrink-0"
+              style={{ width: blackColumnWidth, height: containerHeight }}
+            />
+          )}
         </div>
 
         {/* Dropdowns + controls */}
@@ -363,15 +394,26 @@ export default function SeamlessPlacements() {
               disabled={saving}
             />
             {firstImage && firstImage.id && firstPosition && (
-              <button
-                type="button"
-                onClick={() => handleToggleFlip(group.id, firstImage.id)}
-                title="Flip 180°"
-                disabled={saving}
-                className={`flex-shrink-0 w-6 h-6 -mt-2 flex items-center justify-center rounded transition text-sm ${firstImage.flipped ? 'text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'}`}
-              >
-                <Icon name="autorenew" />
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleToggleFlipX(group.id, firstImage.id)}
+                  title="Flip X (top/bottom mirror)"
+                  disabled={saving}
+                  className={`flex-shrink-0 w-6 h-6 -mt-2 flex items-center justify-center rounded transition text-sm ${firstImage.flipX ? 'text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'}`}
+                >
+                  <Icon name="swap_vert" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleFlipY(group.id, firstImage.id)}
+                  title="Flip Y (left/right mirror)"
+                  disabled={saving}
+                  className={`flex-shrink-0 w-6 h-6 -mt-2 flex items-center justify-center rounded transition text-sm ${firstImage.flipY ? 'text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'}`}
+                >
+                  <Icon name="swap_horiz" />
+                </button>
+              </>
             )}
             {firstImage && firstImage.id && (
               <button
@@ -421,15 +463,26 @@ export default function SeamlessPlacements() {
                   disabled={saving}
                 />
                 {currentPosition && (
-                  <button
-                    type="button"
-                    onClick={() => handleToggleFlip(group.id, img.id)}
-                    title="Flip 180°"
-                    disabled={saving}
-                    className={`flex-shrink-0 w-6 h-6 -mt-2 flex items-center justify-center rounded transition text-sm ${img.flipped ? 'text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'}`}
-                  >
-                    <Icon name="autorenew" />
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFlipX(group.id, img.id)}
+                      title="Flip X (top/bottom mirror)"
+                      disabled={saving}
+                      className={`flex-shrink-0 w-6 h-6 -mt-2 flex items-center justify-center rounded transition text-sm ${img.flipX ? 'text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'}`}
+                    >
+                      <Icon name="swap_vert" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFlipY(group.id, img.id)}
+                      title="Flip Y (left/right mirror)"
+                      disabled={saving}
+                      className={`flex-shrink-0 w-6 h-6 -mt-2 flex items-center justify-center rounded transition text-sm ${img.flipY ? 'text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'}`}
+                    >
+                      <Icon name="swap_horiz" />
+                    </button>
+                  </>
                 )}
                 <button
                   type="button"
@@ -460,8 +513,13 @@ export default function SeamlessPlacements() {
             );
           })()}
 
-          {/* Delete group button */}
-          <div className="flex justify-end mt-auto">
+          {/* Aspect ratio + Delete group button */}
+          <div className="flex items-center justify-between mt-auto">
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Aspect Ratio {totalWidth > 0 && containerHeight > 0
+                ? `1:${(containerHeight / totalWidth).toFixed(2)}`
+                : ''}
+            </span>
             <ButtonIcon
               name="delete"
               color="red"

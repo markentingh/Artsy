@@ -435,7 +435,8 @@ export function ProductBlueprintProvider({
           artworkId: imageData.artworkId,
           customId: imageData.customId,
           position: imageData.position || null,
-          flipped: imageData.flipped || false,
+          flipX: imageData.flipX || false,
+          flipY: imageData.flipY || false,
         };
         if (existingIdx >= 0) {
           images[existingIdx] = newImage;
@@ -473,12 +474,13 @@ export function ProductBlueprintProvider({
         artworkId: img.artworkId,
         customId: img.customId,
         position: img.position || null,
-        flipped: img.flipped || false,
+        flipX: img.flipX || false,
+        flipY: img.flipY || false,
       });
     }
   }, [savePlacementGroupImage, projectId, blueprint]);
 
-  const handleToggleFlip = useCallback(async (groupId, imageId) => {
+  const handleToggleFlipX = useCallback(async (groupId, imageId) => {
     let updatedImage = null;
     setPlacementGroups((prev) => prev.map(g => {
       if (g.id !== groupId) return g;
@@ -486,7 +488,7 @@ export function ProductBlueprintProvider({
         ...g,
         images: (g.images || []).map(img => {
           if (img.id !== imageId) return img;
-          updatedImage = { ...img, flipped: !img.flipped };
+          updatedImage = { ...img, flipX: !img.flipX };
           return updatedImage;
         }),
       };
@@ -501,7 +503,37 @@ export function ProductBlueprintProvider({
         artworkId: updatedImage.artworkId,
         customId: updatedImage.customId,
         position: updatedImage.position || null,
-        flipped: updatedImage.flipped,
+        flipX: updatedImage.flipX,
+        flipY: updatedImage.flipY || false,
+      });
+    }
+  }, [savePlacementGroupImage, projectId, blueprint]);
+
+  const handleToggleFlipY = useCallback(async (groupId, imageId) => {
+    let updatedImage = null;
+    setPlacementGroups((prev) => prev.map(g => {
+      if (g.id !== groupId) return g;
+      return {
+        ...g,
+        images: (g.images || []).map(img => {
+          if (img.id !== imageId) return img;
+          updatedImage = { ...img, flipY: !img.flipY };
+          return updatedImage;
+        }),
+      };
+    }));
+    if (updatedImage) {
+      await savePlacementGroupImage({
+        id: updatedImage.id,
+        projectId,
+        blueprintId: blueprint.id,
+        groupId,
+        index: updatedImage.index,
+        artworkId: updatedImage.artworkId,
+        customId: updatedImage.customId,
+        position: updatedImage.position || null,
+        flipX: updatedImage.flipX || false,
+        flipY: updatedImage.flipY,
       });
     }
   }, [savePlacementGroupImage, projectId, blueprint]);
@@ -754,7 +786,8 @@ export function ProductBlueprintProvider({
     handleSavePlacementGroupImage,
     handleDeletePlacementGroupImage,
     handleReorderPlacementGroupImages,
-    handleToggleFlip,
+    handleToggleFlipX,
+    handleToggleFlipY,
     handleGenerateInfo,
     generatingInfo,
     refreshItemPreviews,

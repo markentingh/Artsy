@@ -12,6 +12,7 @@ import Spinner from '@/components/ui/spinner';
 export default function ProductImagePrompt() {
   const {
     productImagePrompt, setProductImagePrompt,
+    setProductImageGenerateTrigger,
     selectedProductCombos,
     currentProductComboIndex,
     setStep, setMessage, STEPS, onClose, goBack,
@@ -262,8 +263,9 @@ export default function ProductImagePrompt() {
       setMessage({ type: 'error', text: 'Enter a product image prompt.' });
       return;
     }
+    setProductImageGenerateTrigger(prev => prev + 1);
     setStep(STEPS.PRODUCT_IMAGE_PREVIEW);
-  }, [productName, productImagePrompt, setStep, setMessage, STEPS]);
+  }, [productName, productImagePrompt, setStep, setMessage, STEPS, setProductImageGenerateTrigger]);
 
   const moveToNextCombo = useCallback(() => {
     const nextIndex = currentProductComboIndex >= selectedProductCombos.length - 1

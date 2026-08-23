@@ -2,6 +2,8 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionArtworkPlacements"
 (
     "Id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     "CollectionArtworkId" UUID NOT NULL REFERENCES public."ProjectCollectionArtwork"("Id") ON DELETE CASCADE,
+    "GroupId" UUID,
+    "Position" VARCHAR(64) NOT NULL DEFAULT '',
     "Width" INT NOT NULL DEFAULT 0,
     "Height" INT NOT NULL DEFAULT 0,
     "Index" INT NOT NULL DEFAULT 0,

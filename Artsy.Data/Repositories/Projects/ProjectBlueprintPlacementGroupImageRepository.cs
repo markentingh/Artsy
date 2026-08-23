@@ -32,8 +32,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             if (image.Id == Guid.Empty) image.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectBlueprintPlacementGroupImages"" (""Id"", ""ProjectId"", ""BlueprintId"", ""GroupId"", ""Index"", ""ArtworkId"", ""CustomId"", ""Position"", ""Flipped"")
-                VALUES (@Id, @ProjectId, @BlueprintId, @GroupId, @Index, @ArtworkId, @CustomId, @Position, @Flipped)
+                INSERT INTO public.""ProjectBlueprintPlacementGroupImages"" (""Id"", ""ProjectId"", ""BlueprintId"", ""GroupId"", ""Index"", ""ArtworkId"", ""CustomId"", ""Position"", ""FlipX"", ""FlipY"")
+                VALUES (@Id, @ProjectId, @BlueprintId, @GroupId, @Index, @ArtworkId, @CustomId, @Position, @FlipX, @FlipY)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectBlueprintPlacementGroupImage>(query, image);
         }
@@ -42,7 +42,7 @@ namespace Artsy.Data.Repositories.Projects
         {
             const string query = @"
                 UPDATE public.""ProjectBlueprintPlacementGroupImages""
-                SET ""Index"" = @Index, ""ArtworkId"" = @ArtworkId, ""CustomId"" = @CustomId, ""Position"" = @Position, ""Flipped"" = @Flipped
+                SET ""Index"" = @Index, ""ArtworkId"" = @ArtworkId, ""CustomId"" = @CustomId, ""Position"" = @Position, ""FlipX"" = @FlipX, ""FlipY"" = @FlipY
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, image);
         }

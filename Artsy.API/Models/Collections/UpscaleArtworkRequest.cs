@@ -12,5 +12,8 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("itemId")]
         public Guid ItemId { get; set; }
+
+        [JsonPropertyName("force")]
+        public bool Force { get; set; }
     }
 }

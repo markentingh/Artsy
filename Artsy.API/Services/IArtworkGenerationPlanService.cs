@@ -11,7 +11,8 @@ namespace Artsy.API.Services
         public string Position { get; set; } = "";
         public int Width { get; set; }
         public int Height { get; set; }
-        public bool Flipped { get; set; }
+        public bool FlipX { get; set; }
+        public bool FlipY { get; set; }
         public string CropX { get; set; } = "center";
         public string CropY { get; set; } = "center";
     }
@@ -117,6 +118,7 @@ namespace Artsy.API.Services
             Guid collectionId,
             Guid itemId,
             string? requestedChanges = null,
-            List<GenerateProjectItemPreviewAnswer>? answers = null);
+            List<GenerateProjectItemPreviewAnswer>? answers = null,
+            int resolutionTier = 1);
     }
 }

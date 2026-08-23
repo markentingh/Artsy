@@ -24,8 +24,15 @@ namespace Artsy.Data.Repositories.Projects
         public async Task<ProjectCollectionArtworkPlacement?> GetByArtworkIdAndIndexAsync(Guid collectionArtworkId, int index)
         {
             const string query = @"SELECT * FROM public.""ProjectCollectionArtworkPlacements""
-                WHERE ""CollectionArtworkId"" = @collectionArtworkId AND ""Index"" = @index";
+                WHERE ""CollectionArtworkId"" = @collectionArtworkId AND ""Index"" = @index AND ""GroupId"" IS NULL";
             return await _dbConnection.QueryFirstOrDefaultAsync<ProjectCollectionArtworkPlacement>(query, new { collectionArtworkId, index });
+        }
+
+        public async Task<ProjectCollectionArtworkPlacement?> GetByArtworkIdGroupAndPositionAsync(Guid collectionArtworkId, Guid groupId, string position)
+        {
+            const string query = @"SELECT * FROM public.""ProjectCollectionArtworkPlacements""
+                WHERE ""CollectionArtworkId"" = @collectionArtworkId AND ""GroupId"" = @groupId AND ""Position"" = @position";
+            return await _dbConnection.QueryFirstOrDefaultAsync<ProjectCollectionArtworkPlacement>(query, new { collectionArtworkId, groupId, position });
         }
 
         public async Task<ProjectCollectionArtworkPlacement> CreateAsync(ProjectCollectionArtworkPlacement placement)

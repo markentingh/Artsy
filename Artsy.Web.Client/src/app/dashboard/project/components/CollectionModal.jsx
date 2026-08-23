@@ -149,7 +149,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
   const {
     items, setAiItems, aiItems,
     resumeStep, setResumeStep, blueprintItemIds,
-    collectionArtwork, savedAnswers, upscaleComplete,
+    collectionArtwork, savedAnswers, upscaleComplete, estimate,
     setStep, setCurrentItemIndex, loadItemData,
     fetchEstimate, setInitialLoading,
     STEPS, reset, loadData,
@@ -267,6 +267,14 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
             const art = collectionArtwork.find(a => String(a.itemId) === String(item.id));
             return !art || (art.accepted && art.fullSize);
           });
+
+          // If blueprint placements changed and existing artwork hasn't been upscaled yet, force regeneration
+          if (estimate?.needsRegeneration && !allFullSize && !upscaleComplete) {
+            setStep(STEPS.READY_TO_GENERATE);
+            setInitialLoading(false);
+            return;
+          }
+
           if (allFullSize || upscaleComplete) {
             (async () => {
               const colId = initialCollectionId || await ensureCollection();

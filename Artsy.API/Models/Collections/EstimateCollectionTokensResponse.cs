@@ -15,6 +15,9 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("needsUpscale")]
         public bool NeedsUpscale { get; set; } = true;
+
+        [JsonPropertyName("needsRegeneration")]
+        public bool NeedsRegeneration { get; set; }
     }
 
     public class EstimateCollectionTokensResponse
@@ -27,5 +30,8 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("artworkCount")]
         public int ArtworkCount { get; set; }
+
+        [JsonPropertyName("needsRegeneration")]
+        public bool NeedsRegeneration { get; set; }
     }
 }

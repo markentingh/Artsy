@@ -82,6 +82,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     getCollectionArtwork: (collectionId) => api.get(`${apiPath}/get-collection-artwork?collectionId=${collectionId}`),
     saveCollectionDraft: (request) => api.post(`${apiPath}/save-collection-draft`, request),
     generateCollectionArtwork: (request) => api.post(`${apiPath}/generate-collection-artwork`, request),
+    fixSeamlessPlacements: (request) => api.post(`${apiPath}/fix-seamless-placements`, request),
     upscaleArtwork: (request) => api.post(`${apiPath}/upscale-artwork`, request),
     acceptCollectionArtwork: (request) => api.post(`${apiPath}/accept-collection-artwork`, request),
     autoAcceptCustomArtwork: (request) => api.post(`${apiPath}/auto-accept-custom-artwork`, request),

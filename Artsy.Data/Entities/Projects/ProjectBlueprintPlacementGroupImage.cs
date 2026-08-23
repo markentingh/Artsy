@@ -10,6 +10,7 @@ namespace Artsy.Data.Entities.Projects
         public Guid? ArtworkId { get; set; }
         public Guid? CustomId { get; set; }
         public string Position { get; set; }
-        public bool Flipped { get; set; }
+        public bool FlipX { get; set; }
+        public bool FlipY { get; set; }
     }
 }

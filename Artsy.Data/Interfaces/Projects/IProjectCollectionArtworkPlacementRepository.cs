@@ -6,6 +6,7 @@ namespace Artsy.Data.Interfaces.Projects
     {
         Task<IEnumerable<ProjectCollectionArtworkPlacement>> GetByArtworkIdAsync(Guid collectionArtworkId);
         Task<ProjectCollectionArtworkPlacement?> GetByArtworkIdAndIndexAsync(Guid collectionArtworkId, int index);
+        Task<ProjectCollectionArtworkPlacement?> GetByArtworkIdGroupAndPositionAsync(Guid collectionArtworkId, Guid groupId, string position);
         Task<ProjectCollectionArtworkPlacement> CreateAsync(ProjectCollectionArtworkPlacement placement);
         Task UpdateAsync(ProjectCollectionArtworkPlacement placement);
         Task DeleteByArtworkIdAsync(Guid collectionArtworkId);

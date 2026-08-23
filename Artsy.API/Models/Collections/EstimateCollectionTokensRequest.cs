@@ -6,5 +6,8 @@ namespace Artsy.API.Models.Collections
     {
         [JsonPropertyName("projectId")]
         public Guid ProjectId { get; set; }
+
+        [JsonPropertyName("collectionId")]
+        public Guid? CollectionId { get; set; }
     }
 }

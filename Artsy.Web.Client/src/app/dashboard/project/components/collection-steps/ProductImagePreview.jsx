@@ -14,6 +14,7 @@ export default function ProductImagePreview() {
     setCurrentProductComboIndex,
     selectedProductImageModel,
     collectionProducts,
+    productImageGenerateTrigger,
   } = useCollection();
   const { refreshTokens } = useDashboard();
 
@@ -58,12 +59,28 @@ export default function ProductImagePreview() {
     }
   }, [projectId, collectionId, api, productImagePrompt, setIsGeneratingProductImage, setCurrentProductImage, setShowProductImageChanges, setProductImageChanges, setMessage, refreshTokens, selectedProductImageModel, onSaved, collectionProducts]);
 
+  // When combo changes, show existing accepted image if available (no auto-generation)
   useEffect(() => {
     if (!combo) return;
-    setCurrentProductImage(null);
-    doGenerateProductImage(combo);
+    const existing = allProductImages.find(img =>
+      img.projectBlueprintId === combo.projectBlueprintId &&
+      img.productImageId === combo.productImageId &&
+      img.accepted
+    );
+    setCurrentProductImage(existing || null);
+    setShowProductImageChanges(false);
+    setProductImageChanges('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProductComboIndex]);
+
+  // When user clicks "Generate Image" from the prompt step, trigger generation
+  useEffect(() => {
+    if (productImageGenerateTrigger > 0 && combo) {
+      setCurrentProductImage(null);
+      doGenerateProductImage(combo);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productImageGenerateTrigger]);
 
   const handleAccept = useCallback(async () => {
     if (!currentProductImage) return;
@@ -81,7 +98,6 @@ export default function ProductImagePreview() {
         }
         return [...prev, { ...currentProductImage, accepted: true }];
       });
-      if (onSaved) onSaved();
     } catch (error) {
       console.error('acceptProductImage error:', error?.response?.data || error);
     }
@@ -89,14 +105,16 @@ export default function ProductImagePreview() {
     const nextIndex = currentProductComboIndex + 1;
     if (nextIndex >= selectedProductCombos.length) {
       setStep(STEPS.PUBLISH_PRODUCTS);
+      if (onSaved) onSaved();
     } else {
       setCurrentProductComboIndex(nextIndex);
       setCurrentProductImage(null);
       setShowProductImageChanges(false);
       setProductImageChanges('');
       setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+      if (onSaved) onSaved();
     }
-  }, [currentProductImage, collectionId, api, currentProductComboIndex, selectedProductCombos, setStep, STEPS, setCurrentProductComboIndex, setCurrentProductImage, setShowProductImageChanges, setProductImageChanges, doGenerateProductImage, setAllProductImages, onSaved]);
+  }, [currentProductImage, collectionId, api, currentProductComboIndex, selectedProductCombos, setStep, STEPS, setCurrentProductComboIndex, setCurrentProductImage, setShowProductImageChanges, setProductImageChanges, setAllProductImages, onSaved]);
 
   const handleMakeChanges = useCallback(() => {
     setShowProductImageChanges(true);
@@ -133,7 +151,7 @@ export default function ProductImagePreview() {
               className="w-full h-full object-contain"
             />
           ) : (
-            <span className="text-sm text-gray-500 dark:text-gray-400">Generating product image...</span>
+            <Spinner className="text-3xl" />
           )}
         </div>
 
@@ -155,14 +173,19 @@ export default function ProductImagePreview() {
           </div>
         )}
       </div>
-      <div className="buttons flex justify-end gap-2 mt-8 mt-auto">
+      <div className="buttons flex justify-end gap-2 mt-8">
         <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         {!showProductImageChanges && !isGeneratingProductImage && currentProductImage && (
           <>
-            <ButtonOutline onClick={handleMakeChanges}>Make Changes</ButtonOutline>
-            <ButtonOutline onClick={handleAccept}>Accept</ButtonOutline>
+            <ButtonOutline color="gray" onClick={handleMakeChanges}>Make Changes</ButtonOutline>
+            <ButtonOutline color="green" onClick={handleAccept}>Accept</ButtonOutline>
           </>
+        )}
+        {!showProductImageChanges && !isGeneratingProductImage && !currentProductImage && (
+          <ButtonOutline onClick={() => doGenerateProductImage(combo)}>
+            Generate Image
+          </ButtonOutline>
         )}
       </div>
     </div>

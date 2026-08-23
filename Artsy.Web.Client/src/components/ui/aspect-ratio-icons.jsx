@@ -28,8 +28,26 @@ const stroke = '#ffffff';
 const strokeWidth = 2;
 const rx = 2;
 
+export const Ratio1x3 = () => {
+  const r = getRect(1 / 3);
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x={r.x} y={r.y} width={r.w} height={r.h} rx={rx} stroke={stroke} strokeWidth={strokeWidth} fill="none" />
+    </svg>
+  );
+};
+
 export const Ratio9x21 = () => {
   const r = getRect(9 / 21);
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x={r.x} y={r.y} width={r.w} height={r.h} rx={rx} stroke={stroke} strokeWidth={strokeWidth} fill="none" />
+    </svg>
+  );
+};
+
+export const Ratio1x2 = () => {
+  const r = getRect(1 / 2);
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect x={r.x} y={r.y} width={r.w} height={r.h} rx={rx} stroke={stroke} strokeWidth={strokeWidth} fill="none" />
@@ -127,8 +145,28 @@ export const Ratio21x9 = () => {
   );
 };
 
+export const Ratio2x1 = () => {
+  const r = getRect(2 / 1);
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x={r.x} y={r.y} width={r.w} height={r.h} rx={rx} stroke={stroke} strokeWidth={strokeWidth} fill="none" />
+    </svg>
+  );
+};
+
+export const Ratio3x1 = () => {
+  const r = getRect(3 / 1);
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x={r.x} y={r.y} width={r.w} height={r.h} rx={rx} stroke={stroke} strokeWidth={strokeWidth} fill="none" />
+    </svg>
+  );
+};
+
 export const aspectRatioOptions = [
+  { value: '1:3', label: '1:3', icon: <Ratio1x3 /> },
   { value: '9:21', label: '9:21', icon: <Ratio9x21 /> },
+  { value: '1:2', label: '1:2', icon: <Ratio1x2 /> },
   { value: '9:16', label: '9:16', icon: <Ratio9x16 /> },
   { value: '2:3', label: '2:3', icon: <Ratio2x3 /> },
   { value: '3:4', label: '3:4', icon: <Ratio3x4 /> },
@@ -138,5 +176,7 @@ export const aspectRatioOptions = [
   { value: '4:3', label: '4:3', icon: <Ratio4x3 /> },
   { value: '3:2', label: '3:2', icon: <Ratio3x2 /> },
   { value: '16:9', label: '16:9', icon: <Ratio16x9 /> },
+  { value: '2:1', label: '2:1', icon: <Ratio2x1 /> },
   { value: '21:9', label: '21:9', icon: <Ratio21x9 /> },
+  { value: '3:1', label: '3:1', icon: <Ratio3x1 /> },
 ];

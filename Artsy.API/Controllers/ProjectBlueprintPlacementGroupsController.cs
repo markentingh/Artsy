@@ -43,7 +43,8 @@ namespace Artsy.API.Controllers
                         artworkId = i.ArtworkId,
                         customId = i.CustomId,
                         position = i.Position,
-                        flipped = i.Flipped,
+                        flipX = i.FlipX,
+                        flipY = i.FlipY,
                     }),
                 });
 
@@ -123,7 +124,8 @@ namespace Artsy.API.Controllers
                         ArtworkId = request.ArtworkId,
                         CustomId = request.CustomId,
                         Position = request.Position,
-                        Flipped = request.Flipped,
+                        FlipX = request.FlipX,
+                        FlipY = request.FlipY,
                         ProjectId = request.ProjectId,
                         BlueprintId = request.BlueprintId,
                     };
@@ -141,7 +143,8 @@ namespace Artsy.API.Controllers
                         ArtworkId = request.ArtworkId,
                         CustomId = request.CustomId,
                         Position = request.Position,
-                        Flipped = request.Flipped,
+                        FlipX = request.FlipX,
+                        FlipY = request.FlipY,
                     };
                     var created = await _placementGroupImageRepository.CreateAsync(image);
                     return Json(new ApiResponse { success = true, data = new { id = created.Id } });

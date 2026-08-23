@@ -65,6 +65,7 @@ namespace Artsy.API.Services
         Task<byte[]> GetProjectCollectionProductImageThumbAsync(Guid projectId, Guid collectionId, Guid productImageId);
         Task<bool> GenerateProjectCollectionProductImageThumbAsync(Guid projectId, Guid collectionId, Guid productImageId);
         Task SaveProjectCollectionMockupAsync(Guid projectId, Guid collectionId, Guid mockupId, byte[] imageData);
+        Task DeleteProjectCollectionMockupAsync(Guid projectId, Guid collectionId, Guid mockupId);
         Task<byte[]> GetProjectCollectionMockupAsync(Guid projectId, Guid collectionId, Guid mockupId);
         Task<byte[]> GetProjectCollectionMockupThumbAsync(Guid projectId, Guid collectionId, Guid mockupId);
         Task<bool> GenerateProjectCollectionMockupThumbAsync(Guid projectId, Guid collectionId, Guid mockupId);
@@ -113,9 +114,53 @@ namespace Artsy.API.Services
         Task<List<byte[]>> CutImageVerticalAsync(byte[] imageBytes, List<int> segmentHeights);
 
         /// <summary>
+        /// Cuts a tall image vertically into segments at the specified heights, center-cropping
+        /// each segment to the corresponding target width. Outputs JPG.
+        /// </summary>
+        Task<List<byte[]>> CutImageVerticalWithCenterCropAsync(byte[] imageBytes, List<int> segmentHeights, List<int> segmentWidths);
+
+        /// <summary>
+        /// Cuts a tall image vertically into segments at the specified heights, center-cropping
+        /// each segment to the corresponding target width. Outputs PNG.
+        /// </summary>
+        Task<List<byte[]>> CutImageVerticalWithCenterCropPngAsync(byte[] imageBytes, List<int> segmentHeights, List<int> segmentWidths);
+
+        /// <summary>
         /// Flips an image 180 degrees (rotates 180).
         /// </summary>
         Task<byte[]> Flip180Async(byte[] imageBytes);
+
+        /// <summary>
+        /// Mirrors an image across the X axis (vertical flip / top becomes bottom).
+        /// </summary>
+        Task<byte[]> MirrorXAsync(byte[] imageBytes);
+
+        /// <summary>
+        /// Mirrors an image across the Y axis (horizontal flip / left becomes right).
+        /// </summary>
+        Task<byte[]> MirrorYAsync(byte[] imageBytes);
+
+        /// <summary>
+        /// Resizes an image to the specified resize dimensions (maintaining aspect ratio via cover),
+        /// then center-crops to the exact crop dimensions. Outputs JPG.
+        /// </summary>
+        Task<byte[]> ResizeAndCenterCropAsync(byte[] imageBytes, int resizeWidth, int resizeHeight, int cropWidth, int cropHeight);
+
+        /// <summary>
+        /// Resizes an image to the specified resize dimensions (maintaining aspect ratio via cover),
+        /// then center-crops to the exact crop dimensions. Outputs PNG.
+        /// </summary>
+        Task<byte[]> ResizeAndCenterCropPngAsync(byte[] imageBytes, int resizeWidth, int resizeHeight, int cropWidth, int cropHeight);
+
+        /// <summary>
+        /// Resizes an image to the target width, maintaining aspect ratio. Outputs JPG.
+        /// </summary>
+        Task<byte[]> ResizeToWidthAsync(byte[] imageBytes, int targetWidth);
+
+        /// <summary>
+        /// Resizes an image to the target width, maintaining aspect ratio. Outputs PNG.
+        /// </summary>
+        Task<byte[]> ResizeToWidthPngAsync(byte[] imageBytes, int targetWidth);
     }
 
     public class ImageService : IImageService
@@ -1268,6 +1313,24 @@ namespace Artsy.API.Services
             await SaveToFileSystemAsync(relativePath, imageData);
         }
 
+        public async Task DeleteProjectCollectionMockupAsync(Guid projectId, Guid collectionId, Guid mockupId)
+        {
+            var fileName = $"{mockupId}.jpg";
+            var relativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "mockups", fileName);
+            var thumbFileName = $"{mockupId}_thumb.jpg";
+            var thumbRelativePath = Path.Combine("projects", projectId.ToString(), "collections", collectionId.ToString(), "mockups", thumbFileName);
+
+            if (_activeStorage == "azure")
+            {
+                await DeleteFromAzureBlobAsync(relativePath);
+                await DeleteFromAzureBlobAsync(thumbRelativePath);
+                return;
+            }
+
+            await DeleteFromFileSystemAsync(relativePath);
+            await DeleteFromFileSystemAsync(thumbRelativePath);
+        }
+
         public async Task<byte[]> GetProjectCollectionMockupAsync(Guid projectId, Guid collectionId, Guid mockupId)
         {
             var fileName = $"{mockupId}.jpg";
@@ -1843,12 +1906,133 @@ namespace Artsy.API.Services
             return Task.FromResult(results);
         }
 
+        public Task<List<byte[]>> CutImageVerticalWithCenterCropAsync(byte[] imageBytes, List<int> segmentHeights, List<int> segmentWidths)
+            => CutImageVerticalWithCenterCropImplAsync(imageBytes, segmentHeights, segmentWidths, png: false);
+
+        public Task<List<byte[]>> CutImageVerticalWithCenterCropPngAsync(byte[] imageBytes, List<int> segmentHeights, List<int> segmentWidths)
+            => CutImageVerticalWithCenterCropImplAsync(imageBytes, segmentHeights, segmentWidths, png: true);
+
+        private Task<List<byte[]>> CutImageVerticalWithCenterCropImplAsync(byte[] imageBytes, List<int> segmentHeights, List<int> segmentWidths, bool png)
+        {
+            var results = new List<byte[]>();
+            using var image = Image.Load(imageBytes);
+            var srcW = image.Width;
+            var srcH = image.Height;
+
+            var totalTargetHeight = segmentHeights.Sum();
+            if (totalTargetHeight <= 0 || segmentHeights.Count == 0 || segmentWidths.Count != segmentHeights.Count)
+            {
+                results.Add(imageBytes);
+                return Task.FromResult(results);
+            }
+
+            var scaleY = (double)srcH / totalTargetHeight;
+            var yOffset = 0;
+
+            for (var i = 0; i < segmentHeights.Count; i++)
+            {
+                var segHeight = segmentHeights[i];
+                var targetWidth = segmentWidths[i];
+                var scaledHeight = (int)Math.Round(segHeight * scaleY);
+                if (yOffset + scaledHeight > srcH)
+                    scaledHeight = srcH - yOffset;
+                if (scaledHeight <= 0) break;
+
+                // Crop the vertical segment (full width)
+                using var segImage = image.Clone(ctx => ctx.Crop(new Rectangle(0, yOffset, srcW, scaledHeight)));
+
+                // Center crop on X-axis to target width if narrower than source width
+                if (targetWidth > 0 && targetWidth < srcW)
+                {
+                    var cropX = (srcW - targetWidth) / 2;
+                    segImage.Mutate(ctx => ctx.Crop(new Rectangle(cropX, 0, targetWidth, scaledHeight)));
+                }
+
+                using var ms = new MemoryStream();
+                if (png)
+                    segImage.Save(ms, new PngEncoder());
+                else
+                    segImage.Save(ms, new JpegEncoder { Quality = 95 });
+                results.Add(ms.ToArray());
+
+                yOffset += scaledHeight;
+            }
+
+            return Task.FromResult(results);
+        }
+
         public Task<byte[]> Flip180Async(byte[] imageBytes)
         {
             using var image = Image.Load(imageBytes);
             image.Mutate(ctx => ctx.Rotate(RotateMode.Rotate180));
             using var ms = new MemoryStream();
             image.Save(ms, new JpegEncoder { Quality = 95 });
+            return Task.FromResult(ms.ToArray());
+        }
+
+        public Task<byte[]> MirrorXAsync(byte[] imageBytes)
+        {
+            using var image = Image.Load(imageBytes);
+            image.Mutate(ctx => ctx.Flip(FlipMode.Vertical));
+            using var ms = new MemoryStream();
+            image.Save(ms, new JpegEncoder { Quality = 95 });
+            return Task.FromResult(ms.ToArray());
+        }
+
+        public Task<byte[]> MirrorYAsync(byte[] imageBytes)
+        {
+            using var image = Image.Load(imageBytes);
+            image.Mutate(ctx => ctx.Flip(FlipMode.Horizontal));
+            using var ms = new MemoryStream();
+            image.Save(ms, new JpegEncoder { Quality = 95 });
+            return Task.FromResult(ms.ToArray());
+        }
+
+        public Task<byte[]> ResizeAndCenterCropAsync(byte[] imageBytes, int resizeWidth, int resizeHeight, int cropWidth, int cropHeight)
+        {
+            using var image = Image.Load(imageBytes);
+            image.Mutate(ctx => ctx.Resize(resizeWidth, resizeHeight));
+            var cropX = (resizeWidth - cropWidth) / 2;
+            var cropY = (resizeHeight - cropHeight) / 2;
+            if (cropX > 0 || cropY > 0)
+                image.Mutate(ctx => ctx.Crop(new Rectangle(cropX, cropY, cropWidth, cropHeight)));
+            using var ms = new MemoryStream();
+            image.Save(ms, new JpegEncoder { Quality = 95 });
+            return Task.FromResult(ms.ToArray());
+        }
+
+        public Task<byte[]> ResizeAndCenterCropPngAsync(byte[] imageBytes, int resizeWidth, int resizeHeight, int cropWidth, int cropHeight)
+        {
+            using var image = Image.Load(imageBytes);
+            image.Mutate(ctx => ctx.Resize(resizeWidth, resizeHeight));
+            var cropX = (resizeWidth - cropWidth) / 2;
+            var cropY = (resizeHeight - cropHeight) / 2;
+            if (cropX > 0 || cropY > 0)
+                image.Mutate(ctx => ctx.Crop(new Rectangle(cropX, cropY, cropWidth, cropHeight)));
+            using var ms = new MemoryStream();
+            image.Save(ms, new PngEncoder());
+            return Task.FromResult(ms.ToArray());
+        }
+
+        public Task<byte[]> ResizeToWidthAsync(byte[] imageBytes, int targetWidth)
+        {
+            using var image = Image.Load(imageBytes);
+            var ratio = (double)targetWidth / image.Width;
+            var targetHeight = (int)Math.Round(image.Height * ratio);
+            image.Mutate(ctx => ctx.Resize(targetWidth, targetHeight));
+            using var ms = new MemoryStream();
+            image.Save(ms, new JpegEncoder { Quality = 95 });
+            return Task.FromResult(ms.ToArray());
+        }
+
+        public Task<byte[]> ResizeToWidthPngAsync(byte[] imageBytes, int targetWidth)
+        {
+            using var image = Image.Load(imageBytes);
+            var ratio = (double)targetWidth / image.Width;
+            var targetHeight = (int)Math.Round(image.Height * ratio);
+            image.Mutate(ctx => ctx.Resize(targetWidth, targetHeight));
+            using var ms = new MemoryStream();
+            image.Save(ms, new PngEncoder());
             return Task.FromResult(ms.ToArray());
         }
 

@@ -75,7 +75,7 @@ namespace Artsy.API.Services
                 throw new InvalidOperationException("OpenAI API key is missing.");
 
             var model = string.IsNullOrWhiteSpace(request.Model) ? "gpt-image-2" : request.Model;
-            var size = !string.IsNullOrWhiteSpace(request.CustomSize) ? request.CustomSize : FindBestResolution($"{request.Width}x{request.Height}");
+            var size = !string.IsNullOrWhiteSpace(request.CustomSize) ? request.CustomSize : $"{request.Width}x{request.Height}";
             var quality = string.IsNullOrWhiteSpace(request.Quality) ? "medium" : request.Quality;
 
             var images = new List<OpenAIImageReference>();
@@ -159,7 +159,7 @@ namespace Artsy.API.Services
                 throw new InvalidOperationException("OpenAI API key is missing.");
 
             var model = string.IsNullOrWhiteSpace(request.Model) ? "gpt-image-2" : request.Model;
-            var size = !string.IsNullOrWhiteSpace(request.CustomSize) ? request.CustomSize : FindBestResolution($"{request.Width}x{request.Height}");
+            var size = !string.IsNullOrWhiteSpace(request.CustomSize) ? request.CustomSize : $"{request.Width}x{request.Height}";
             var quality = string.IsNullOrWhiteSpace(request.Quality) ? "medium" : request.Quality;
 
             var jsonOptions = new JsonSerializerOptions
@@ -287,7 +287,7 @@ namespace Artsy.API.Services
                 throw new InvalidOperationException("OpenAI API key is missing.");
 
             var imageModel = string.IsNullOrWhiteSpace(request.Model) ? "gpt-image-2" : request.Model;
-            var toolSize = !string.IsNullOrWhiteSpace(request.CustomSize) ? request.CustomSize : FindBestResolution($"{request.Width}x{request.Height}");
+            var toolSize = !string.IsNullOrWhiteSpace(request.CustomSize) ? request.CustomSize : $"{request.Width}x{request.Height}";
             var toolQuality = string.IsNullOrWhiteSpace(request.Quality) ? "medium" : request.Quality;
 
             var jsonOptions = new JsonSerializerOptions
@@ -398,47 +398,6 @@ namespace Artsy.API.Services
             return $"data:{mime};base64,{Convert.ToBase64String(imageData)}";
         }
 
-        static readonly (int W, int H)[] SupportedResolutions =
-        {
-            (1024, 1024),
-            (1536, 1024),
-            (1024, 1536),
-            (2048, 2048),
-            (2048, 1152),
-            (3840, 2160),
-            (2160, 3840),
-        };
-
-        public static string FindBestResolution(string requestedSize)
-        {
-            var parts = requestedSize.Split('x');
-            if (parts.Length != 2 || !int.TryParse(parts[0], out var targetW) || !int.TryParse(parts[1], out var targetH))
-                return "1024x1024";
-
-            var targetRatio = (double)targetW / targetH;
-            var targetPixels = (long)targetW * targetH;
-
-            var best = SupportedResolutions[0];
-            var bestScore = double.MaxValue;
-
-            foreach (var (w, h) in SupportedResolutions)
-            {
-                var ratio = (double)w / h;
-                var ratioDiff = Math.Abs(ratio - targetRatio);
-                var pixels = (long)w * h;
-                var pixelDiff = Math.Abs(pixels - targetPixels);
-
-                var score = ratioDiff * 1000 + pixelDiff / 1_000_000.0;
-                if (score < bestScore)
-                {
-                    bestScore = score;
-                    best = (w, h);
-                }
-            }
-
-            return $"{best.W}x{best.H}";
-        }
-
         /// <summary>
         /// Calculates a valid GPT image 2.0 custom size for a placement with the given dimensions.
         /// GPT image 2.0 supports custom sizes where edges are multiples of 16 and ratio ≤ 3:1.
@@ -449,10 +408,13 @@ namespace Artsy.API.Services
         /// <param name="placementHeight">Placement print height in pixels</param>
         /// <returns>Tuple of (width, height, needsCrop) where needsCrop is true when the placement
         /// ratio exceeds 3:1 and the generated image will need post-generation cropping</returns>
-        public static (int Width, int Height, bool NeedsCrop) CalculateCustomResolution(int placementWidth, int placementHeight)
+        public static (int Width, int Height, bool NeedsCrop) CalculateCustomResolution(int placementWidth, int placementHeight, int resolutionTier = 1)
         {
             if (placementWidth <= 0 || placementHeight <= 0)
-                return (1024, 1024, false);
+            {
+                var fallback = resolutionTier >= 4 ? 4096 : resolutionTier >= 2 ? 2048 : 1024;
+                return (fallback, fallback, false);
+            }
 
             var ratio = (double)placementWidth / placementHeight;
             var needsCrop = Math.Abs(ratio) > 3.0 || Math.Abs(ratio) < 1.0 / 3.0;
@@ -466,10 +428,11 @@ namespace Artsy.API.Services
             else
                 genRatio = ratio;
 
-            // Pick target area based on the larger placement dimension
-            // 2K area (~4M pixels) for placements > 1024px, 1K area (~1M pixels) for smaller
-            var maxDim = Math.Max(placementWidth, placementHeight);
-            var targetArea = maxDim > 1024 ? 2048.0 * 2048 : 1024.0 * 1024;
+            // Pick target area based on resolution tier (1K, 2K, or 4K)
+            double targetArea;
+            if (resolutionTier >= 4) targetArea = 4096.0 * 4096;
+            else if (resolutionTier >= 2) targetArea = 2048.0 * 2048;
+            else targetArea = 1024.0 * 1024;
 
             // Calculate width and height from target area and ratio
             var w = Math.Sqrt(targetArea * genRatio);

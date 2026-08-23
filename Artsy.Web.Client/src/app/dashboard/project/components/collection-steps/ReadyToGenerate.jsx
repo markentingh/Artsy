@@ -2,6 +2,7 @@ import React, { useCallback, useState, useRef, useMemo, useEffect } from 'react'
 import { useCollection } from '@/context/collection';
 import { useDashboard } from '@/context/dashboard';
 import { artworkThumbUrl } from '@/utils/artworkUrls';
+import Button from '@/components/ui/button';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 import Checked from '@/components/ui/checked';
@@ -9,7 +10,7 @@ import Spinner from '@/components/ui/spinner';
 
 export default function ReadyToGenerate() {
   const {
-    collectionId, setCollectionId, collectionArtwork, blueprints, estimate,
+    collectionId, setCollectionId, collectionArtwork, setCollectionArtwork, blueprints, estimate,
     isGeneratingAll, generatingProgress, generatingMessage,
     generationError, setGenerationError,
     generatedArtworks, currentGeneratingIndex, currentGeneratingItemId,
@@ -36,18 +37,43 @@ export default function ReadyToGenerate() {
   const [thumbFailed, setThumbFailed] = useState({});
   const retryRef = useRef({});
 
-  const artworkImages = acceptedArtworks.map(a => {
-    // For group artworks, show the main combined image (no placement index)
-    // For variant artworks, show the first placement variant thumbnail
-    const placementIndex = a.hasGroups ? null : (a.totalPlacements > 0 ? 0 : null);
-    return artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex, cacheBust: Math.floor(Math.random() * 1000000) });
+  const artworkImages = acceptedArtworks.flatMap(a => {
+    const thumbs = [];
+    const cacheBust = Math.floor(Math.random() * 1000000);
+
+    // For group artworks, show the base combined image (not individual segments)
+    if (a.hasGroups) {
+      thumbs.push({
+        url: artworkThumbUrl(collectionId, a.itemId, a.id, { cacheBust }),
+        artwork: a,
+      });
+    }
+
+    // Show non-group placement thumbnails
+    const nonGroupPlacements = (a.placements || []).filter(p => !p.groupId);
+    for (const p of nonGroupPlacements) {
+      thumbs.push({
+        url: artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex: p.index, cacheBust }),
+        artwork: a,
+      });
+    }
+
+    // If no placements at all, show the base artwork
+    if (thumbs.length === 0) {
+      thumbs.push({
+        url: artworkThumbUrl(collectionId, a.itemId, a.id, { cacheBust }),
+        artwork: a,
+      });
+    }
+
+    return thumbs;
   });
 
   const handleImageError = useCallback(async (index) => {
     if (retryRef.current[index]) return;
     retryRef.current[index] = true;
 
-    const artwork = acceptedArtworks[index];
+    const artwork = artworkImages[index]?.artwork;
     if (!artwork || !collectionId) {
       setThumbFailed(prev => ({ ...prev, [index]: true }));
       return;
@@ -64,13 +90,13 @@ export default function ReadyToGenerate() {
     } catch {
       setThumbFailed(prev => ({ ...prev, [index]: true }));
     }
-  }, [acceptedArtworks, collectionId, api, refreshTokens]);
+  }, [artworkImages, collectionId, api, refreshTokens]);
 
   const displayImages = useMemo(() => {
-    return artworkImages.map((url, i) => {
+    return artworkImages.map((img, i) => {
       if (thumbFailed[i]) return null;
-      if (thumbRetried[i]) return `${url}&r=${thumbRetried[i]}`;
-      return url;
+      if (thumbRetried[i]) return `${img.url}${img.url.includes('?') ? '&' : '?'}r=${thumbRetried[i]}`;
+      return img.url;
     }).filter(Boolean);
   }, [artworkImages, thumbRetried, thumbFailed]);
 
@@ -87,6 +113,8 @@ export default function ReadyToGenerate() {
   useEffect(() => {
     if (!isGeneratingAll && pendingCount === 0) {
       setUpscaleComplete(true);
+    } else if (pendingCount > 0) {
+      setUpscaleComplete(false);
     }
   }, [isGeneratingAll, pendingCount, setUpscaleComplete]);
 
@@ -113,6 +141,34 @@ export default function ReadyToGenerate() {
     onClose();
   }, [cancelRef, onClose]);
 
+  const [upscalingAgain, setUpscalingAgain] = useState({});
+  const [hoveredIdx, setHoveredIdx] = useState(null);
+
+  const handleUpscaleAgain = useCallback(async (artwork) => {
+    if (!collectionId || !projectId) return;
+    setUpscalingAgain(prev => ({ ...prev, [artwork.itemId]: true }));
+    try {
+      const res = await api.upscaleArtwork({
+        projectId,
+        collectionId,
+        itemId: artwork.itemId,
+        force: true,
+      });
+      if (res.data.success) {
+        // Refresh artwork data from server to get updated printifyImageId (cleared) and fullSize
+        const artRes = await api.getCollectionArtwork(collectionId);
+        if (artRes.data.success) {
+          setCollectionArtwork(artRes.data.data || []);
+        }
+        refreshTokens();
+      }
+    } catch (error) {
+      console.error('Upscale again failed:', error);
+    } finally {
+      setUpscalingAgain(prev => ({ ...prev, [artwork.itemId]: false }));
+    }
+  }, [collectionId, projectId, api, setCollectionArtwork, refreshTokens]);
+
   const handleTryAgain = useCallback(() => {
     setGenerationError(null);
     setUpscaleComplete(false);
@@ -127,12 +183,13 @@ export default function ReadyToGenerate() {
   }, [collectionId, ensureCollection, loadImageModels, setStep, STEPS]);
 
   const renderOverlay = (i) => {
-    const artwork = acceptedArtworks[i];
+    const artwork = artworkImages[i]?.artwork;
     if (!artwork) return null;
 
     const isAlreadyUpscaled = artwork.fullSize;
     const isCurrent = isGeneratingAll && artwork?.itemId === currentItemGenId;
     const isDone = generatedArtworks.some(g => g.itemId === artwork?.itemId);
+    const isUpscalingAgain = upscalingAgain[artwork.itemId];
 
     if (isCurrent && !isDone && !isAlreadyUpscaled) {
       return (
@@ -141,10 +198,33 @@ export default function ReadyToGenerate() {
         </div>
       );
     }
+    if (isUpscalingAgain) {
+      return (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg">
+          <Spinner className="text-2xl text-white" />
+        </div>
+      );
+    }
     if (isDone || isAlreadyUpscaled) {
       return (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-between pt-4 pb-2"
+          onMouseEnter={() => setHoveredIdx(i)}
+          onMouseLeave={() => setHoveredIdx(null)}
+        >
           <Checked checked={true} />
+          {isAlreadyUpscaled && hoveredIdx === i && (
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUpscaleAgain(artwork);
+              }}
+              size="small"
+              className="!text-xs"
+            >
+              Upscale Again
+            </Button>
+          )}
         </div>
       );
     }
@@ -212,7 +292,7 @@ export default function ReadyToGenerate() {
       ) : upscaleComplete ? (
         <>
           <p className="text-center text-lg mb-4">
-            Upscaling complete! {generatedArtworks.length} artwork{generatedArtworks.length !== 1 ? 's' : ''} upscaled to full size.
+            Upscaling complete! {artworkImages.filter(img => img.artwork?.fullSize).length} artwork{artworkImages.filter(img => img.artwork?.fullSize).length !== 1 ? 's' : ''} upscaled to full size.
           </p>
           <div className="buttons flex justify-end gap-2 mt-auto">
             <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
@@ -222,6 +302,11 @@ export default function ReadyToGenerate() {
         </>
       ) : (
         <>
+          {estimate?.needsRegeneration && (
+            <p className="text-center text-sm text-yellow-600 dark:text-yellow-400 mb-4">
+              Blueprint placements have changed. Some artworks need to be regenerated.
+            </p>
+          )}
           {pendingCount === 0 ? (
             <p className="text-center text-lg mb-4">
               All artworks have been upscaled.

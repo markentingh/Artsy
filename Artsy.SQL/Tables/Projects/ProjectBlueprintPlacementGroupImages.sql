@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS public."ProjectBlueprintPlacementGroupImages"
     "ArtworkId" UUID,
     "CustomId" UUID,
     "Position" TEXT,
-    "Flipped" BOOLEAN NOT NULL DEFAULT FALSE
+    "FlipX" BOOLEAN NOT NULL DEFAULT FALSE,
+    "FlipY" BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE INDEX IF NOT EXISTS "IX_ProjectBlueprintPlacementGroupImages_GroupId"
@@ -17,5 +18,6 @@ CREATE INDEX IF NOT EXISTS "IX_ProjectBlueprintPlacementGroupImages_GroupId"
 CREATE INDEX IF NOT EXISTS "IX_ProjectBlueprintPlacementGroupImages_ProjectId_BlueprintId"
     ON public."ProjectBlueprintPlacementGroupImages" ("ProjectId", "BlueprintId");
 
-ALTER TABLE public."ProjectBlueprintPlacementGroupImages" ADD COLUMN IF NOT EXISTS "Flipped" BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE public."ProjectBlueprintPlacementGroupImages" ADD COLUMN IF NOT EXISTS "Position" TEXT;
+ALTER TABLE public."ProjectBlueprintPlacementGroupImages" ADD COLUMN IF NOT EXISTS "FlipX" BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public."ProjectBlueprintPlacementGroupImages" ADD COLUMN IF NOT EXISTS "FlipY" BOOLEAN NOT NULL DEFAULT FALSE;
