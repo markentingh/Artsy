@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { useCollection } from '@/context/collection';
 import { useDashboard } from '@/context/dashboard';
 import { artworkImageUrl, artworkThumbUrl } from '@/utils/artworkUrls';
@@ -8,6 +8,7 @@ import Input from '@/components/forms/input';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 import Spinner from '@/components/ui/spinner';
+const TokenCostBreakdownModal = lazy(() => import('../TokenCostBreakdownModal'));
 
 export default function ProductImagePrompt() {
   const {
@@ -119,7 +120,9 @@ export default function ProductImagePrompt() {
   const [thumbFailed, setThumbFailed] = useState({});
   const retryRef = useRef({});
   const [tokenEstimate, setTokenEstimate] = useState(null);
+  const [estimateGenerations, setEstimateGenerations] = useState(null);
   const [estimatingTokens, setEstimatingTokens] = useState(false);
+  const [showCostBreakdown, setShowCostBreakdown] = useState(false);
   const estimateTimerRef = useRef(null);
 
   const placementItemId = useMemo(() => {
@@ -241,9 +244,13 @@ export default function ProductImagePrompt() {
           mockupImageIds: combo.selectedMockupImageIds || [],
         });
         if (res.data.success) {
-          setTokenEstimate(res.data.data);
+          const data = res.data.data;
+          const total = typeof data === 'number' ? data : data.totalTokens;
+          setTokenEstimate(total);
+          setEstimateGenerations(data?.generations || null);
         } else {
           setTokenEstimate(null);
+          setEstimateGenerations(null);
         }
       } catch {
         setTokenEstimate(null);
@@ -355,7 +362,7 @@ export default function ProductImagePrompt() {
             />
           </div>
           <div>
-            <div className="flex items-end gap-3">
+            <div className="flex items-end justify-between gap-3">
               <Select
                 label="AI Image Model"
                 name="productImageModel"
@@ -373,8 +380,15 @@ export default function ProductImagePrompt() {
                   <span>Estimating...</span>
                 </div>
               ) : tokenEstimate != null ? (
-                <div className="text-sm text-gray-500 dark:text-gray-400" style={{ marginBottom: '2em' }}>
-                  <span className="font-medium">Token Cost: <span className="text-white font-bold">{tokenEstimate.toLocaleString()}</span></span>
+                <div className="flex items-center gap-3" style={{ marginBottom: '2em' }}>
+                  {estimateGenerations && estimateGenerations.length > 0 && (
+                    <ButtonOutline color="gray" size="small" onClick={() => setShowCostBreakdown(true)}>
+                      Cost Breakdown
+                    </ButtonOutline>
+                  )}
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    <span className="font-medium">Token Cost: <span className="text-white font-bold">{tokenEstimate.toLocaleString()}</span></span>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -397,6 +411,15 @@ export default function ProductImagePrompt() {
           Generate Image
         </ButtonOutline>
       </div>
+      {showCostBreakdown && (
+        <Suspense fallback={null}>
+          <TokenCostBreakdownModal
+            show={showCostBreakdown}
+            onClose={() => setShowCostBreakdown(false)}
+            generations={estimateGenerations}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

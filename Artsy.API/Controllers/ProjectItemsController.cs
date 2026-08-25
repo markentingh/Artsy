@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Artsy.API.Models;
+using Artsy.API.Models.Collections;
 using Artsy.API.Models.Projects;
 using Artsy.API.Services;
 using Artsy.Data.Entities;
@@ -268,7 +269,7 @@ namespace Artsy.API.Controllers
         }
 
         [HttpGet("estimate-item-tokens")]
-        public async Task<IActionResult> EstimateItemTokens([FromQuery] Guid itemId, [FromQuery] int modelId = 0)
+        public async Task<IActionResult> EstimateItemTokens([FromQuery] Guid itemId, [FromQuery] int modelId = 0, [FromQuery] Guid? collectionId = null)
         {
             var userId = GetUserId();
             if (userId == Guid.Empty)
@@ -287,8 +288,9 @@ namespace Artsy.API.Controllers
                 if (project == null)
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
-                // Build the generation plan to get accurate dimensions, reference images, and tasks
-                var plan = await _artworkGenerationPlanService.BuildPlanAsync(item.ProjectId, Guid.Empty, itemId);
+                // Build the generation plan with collectionId so it filters by active products
+                // Use resolutionTier 2 (2K) to match the actual collection wizard generation
+                var plan = await _artworkGenerationPlanService.BuildPlanAsync(item.ProjectId, collectionId ?? Guid.Empty, itemId, resolutionTier: 2);
 
                 ImageGenerationModel? model;
                 if (modelId > 0)
@@ -311,28 +313,49 @@ namespace Artsy.API.Controllers
                     .Select(r => (r.Width, r.Height))
                     .ToList() as IReadOnlyList<(int width, int height)>;
 
-                // Sum tokens across all tasks (variants)
+                // Build detailed response with per-task tokens and placements
+                var generations = new List<CollectionArtworkGenerationDto>();
                 var totalTokens = 0m;
-                var totalCost = 0m;
                 foreach (var task in plan.Tasks)
                 {
                     var result = tokenizer.CalculateTokens(
                         plan.FinalPrompt,
                         task.Width,
                         task.Height,
-                        "medium",
+                        "high",
                         inputImageDimensions,
                         "auto",
                         tokenCost
                     );
+
+                    generations.Add(new CollectionArtworkGenerationDto
+                    {
+                        ItemId = itemId,
+                        Width = task.Width,
+                        Height = task.Height,
+                        NeedsUpscale = plan.NeedsUpscale,
+                        Tokens = result.PlatformTokens,
+                        Placements = task.Placements.Select(p => new EstimatePlacementDto
+                        {
+                            BlueprintId = p.BlueprintId,
+                            BlueprintName = p.BlueprintName,
+                            Position = p.Position,
+                            Width = p.Width,
+                            Height = p.Height
+                        }).ToList()
+                    });
+
                     totalTokens += result.PlatformTokens;
-                    totalCost += result.EstimatedCostUSD;
                 }
 
                 return Json(new ApiResponse
                 {
                     success = true,
-                    data = (int)Math.Ceiling(totalTokens)
+                    data = new
+                    {
+                        totalTokens = (int)Math.Ceiling(totalTokens),
+                        generations
+                    }
                 });
             }
             catch (Exception ex)

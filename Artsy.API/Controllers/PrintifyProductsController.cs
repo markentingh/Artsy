@@ -589,6 +589,9 @@ namespace Artsy.API.Controllers
                     });
                 }
 
+                if (!product.Active)
+                    return Json(new ApiResponse { success = false, message = "This product is not active for this collection." });
+
                 if (bp.PrintProviderId == 0)
                     return Json(new ApiResponse { success = false, message = "No print provider configured for blueprint." });
                 var printProviderId = bp.PrintProviderId;
@@ -688,18 +691,34 @@ namespace Artsy.API.Controllers
 
                                 if (art.TotalPlacements > 0 && artworkPlacementsMap.TryGetValue(art.Id, out var placementVariants))
                                 {
-                                    // For seamless group placements, match by Position first (case-insensitive)
+                                    var (pw, ph) = placement.GetDimensions();
+                                    var placementRatio = pw > 0 && ph > 0 ? (double)pw / ph : 0;
+
+                                    // For seamless group placements, match by Position AND dimensions (case-insensitive)
+                                    // This prevents matching a "front" group placement from a different blueprint
                                     var matching = placementVariants.FirstOrDefault(v =>
                                         v.GroupId.HasValue &&
                                         !string.IsNullOrWhiteSpace(v.Position) &&
                                         string.Equals(v.Position, placement.Position, StringComparison.OrdinalIgnoreCase) &&
+                                        v.Width == pw && v.Height == ph &&
                                         !string.IsNullOrWhiteSpace(v.PrintifyImageId));
+
+                                    // Fall back to position match with aspect ratio check (within 1% tolerance)
+                                    if (matching == null)
+                                    {
+                                        matching = placementVariants.FirstOrDefault(v =>
+                                            v.GroupId.HasValue &&
+                                            !string.IsNullOrWhiteSpace(v.Position) &&
+                                            string.Equals(v.Position, placement.Position, StringComparison.OrdinalIgnoreCase) &&
+                                            v.Width > 0 && v.Height > 0 &&
+                                            placementRatio > 0 &&
+                                            Math.Abs((double)v.Width / v.Height - placementRatio) < 0.01 &&
+                                            !string.IsNullOrWhiteSpace(v.PrintifyImageId));
+                                    }
 
                                     // Fall back to aspect ratio matching for non-group placements
                                     if (matching == null)
                                     {
-                                        var (pw, ph) = placement.GetDimensions();
-                                        var placementRatio = pw > 0 && ph > 0 ? (double)pw / ph : 0;
                                         matching = placementVariants.FirstOrDefault(v =>
                                         {
                                             if (v.Width <= 0 || v.Height <= 0) return false;
@@ -1326,7 +1345,9 @@ namespace Artsy.API.Controllers
                 var blueprints = (await _blueprintRepository.GetByProjectIdAsync(collection.ProjectId)).ToList();
                 var productImages = (await _productImageRepository.GetByCollectionIdAsync(request.CollectionId)).ToList();
                 var imageBlueprintIds = productImages.Select(img => img.ProjectBlueprintId).Distinct().ToHashSet();
-                var configuredBlueprints = blueprints.Where(bp => imageBlueprintIds.Contains(bp.Id)).ToList();
+                var collectionProducts = await _productRepository.GetByCollectionIdAsync(request.CollectionId);
+                var activeBlueprintIds = collectionProducts.Where(cp => cp.Active).Select(cp => cp.ProjectBlueprintId).ToHashSet();
+                var configuredBlueprints = blueprints.Where(bp => imageBlueprintIds.Contains(bp.Id) && activeBlueprintIds.Contains(bp.Id)).ToList();
 
                 var created = new List<object>();
                 foreach (var bp in configuredBlueprints)

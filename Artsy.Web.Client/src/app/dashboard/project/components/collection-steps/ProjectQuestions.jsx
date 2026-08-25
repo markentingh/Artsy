@@ -9,7 +9,7 @@ export default function ProjectQuestions() {
     ensureCollection, saveAnswers,
     collectionArtwork, aiItems, blueprintItemIds,
     setStep, setCurrentItemIndex, loadItemData,
-    fetchEstimate, STEPS, onClose,
+    STEPS, onClose,
   } = useCollection();
 
   const handleAnswerChange = useCallback((questionId, value) => {
@@ -29,12 +29,11 @@ export default function ProjectQuestions() {
     );
     if (firstBlueprintItemIndex === -1) {
       setStep(STEPS.READY_TO_GENERATE);
-      fetchEstimate();
     } else {
       setCurrentItemIndex(firstBlueprintItemIndex);
       loadItemData(firstBlueprintItemIndex);
     }
-  }, [ensureCollection, saveAnswers, collectionArtwork, aiItems, blueprintItemIds, fetchEstimate, loadItemData, setStep, setCurrentItemIndex, STEPS]);
+  }, [ensureCollection, saveAnswers, collectionArtwork, aiItems, blueprintItemIds, loadItemData, setStep, setCurrentItemIndex, STEPS]);
 
   return (
     <div className="flex flex-col h-full">

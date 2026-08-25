@@ -21,6 +21,7 @@ export default function CreateProducts() {
     setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex,
     setProductBlueprintImages, setProductImagePrompt, loadImageModels,
     ensureCollection, loadMockups,
+    collectionProducts,
   } = useCollection();
 
   const printifyProductsApi = PrintifyProducts(session);
@@ -29,7 +30,6 @@ export default function CreateProducts() {
   const [creating, setCreating] = useState(false);
   const [downloadingMockups, setDownloadingMockups] = useState(false);
   const [artworkUploadState, setArtworkUploadState] = useState({});
-  const [activeMap, setActiveMap] = useState({});
   const [deletingProduct, setDeletingProduct] = useState({});
   const [productToDelete, setProductToDelete] = useState(null);
   const [archivingUpload, setArchivingUpload] = useState({});
@@ -45,8 +45,14 @@ export default function CreateProducts() {
   }, [printifyProducts]);
 
   const blueprintsWithImages = useMemo(() => {
-    return blueprints.filter(bp => bp.configured === true || bp.configured === undefined);
-  }, [blueprints]);
+    const activeBlueprintIds = new Set(
+      collectionProducts.filter(cp => cp.active).map(cp => cp.projectBlueprintId)
+    );
+    return blueprints.filter(bp =>
+      (bp.configured === true || bp.configured === undefined) &&
+      activeBlueprintIds.has(bp.id)
+    );
+  }, [blueprints, collectionProducts]);
 
   const variantCountByBlueprint = useMemo(() => {
     const map = {};
@@ -82,10 +88,7 @@ export default function CreateProducts() {
     );
   }, [blueprintsWithImages, imagesByBlueprint]);
 
-  const activeBlueprints = useMemo(() =>
-    blueprintsWithImages.filter(bp => activeMap[bp.id] !== false),
-    [blueprintsWithImages, activeMap]
-  );
+  const activeBlueprints = blueprintsWithImages;
 
   const activeItemIds = useMemo(() => {
     const ids = new Set();
@@ -169,16 +172,6 @@ export default function CreateProducts() {
       return next;
     });
   }, [collectionArtwork]);
-
-  useEffect(() => {
-    setActiveMap(prev => {
-      const next = { ...prev };
-      for (const bp of blueprintsWithImages) {
-        if (next[bp.id] === undefined || createdBlueprints[bp.id]) next[bp.id] = true;
-      }
-      return next;
-    });
-  }, [blueprintsWithImages, createdBlueprints]);
 
   const acceptedArtwork = useMemo(() =>
     (collectionArtwork || []).filter(a => a.accepted && a.active && blueprintItemIds.has(String(a.itemId))),
@@ -475,11 +468,6 @@ export default function CreateProducts() {
 
   const handleStart = useCallback(async () => {
     if (!collectionId) return;
-    const products = blueprintsWithImages.map(bp => ({
-      projectBlueprintId: bp.id,
-      active: activeMap[bp.id] !== false,
-    }));
-    await api.updateCollectionProductsActive({ collectionId, products });
 
     if (allImagesUploaded) {
       await handleCreateProducts();
@@ -487,7 +475,7 @@ export default function CreateProducts() {
       await handleUploadImages();
       await handleCreateProducts();
     }
-  }, [collectionId, blueprintsWithImages, activeMap, api, allImagesUploaded, handleUploadImages, handleCreateProducts]);
+  }, [collectionId, allImagesUploaded, handleUploadImages, handleCreateProducts]);
 
   const handleDeleteProduct = useCallback(async (pp) => {
     if (!pp?.productId || !collectionId) return;
@@ -653,19 +641,11 @@ export default function CreateProducts() {
           {blueprintsWithImages.map((bp) => {
             const variantCount = variantCountByBlueprint[bp.id] || 0;
             const isCreated = createdBlueprints[bp.id] || false;
-            const isActive = activeMap[bp.id] !== false;
             const pp = printifyProducts.find(p => p.projectBlueprintId === bp.id);
             return (
               <Item key={bp.id}>
                 <div className="flex items-center w-full">
-                  <input
-                    type="checkbox"
-                    checked={isActive}
-                    disabled={isCreated}
-                    onChange={() => !isCreated && setActiveMap(prev => ({ ...prev, [bp.id]: !isActive }))}
-                    className={`mr-3 w-4 h-4 accent-blue-600 ${isCreated ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-                  />
-                  <span className={`text-sm font-medium ${isActive ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500 line-through'}`}>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                     {bp.name}
                   </span>
                   <div className="ml-auto flex items-center gap-3">

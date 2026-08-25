@@ -2,6 +2,24 @@ using System.Text.Json.Serialization;
 
 namespace Artsy.API.Models.Collections
 {
+    public class EstimatePlacementDto
+    {
+        [JsonPropertyName("blueprintId")]
+        public int BlueprintId { get; set; }
+
+        [JsonPropertyName("blueprintName")]
+        public string BlueprintName { get; set; } = "";
+
+        [JsonPropertyName("position")]
+        public string Position { get; set; } = "";
+
+        [JsonPropertyName("width")]
+        public int Width { get; set; }
+
+        [JsonPropertyName("height")]
+        public int Height { get; set; }
+    }
+
     public class CollectionArtworkGenerationDto
     {
         [JsonPropertyName("itemId")]
@@ -18,6 +36,12 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("needsRegeneration")]
         public bool NeedsRegeneration { get; set; }
+
+        [JsonPropertyName("tokens")]
+        public int Tokens { get; set; }
+
+        [JsonPropertyName("placements")]
+        public List<EstimatePlacementDto> Placements { get; set; } = new();
     }
 
     public class EstimateCollectionTokensResponse

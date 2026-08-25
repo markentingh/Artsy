@@ -18,6 +18,18 @@ namespace Artsy.API.Services
     }
 
     /// <summary>
+    /// Describes a single placement that maps to a generation task.
+    /// </summary>
+    public class TaskPlacementInfo
+    {
+        public int BlueprintId { get; set; }
+        public string BlueprintName { get; set; } = "";
+        public string Position { get; set; } = "";
+        public int Width { get; set; }
+        public int Height { get; set; }
+    }
+
+    /// <summary>
     /// Describes a single image generation that must be performed for an artwork.
     /// An artwork may require multiple generations if it has placements with different aspect ratios.
     /// </summary>
@@ -55,6 +67,9 @@ namespace Artsy.API.Services
 
         /// <summary>Placements within the seamless group (only set when GroupId is non-null).</summary>
         public List<SeamlessGroupPlacement> GroupPlacements { get; set; } = new();
+
+        /// <summary>All placements that map to this task (for debugging/estimation).</summary>
+        public List<TaskPlacementInfo> Placements { get; set; } = new();
     }
 
     /// <summary>

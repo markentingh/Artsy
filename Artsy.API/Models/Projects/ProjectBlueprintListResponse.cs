@@ -8,5 +8,6 @@ namespace Artsy.API.Models.Projects
         public string BlueprintJson { get; set; } = "";
         public bool Configured { get; set; }
         public int ImageCount { get; set; }
+        public decimal? MinPrice { get; set; }
     }
 }

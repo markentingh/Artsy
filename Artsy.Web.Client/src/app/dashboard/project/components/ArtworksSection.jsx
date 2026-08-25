@@ -219,19 +219,20 @@ export default function ArtworksSection({ projectId, onArtworkChanged }) {
               onDragOver={(e) => e.preventDefault()}
               onDragEnd={handleDragEnd}
               onClick={() => handleOpenEditArtwork(item)}
-              className="rounded-lg bg-white dark:bg-gray-800 shadow hover:shadow-md cursor-pointer overflow-hidden transition"
+              className="w-[300px] bg-white dark:bg-gray-800 rounded-lg shadow p-4 hover:shadow-md transition cursor-pointer"
             >
-              <div className="w-full">
+              <div className="w-full mb-3 rounded-lg overflow-hidden">
                 <Carousel
                   images={item.thumbnails || []}
                   alt={item.title || 'Artwork'}
                   singleImage
                   infiniteScroll
                   placeholder="No Previews"
-                  imageClassName="!max-w-[300px] !max-h-[300px] object-contain"
+                  imageClassName="!max-w-[260px] object-contain"
+                  maxHeight="260px"
                 />
               </div>
-              <div className="p-3">
+              <div>
                 <div className="flex items-baseline gap-2">
                   <span className="font-bold text-lg">{String(item.index).padStart(2, '0')}</span>
                   <span
@@ -242,14 +243,17 @@ export default function ArtworksSection({ projectId, onArtworkChanged }) {
                   </span>
                 </div>
                 <div className="flex items-center justify-between mt-1">
-                  <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-                    {item.productCount > 0 && <span>{item.productCount} {item.productCount === 1 ? 'Product' : 'Products'}</span>}
-                    {item.questionCount > 0 && <span>{item.questionCount} {item.questionCount === 1 ? 'Question' : 'Questions'}</span>}
-                    {item.socialMedia && (
-                      <Icon name="share" className="text-green-500" title="Social Media enabled" />
-                    )}
-                  </div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {item.artworkType === 'custom' ? 'Custom Image' : 'AI Artwork'}
+                  </p>
                   <ButtonIcon name="delete" color="red" onClick={(e) => handleDeleteArtwork(e, item.id)} title="Delete artwork" />
+                </div>
+                <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {item.productCount > 0 && <span>{item.productCount} {item.productCount === 1 ? 'Product' : 'Products'}</span>}
+                  {item.questionCount > 0 && <span>{item.questionCount} {item.questionCount === 1 ? 'Question' : 'Questions'}</span>}
+                  {item.socialMedia && (
+                    <Icon name="share" className="text-green-500" title="Social Media enabled" />
+                  )}
                 </div>
               </div>
             </div>

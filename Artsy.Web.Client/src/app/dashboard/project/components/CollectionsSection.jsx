@@ -169,44 +169,43 @@ export default function CollectionsSection({ projectId, project, showNewButton =
                     singleImage
                     infiniteScroll
                     placeholder="No Artwork"
-                    imageClassName="!max-w-[260px] !max-h-[260px] object-contain"
+                    imageClassName="!max-w-[260px] object-contain"
+                    maxHeight="260px"
                   />
                 </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    {editingCollectionId === collection.id ? (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="text"
-                          value={editingTitle}
-                          onChange={(e) => setEditingTitle(e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTitle(collection, e); if (e.key === 'Escape') handleCancelEditTitle(e); }}
-                          autoFocus
-                          className="flex-1 px-2 py-1 text-sm border rounded bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                        <ButtonIcon name="check" color="green" onClick={(e) => handleSaveTitle(collection, e)} title="Save title" />
-                        <ButtonIcon name="close" color="red" onClick={handleCancelEditTitle} title="Cancel" />
-                      </div>
-                    ) : (
-                      <>
-                        <h3
-                          className="font-medium mb-1 truncate"
-                          title={collection.title || `Collection #${collection.sequence}`}
-                        >
-                          {collection.title || `Collection #${collection.sequence}`}
-                        </h3>
+                <div>
+                  {editingCollectionId === collection.id ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTitle(collection, e); if (e.key === 'Escape') handleCancelEditTitle(e); }}
+                        autoFocus
+                        className="flex-1 px-2 py-1 text-sm border rounded bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                      <ButtonIcon name="check" color="green" onClick={(e) => handleSaveTitle(collection, e)} title="Save title" />
+                      <ButtonIcon name="close" color="red" onClick={handleCancelEditTitle} title="Cancel" />
+                    </div>
+                  ) : (
+                    <>
+                      <h3
+                        className="font-medium truncate"
+                        title={collection.title || `Collection #${collection.sequence}`}
+                      >
+                        {collection.title || `Collection #${collection.sequence}`}
+                      </h3>
+                      <div className="flex items-center justify-between mt-1">
                         <p className="text-sm text-gray-500 dark:text-gray-400">
                           {new Date(collection.created).toLocaleDateString()}
                         </p>
-                      </>
-                    )}
-                  </div>
-                  {editingCollectionId !== collection.id && (
-                    <div className="flex items-center gap-1">
-                      <ButtonIcon name="edit" color="blue" onClick={(e) => handleEditTitle(collection, e)} title="Edit title" />
-                      <ButtonIcon name="delete" color="red" onClick={(e) => handleDeleteCollection(collection, e)} title="Delete collection" />
-                    </div>
+                        <div className="flex items-center gap-1">
+                          <ButtonIcon name="edit" color="blue" onClick={(e) => handleEditTitle(collection, e)} title="Edit title" />
+                          <ButtonIcon name="delete" color="red" onClick={(e) => handleDeleteCollection(collection, e)} title="Delete collection" />
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
               </div>

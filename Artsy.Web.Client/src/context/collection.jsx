@@ -10,6 +10,7 @@ import { ImageGeneration } from '@/api/user/imageGeneration';
 const CollectionContext = createContext(null);
 
 export const STEPS = {
+  SELECT_PRODUCTS: 'select_products',
   PROJECT_QUESTIONS: 'project_questions',
   ARTWORK_QUESTIONS: 'artwork_questions',
   ARTWORK_PREVIEW: 'artwork_preview',
@@ -18,22 +19,20 @@ export const STEPS = {
   PRODUCT_IMAGE_PREVIEW: 'product_image_preview',
   CREATE_PRODUCTS: 'create_products',
   PUBLISH_PRODUCTS: 'publish_products',
-  SOCIAL_MEDIA: 'social_media',
-  SUMMARY: 'summary',
 };
 
 export const WIZARD_STEPS = [
+  'Select Products',
   'Project Questions',
   'Artwork Questions',
   'Ready to Upscale',
   'Create Products',
   'Product Images',
   'Publish Products',
-  'Social Media',
-  'Summary',
 ];
 
 const STEP_ORDER = [
+  STEPS.SELECT_PRODUCTS,
   STEPS.PROJECT_QUESTIONS,
   STEPS.ARTWORK_QUESTIONS,
   STEPS.ARTWORK_PREVIEW,
@@ -42,8 +41,6 @@ const STEP_ORDER = [
   STEPS.PRODUCT_IMAGE_PROMPT,
   STEPS.PRODUCT_IMAGE_PREVIEW,
   STEPS.PUBLISH_PRODUCTS,
-  STEPS.SOCIAL_MEDIA,
-  STEPS.SUMMARY,
 ];
 
 const PLACEMENT_NAMES = [
@@ -55,38 +52,36 @@ export function getPlacementName(num) {
 }
 
 export const STEP_INDEX = {
-  project_questions: 0,
-  artwork_questions: 1,
-  artwork_preview: 1,
-  ready_to_generate: 2,
-  create_products: 3,
-  product_image_prompt: 4,
-  product_image_preview: 4,
-  publish_products: 5,
-  social_media: 6,
-  summary: 7,
+  select_products: 0,
+  project_questions: 1,
+  artwork_questions: 2,
+  artwork_preview: 2,
+  ready_to_generate: 3,
+  create_products: 4,
+  product_image_prompt: 5,
+  product_image_preview: 5,
+  publish_products: 6,
 };
 
 export function buildWizardSteps(hasProjectQuestions) {
-  const steps = [];
+  const steps = ['Select Products'];
   if (hasProjectQuestions) steps.push('Project Questions');
-  steps.push('Artwork Questions', 'Ready to Upscale', 'Create Products', 'Product Images', 'Publish Products', 'Social Media', 'Summary');
+  steps.push('Artwork Questions', 'Ready to Upscale', 'Create Products', 'Product Images', 'Publish Products');
   return steps;
 }
 
 export function buildStepIndex(hasProjectQuestions) {
   const offset = hasProjectQuestions ? 0 : -1;
   return {
-    project_questions: 0,
-    artwork_questions: 1 + offset,
-    artwork_preview: 1 + offset,
-    ready_to_generate: 2 + offset,
-    create_products: 3 + offset,
-    product_image_prompt: 4 + offset,
-    product_image_preview: 4 + offset,
-    publish_products: 5 + offset,
-    social_media: 6 + offset,
-    summary: 7 + offset,
+    select_products: 0,
+    project_questions: 1,
+    artwork_questions: 2 + offset,
+    artwork_preview: 2 + offset,
+    ready_to_generate: 3 + offset,
+    create_products: 4 + offset,
+    product_image_prompt: 5 + offset,
+    product_image_preview: 5 + offset,
+    publish_products: 6 + offset,
   };
 }
 
@@ -98,7 +93,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const printifyProductsApi = useMemo(() => PrintifyProducts(session), [session]);
   const imageGenerationApi = useMemo(() => ImageGeneration(session), [session]);
 
-  const [step, setStep] = useState(STEPS.PROJECT_QUESTIONS);
+  const [step, setStep] = useState(STEPS.SELECT_PRODUCTS);
   const [maxStepIndex, setMaxStepIndex] = useState(0);
   const [projectQuestions, setProjectQuestions] = useState([]);
   const [items, setItems] = useState([]);
@@ -117,12 +112,14 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const [savedAnswers, setSavedAnswers] = useState({});
   const [collectionArtwork, setCollectionArtwork] = useState([]);
   const [resumeStep, setResumeStep] = useState(null);
-  const [estimate, setEstimate] = useState(null);
   const [message, setMessage] = useState(null);
   const [generatingProgress, setGeneratingProgress] = useState(0);
   const [generatedArtworks, setGeneratedArtworks] = useState([]);
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [generatingMessage, setGeneratingMessage] = useState('');
+  const [previewGenerationThumbs, setPreviewGenerationThumbs] = useState([]);
+  const [previewGenerationIndex, setPreviewGenerationIndex] = useState(0);
+  const [previewGenerationTotal, setPreviewGenerationTotal] = useState(0);
   const [currentGeneratingIndex, setCurrentGeneratingIndex] = useState(-1);
   const [currentGeneratingItemId, setCurrentGeneratingItemId] = useState(null);
   const [generationError, setGenerationError] = useState(null);
@@ -155,8 +152,13 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const [instagramPost, setInstagramPost] = useState(null);
 
   const blueprintItemIds = useMemo(() => {
+    const activeBlueprintIds = new Set(
+      collectionProducts.filter(cp => cp.active).map(cp => cp.projectBlueprintId)
+    );
     const ids = new Set();
     for (const bp of blueprints) {
+      // Only include items from active products (or all if no collection products exist yet)
+      if (collectionProducts.length > 0 && !activeBlueprintIds.has(bp.id)) continue;
       if (!bp.placementJson) continue;
       try {
         const placements = JSON.parse(bp.placementJson);
@@ -167,7 +169,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       } catch { /* skip */ }
     }
     return ids;
-  }, [blueprints]);
+  }, [blueprints, collectionProducts]);
 
   const currentItem = aiItems[currentItemIndex];
   const creatingCollectionRef = useRef(null);
@@ -230,16 +232,17 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     }
   }, [projectId, api, buildAllAnswers]);
 
-  const fetchEstimate = useCallback(async () => {
+  const refreshCollectionArtwork = useCallback(async () => {
+    if (!collectionId) return;
     try {
-      const res = await api.estimateCollectionTokens({ projectId, collectionId });
+      const res = await api.getCollectionArtwork(collectionId);
       if (res.data.success) {
-        setEstimate(res.data.data);
+        setCollectionArtwork(res.data.data || []);
       }
     } catch (error) {
       // non-critical
     }
-  }, [projectId, collectionId, api]);
+  }, [collectionId, api]);
 
   const doGeneratePreview = useCallback(async (colId) => {
     const item = aiItems[currentItemIndex];
@@ -255,45 +258,83 @@ export function CollectionProvider({ children, projectId, project, collectionId:
           .map(([questionId, answer]) => ({ questionId, answer })),
       ];
 
-      const res = await api.generateCollectionArtwork({
-        projectId,
-        collectionId: colId,
-        itemId: item.id,
-        width: 2048,
-        height: 2048,
-        answers: answerList,
-        requestedChanges: showChanges ? requestedChanges : null,
-        modelId: selectedImageModel?.id,
-      });
+      // Get the number of generations from the estimate
+      let totalGenerations = 1;
+      let generations = [];
+      try {
+        const estRes = await api.estimateItemTokens(item.id, selectedImageModel?.id, colId);
+        if (estRes.data.success) {
+          const data = estRes.data.data;
+          if (typeof data === 'number') {
+            totalGenerations = 1;
+          } else {
+            generations = data.generations || [];
+            totalGenerations = generations.length || 1;
+          }
+        }
+      } catch { /* non-critical */ }
 
-      if (res.data.success) {
-        const artwork = res.data.data;
-        const placementIndex = artwork.totalPlacements > 0 ? 0 : null;
-        const url = artworkImageUrl(colId, item.id, artwork.id, { thumb: true, cacheBust: Math.floor(Math.random() * 100000), placementIndex });
-        setCurrentArtwork(artwork);
-        setPreviewImageData(url);
-        setShowChanges(false);
-        setRequestedChanges('');
-        setCollectionArtwork(prev => prev.filter(a => String(a.itemId) !== String(item.id)).concat(artwork));
-        fetchEstimate();
-        refreshTokens();
-        if (onSaved) onSaved();
-      } else {
-        setMessage({ type: 'error', text: res.data.message || 'Failed to generate preview' });
+      setPreviewGenerationTotal(totalGenerations);
+      setPreviewGenerationIndex(0);
+      setPreviewGenerationThumbs([]);
+
+      let lastArtwork = null;
+      for (let genIdx = 0; genIdx < totalGenerations; genIdx++) {
+        setPreviewGenerationIndex(genIdx);
+        const dims = generations[genIdx];
+        const dimStr = dims ? ` (${dims.width}x${dims.height})` : '';
+        setGeneratingMessage(`Generating artwork ${genIdx + 1} of ${totalGenerations}${dimStr}...`);
+
+        const res = await api.generateCollectionArtwork({
+          projectId,
+          collectionId: colId,
+          itemId: item.id,
+          width: 2048,
+          height: 2048,
+          answers: answerList,
+          requestedChanges: showChanges ? requestedChanges : null,
+          modelId: selectedImageModel?.id,
+          generationIndex: genIdx,
+        });
+
+        if (res.data.success) {
+          lastArtwork = res.data.data;
+          // Update preview image after each generation
+          const placementIndex = lastArtwork.totalPlacements > 0 ? genIdx : null;
+          const cacheBust = Math.floor(Math.random() * 100000);
+          const url = artworkImageUrl(colId, item.id, lastArtwork.id, { thumb: true, cacheBust, placementIndex });
+          setCurrentArtwork(lastArtwork);
+          setPreviewImageData(url);
+          // Add this generation's thumbnail to the grid
+          setPreviewGenerationThumbs(prev => [...prev, { index: genIdx, url, width: dims?.width, height: dims?.height }]);
+          setCollectionArtwork(prev => prev.filter(a => String(a.itemId) !== String(item.id)).concat(lastArtwork));
+          refreshTokens();
+        } else {
+          setMessage({ type: 'error', text: res.data.message || 'Failed to generate preview' });
+          setIsGenerating(false);
+          setPreviewGenerationIndex(0);
+          setPreviewGenerationTotal(0);
+          return;
+        }
       }
+
+      setShowChanges(false);
+      setRequestedChanges('');
+      if (onSaved) onSaved();
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to generate preview' });
     } finally {
       setIsGenerating(false);
+      setPreviewGenerationIndex(0);
+      setPreviewGenerationTotal(0);
     }
   }, [aiItems, currentItemIndex, itemAnswers, showChanges, requestedChanges, projectId, api, buildProjectAnswers, selectedImageModel, refreshTokens, onSaved]);
 
-  const loadItemData = useCallback(async (index) => {
+  const loadItemData = useCallback(async (index, forceQuestions = false) => {
     setCurrentItemIndex(index);
     const item = aiItems[index];
     if (!item) {
       setStep(STEPS.READY_TO_GENERATE);
-      fetchEstimate();
       return;
     }
 
@@ -342,7 +383,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       setRequestedChanges('');
 
       const existingArt = collectionArtwork.find(a => String(a.itemId) === String(item.id) && a.active);
-      if (existingArt) {
+      if (existingArt && !forceQuestions) {
         const placementIndex = existingArt.totalPlacements > 0 ? 0 : null;
         setPreviewImageData(artworkImageUrl(collectionId, item.id, existingArt.id, { thumb: true, cacheBust: Math.floor(Math.random() * 100000), placementIndex }));
         setCurrentArtwork(existingArt);
@@ -357,7 +398,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load artwork data' });
     }
-  }, [aiItems, collectionId, savedAnswers, api, ensureCollection, doGeneratePreview, fetchEstimate, projectId]);
+  }, [aiItems, collectionId, savedAnswers, api, ensureCollection, doGeneratePreview, projectId]);
 
   const loadMockups = useCallback(async (colId) => {
     const id = colId || collectionId;
@@ -503,29 +544,25 @@ export function CollectionProvider({ children, projectId, project, collectionId:
             setStep(STEPS.PRODUCT_IMAGE_PROMPT);
           } else {
             setStep(STEPS.READY_TO_GENERATE);
-            fetchEstimate();
           }
         })();
       } else {
         setStep(STEPS.READY_TO_GENERATE);
-        fetchEstimate();
       }
     } else {
       setCurrentItemIndex(nextIndex);
       loadItemData(nextIndex);
     }
-  }, [currentItemIndex, collectionArtwork, aiItems, blueprintItemIds, fetchEstimate, loadItemData, collectionId, ensureCollection, loadImageModels, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex, blueprints, api, printifyImageIndexByColor]);
+  }, [currentItemIndex, collectionArtwork, aiItems, blueprintItemIds, loadItemData, collectionId, ensureCollection, loadImageModels, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex, blueprints, api, printifyImageIndexByColor]);
   advanceToNextItemRef.current = advanceToNextItem;
 
   const doGenerateAll = useCallback(async (colId) => {
-    if (!estimate || estimate.generations.length === 0) return;
-
-    const pendingGenerations = estimate.generations.filter(gen =>
-      gen.needsUpscale !== false &&
-      !collectionArtwork.some(a => String(a.itemId) === String(gen.itemId) && a.fullSize)
+    // Find artwork items that haven't been upscaled yet
+    const pendingItems = collectionArtwork.filter(a =>
+      !a.fullSize && aiItems.some(item => String(item.id) === String(a.itemId))
     );
 
-    if (pendingGenerations.length === 0) {
+    if (pendingItems.length === 0) {
       setUpscaleComplete(true);
       return;
     }
@@ -536,33 +573,33 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     setCurrentGeneratingIndex(0);
     setCurrentGeneratingItemId(null);
     setGenerationError(null);
-    setGeneratingMessage(`Generating artwork 1 of ${pendingGenerations.length}...`);
+    setGeneratingMessage(`Generating artwork 1 of ${pendingItems.length}...`);
     cancelRef.current = false;
 
     const results = [];
-    for (let i = 0; i < pendingGenerations.length; i++) {
+    for (let i = 0; i < pendingItems.length; i++) {
       if (cancelRef.current) break;
 
-      const gen = pendingGenerations[i];
-      const item = aiItems.find(a => a.id === gen.itemId);
+      const art = pendingItems[i];
+      const item = aiItems.find(a => a.id === art.itemId);
       setCurrentGeneratingIndex(i);
-      setCurrentGeneratingItemId(gen.itemId);
-      setGeneratingMessage(`Generating artwork ${i + 1} of ${pendingGenerations.length}: ${item?.title || 'Untitled'} (${gen.width}x${gen.height})...`);
+      setCurrentGeneratingItemId(art.itemId);
+      setGeneratingMessage(`Generating artwork ${i + 1} of ${pendingItems.length}: ${item?.title || 'Untitled'} (${art.width}x${art.height})...`);
 
       try {
         const res = await api.upscaleArtwork({
           projectId,
           collectionId: colId,
-          itemId: gen.itemId,
+          itemId: art.itemId,
         });
 
         if (res.data.success) {
           const artwork = res.data.data;
-          const url = artworkImageUrl(colId, gen.itemId, artwork.id, { thumb: true, cacheBust: Math.floor(Math.random() * 100000) });
-          results.push({ itemId: gen.itemId, artworkId: artwork.id, url, width: gen.width, height: gen.height });
+          const url = artworkImageUrl(colId, art.itemId, artwork.id, { thumb: true, cacheBust: Math.floor(Math.random() * 100000) });
+          results.push({ itemId: art.itemId, artworkId: artwork.id, url, width: art.width, height: art.height });
           setGeneratedArtworks([...results]);
           setCollectionArtwork(prev => prev.map(a =>
-            String(a.itemId) === String(gen.itemId)
+            String(a.itemId) === String(art.itemId)
               ? { ...a, fullSize: true }
               : a
           ));
@@ -577,7 +614,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         return;
       }
 
-      setGeneratingProgress(Math.round(((i + 1) / pendingGenerations.length) * 100));
+      setGeneratingProgress(Math.round(((i + 1) / pendingItems.length) * 100));
     }
 
     setIsGeneratingAll(false);
@@ -588,10 +625,10 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       if (onSaved) onSaved();
     }
     refreshTokens();
-  }, [estimate, aiItems, projectId, api, buildProjectAnswers, collectionArtwork, refreshTokens, onSaved]);
+  }, [aiItems, projectId, api, buildProjectAnswers, collectionArtwork, refreshTokens, onSaved]);
 
   const reset = useCallback(() => {
-    setStep(STEPS.PROJECT_QUESTIONS);
+    setStep(STEPS.SELECT_PRODUCTS);
     setMaxStepIndex(0);
     setProjectQuestions([]);
     setItems([]);
@@ -610,7 +647,6 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     setSavedAnswers({});
     setCollectionArtwork([]);
     setResumeStep(null);
-    setEstimate(null);
     setMessage(null);
     setGeneratingProgress(0);
     setGeneratedArtworks([]);
@@ -619,6 +655,9 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     setCurrentGeneratingIndex(-1);
     setCurrentGeneratingItemId(null);
     setGenerationError(null);
+    setPreviewGenerationIndex(0);
+    setPreviewGenerationTotal(0);
+    setPreviewGenerationThumbs([]);
     setArtworkPreview(null);
     setInitialLoading(true);
     cancelRef.current = false;
@@ -708,21 +747,10 @@ export function CollectionProvider({ children, projectId, project, collectionId:
           setCollectionArtwork(artworkList);
         }
 
-        let estimateData = null;
-        try {
-          const estRes = await api.estimateCollectionTokens({ projectId, collectionId: existingCollectionId });
-          if (estRes.data.success) {
-            estimateData = estRes.data.data;
-            setEstimate(estimateData);
-          }
-        } catch { /* non-critical */ }
-
-        const generations = estimateData?.generations || [];
-        const pendingUpscale = generations.filter(gen =>
-          gen.needsUpscale !== false &&
-          !artworkList.some(a => String(a.itemId) === String(gen.itemId) && a.fullSize)
-        ).length;
-        setUpscaleComplete(generations.length > 0 && pendingUpscale === 0);
+        // Compute upscaleComplete from collection artwork directly
+        const hasArtwork = artworkList.length > 0;
+        const allUpscaled = hasArtwork && artworkList.every(a => a.fullSize);
+        setUpscaleComplete(allUpscaled);
 
         if (ppRes.data.success) {
           setPrintifyProducts(ppRes.data.data || []);
@@ -753,8 +781,14 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         }
 
         const questions = qRes.data.success ? (qRes.data.data || []) : [];
+        const collectionProductsList = cpRes.data.success ? (cpRes.data.data || []) : [];
         const allProjectQuestionsAnswered = questions.length === 0 || questions.every(q => savedAnsMap[`project:${q.id}`]);
-        if (!allProjectQuestionsAnswered) {
+        const loadedBlueprints = bpRes.data.success ? (bpRes.data.data || []).filter(bp => bp.configured === true) : [];
+        const allBlueprintsHaveProducts = loadedBlueprints.length > 0 &&
+          loadedBlueprints.every(bp => collectionProductsList.some(cp => cp.projectBlueprintId === bp.id));
+        if (!allBlueprintsHaveProducts) {
+          setResumeStep(STEPS.SELECT_PRODUCTS);
+        } else if (!allProjectQuestionsAnswered) {
           setResumeStep(STEPS.PROJECT_QUESTIONS);
         } else {
           setResumeStep('artwork_resume');
@@ -915,7 +949,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     currentItemIndex, setCurrentItemIndex, currentItem,
     currentItemQuestions, currentArtwork, setCurrentArtwork,
     collectionId, setCollectionId, collectionArtwork, setCollectionArtwork,
-    savedAnswers, estimate, setEstimate,
+    savedAnswers,
     // form state
     answers, setAnswers, itemAnswers, setItemAnswers,
     previewImageData, setPreviewImageData,
@@ -923,6 +957,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     showChanges, setShowChanges,
     requestedChanges, setRequestedChanges,
     // generation state
+    previewGenerationIndex, previewGenerationTotal, previewGenerationThumbs,
     isGeneratingAll, setIsGeneratingAll,
     generatingProgress, setGeneratingProgress,
     generatedArtworks, setGeneratedArtworks,
@@ -937,7 +972,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     cancelRef,
     // helpers
     ensureCollection, buildProjectAnswers, buildAllAnswers, saveAnswers,
-    fetchEstimate, doGeneratePreview, loadItemData, advanceToNextItem,
+    refreshCollectionArtwork, doGeneratePreview, loadItemData, advanceToNextItem,
     doGenerateAll, reviewStep,
     // product image
     productImageVariants, productImagePrompt, setProductImagePrompt,

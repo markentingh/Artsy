@@ -18,7 +18,6 @@ export default function CollectionSetupList() {
     printifyProducts, mockups,
     collectionProducts,
     reviewStep,
-    instagramPosted,
   } = useCollection();
 
   const aiArtworks = collectionArtwork.filter(a => a.imageModel !== 'custom');
@@ -40,23 +39,23 @@ export default function CollectionSetupList() {
     variantColor: pbi.variantColor,
   }));
   const totalProductImages = allProductCombos.length;
-  const acceptedProductImages = allProductImages.filter(img => img.accepted).length;
+  const activeBpIds = new Set(allProductCombos.map(c => c.projectBlueprintId));
+  const acceptedProductImages = allProductImages.filter(img => img.accepted && activeBpIds.has(img.projectBlueprintId)).length;
 
   const platforms = [];
   if (project?.publishToPrintify) platforms.push('Printify');
 
   const hasPQ = projectQuestions.length > 0;
   const checkIdx = {
-    [STEPS.PROJECT_QUESTIONS]: 0,
-    [STEPS.ARTWORK_QUESTIONS]: hasPQ ? 1 : 0,
-    [STEPS.ARTWORK_PREVIEW]: hasPQ ? 1 : 0,
-    [STEPS.READY_TO_GENERATE]: hasPQ ? 2 : 1,
-    [STEPS.CREATE_PRODUCTS]: hasPQ ? 3 : 2,
-    [STEPS.PRODUCT_IMAGE_PROMPT]: hasPQ ? 4 : 3,
-    [STEPS.PRODUCT_IMAGE_PREVIEW]: hasPQ ? 4 : 3,
-    [STEPS.PUBLISH_PRODUCTS]: hasPQ ? 5 : 4,
-    [STEPS.SOCIAL_MEDIA]: hasPQ ? 6 : 5,
-    [STEPS.SUMMARY]: hasPQ ? 7 : 6,
+    [STEPS.SELECT_PRODUCTS]: 0,
+    [STEPS.PROJECT_QUESTIONS]: 1,
+    [STEPS.ARTWORK_QUESTIONS]: hasPQ ? 2 : 1,
+    [STEPS.ARTWORK_PREVIEW]: hasPQ ? 2 : 1,
+    [STEPS.READY_TO_GENERATE]: hasPQ ? 3 : 2,
+    [STEPS.CREATE_PRODUCTS]: hasPQ ? 4 : 3,
+    [STEPS.PRODUCT_IMAGE_PROMPT]: hasPQ ? 5 : 4,
+    [STEPS.PRODUCT_IMAGE_PREVIEW]: hasPQ ? 5 : 4,
+    [STEPS.PUBLISH_PRODUCTS]: hasPQ ? 6 : 5,
   };
 
   const currentStepIdx = checkIdx[step] ?? 0;
@@ -67,9 +66,28 @@ export default function CollectionSetupList() {
     return currentIdx === checkIdx[itemStep];
   };
 
+  const needsRegeneration = collectionArtwork.some(a => a.needsRegeneration);
+
   const isComplete = (itemStep) => {
+    // If artworks need regeneration, nothing after artwork generation is complete
+    if (needsRegeneration && checkIdx[itemStep] > checkIdx[STEPS.ARTWORK_PREVIEW]) {
+      return false;
+    }
     if (itemStep === STEPS.CREATE_PRODUCTS) {
-      return mockups.length > 0 && printifyProducts.some(pp => pp.mockupsDownloaded);
+      if (needsRegeneration) return false;
+      // Check that all active products have been created
+      const activeBpIds = new Set((collectionProducts || []).filter(cp => cp.active).map(cp => cp.projectBlueprintId));
+      if (activeBpIds.size === 0) return mockups.length > 0 && printifyProducts.some(pp => pp.mockupsDownloaded);
+      const createdBpIds = new Set(
+        printifyProducts.filter(pp => pp.printifyProductId && pp.projectBlueprintId && pp.mockupsDownloaded)
+          .map(pp => pp.projectBlueprintId)
+      );
+      return activeBpIds.size > 0 && [...activeBpIds].every(id => createdBpIds.has(id));
+    }
+    if (itemStep === STEPS.PUBLISH_PRODUCTS) {
+      // Complete if all product images are generated for all selected products
+      if (totalProductImages > 0) return acceptedProductImages === totalProductImages;
+      return acceptedProductImages > 0;
     }
     if (maxStepIdx <= checkIdx[itemStep]) return false;
     return true;
@@ -212,9 +230,18 @@ export default function CollectionSetupList() {
     </List>
   ) : null;
 
-  const productImageComplete = acceptedProductImages > 0 && (totalProductImages === 0 ? isComplete(STEPS.PRODUCT_IMAGE_PREVIEW) : acceptedProductImages === totalProductImages);
+  const productImageComplete = !needsRegeneration && acceptedProductImages > 0 && (totalProductImages === 0 ? isComplete(STEPS.PRODUCT_IMAGE_PREVIEW) : acceptedProductImages === totalProductImages);
 
   const accordionItems = [
+    {
+      title: renderTitle('Select Products', isComplete(STEPS.SELECT_PRODUCTS), null, isCurrent(STEPS.SELECT_PRODUCTS)),
+      content: null,
+      action: isComplete(STEPS.SELECT_PRODUCTS) && !isCurrent(STEPS.SELECT_PRODUCTS) ? (
+        <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.SELECT_PRODUCTS)}>
+          Review
+        </ButtonOutline>
+      ) : null,
+    },
     ...(projectQuestions.length > 0 ? [{
       title: renderTitle('Answer Project Questions', isComplete(STEPS.PROJECT_QUESTIONS), null, isCurrent(STEPS.PROJECT_QUESTIONS)),
       content: null,
@@ -225,11 +252,11 @@ export default function CollectionSetupList() {
       ) : null,
     }] : []),
     {
-      title: renderTitle('Generate Artworks', acceptedArtwork > 0 && acceptedArtwork === totalArtwork, totalArtwork > 0 ? `${acceptedArtwork}/${totalArtwork}` : null, isCurrent(STEPS.ARTWORK_QUESTIONS)),
+      title: renderTitle('Generate Artworks', !needsRegeneration && acceptedArtwork > 0 && acceptedArtwork === totalArtwork, totalArtwork > 0 ? `${acceptedArtwork}/${totalArtwork}` : null, isCurrent(STEPS.ARTWORK_QUESTIONS) || isCurrent(STEPS.ARTWORK_PREVIEW)),
       content: artworkContent,
     },
     {
-      title: renderTitle('Upscale Artworks to 4K', upscaleDone, null, isCurrent(STEPS.READY_TO_GENERATE)),
+      title: renderTitle('Upscale Artworks to 4K', !needsRegeneration && upscaleDone, null, isCurrent(STEPS.READY_TO_GENERATE)),
       content: null,
       action: isComplete(STEPS.ARTWORK_PREVIEW) && !isCurrent(STEPS.READY_TO_GENERATE) ? (
         <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.READY_TO_GENERATE)}>
@@ -256,24 +283,6 @@ export default function CollectionSetupList() {
       content: null,
       action: isComplete(STEPS.CREATE_PRODUCTS) && !isCurrent(STEPS.PUBLISH_PRODUCTS) ? (
         <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.PUBLISH_PRODUCTS)}>
-          Review
-        </ButtonOutline>
-      ) : null,
-    },
-    {
-      title: renderTitle('Post to Social Media', instagramPosted, null, isCurrent(STEPS.SOCIAL_MEDIA)),
-      content: null,
-      action: printifyProducts.length > 0 && printifyProducts.every(pp => pp.published) && !isCurrent(STEPS.SOCIAL_MEDIA) ? (
-        <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.SOCIAL_MEDIA)}>
-          Review
-        </ButtonOutline>
-      ) : null,
-    },
-    {
-      title: renderTitle('Summary', instagramPosted, null, isCurrent(STEPS.SUMMARY)),
-      content: null,
-      action: instagramPosted && !isCurrent(STEPS.SUMMARY) ? (
-        <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.SUMMARY)}>
           Review
         </ButtonOutline>
       ) : null,

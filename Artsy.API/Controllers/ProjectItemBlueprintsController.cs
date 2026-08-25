@@ -60,6 +60,28 @@ namespace Artsy.API.Controllers
             catch { return false; }
         }
 
+        private static decimal? GetMinPriceFromPricingJson(string pricingJson)
+        {
+            if (string.IsNullOrWhiteSpace(pricingJson)) return null;
+            try
+            {
+                var pricing = JsonSerializer.Deserialize<List<JsonElement>>(pricingJson);
+                if (pricing == null || pricing.Count == 0) return null;
+                decimal? min = null;
+                foreach (var p in pricing)
+                {
+                    if (p.TryGetProperty("price", out var priceEl))
+                    {
+                        var price = priceEl.GetDecimal();
+                        if (price > 0 && (min == null || price < min))
+                            min = price;
+                    }
+                }
+                return min;
+            }
+            catch { return null; }
+        }
+
         [HttpGet("get-blueprints")]
         public async Task<IActionResult> GetBlueprints([FromQuery] Guid projectId)
         {
@@ -94,6 +116,7 @@ namespace Artsy.API.Controllers
                 }
                 return Json(new ApiResponse { success = true, data = blueprints.Select(b => new {
                     b.Id, b.BlueprintId, b.Name, b.BlueprintJson, b.PlacementJson, b.Prompt, b.Description, b.SafetyInfo, b.PricingJson, b.PrintProviderId, b.Configured, b.ImageCount,
+                    minPrice = GetMinPriceFromPricingJson(b.PricingJson),
                     printifyImages = printifyImagesByBlueprint.TryGetValue(b.BlueprintId, out var pImgs) ? pImgs.Select(img => new { variantColors = printifyImageVariantsByImageId.TryGetValue(img.Id, out var colors) ? colors : new List<string>(), img.ImageIndex }).Cast<object>() : Enumerable.Empty<object>()
                 }) });
             }
@@ -130,7 +153,8 @@ namespace Artsy.API.Controllers
                     Name = b.Name,
                     BlueprintJson = b.BlueprintJson,
                     Configured = IsBlueprintConfigured(b.Name, b.Description, b.BlueprintJson, b.PlacementJson, b.PricingJson, imagesByBlueprint.TryGetValue(b.Id, out var imgs) ? imgs : null),
-                    ImageCount = b.ImageCount
+                    ImageCount = b.ImageCount,
+                    MinPrice = GetMinPriceFromPricingJson(b.PricingJson)
                 });
                 return Json(new ApiResponse { success = true, data = result });
             }

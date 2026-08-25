@@ -13,17 +13,20 @@ namespace Artsy.API.Controllers
         readonly IProjectCollectionProductImageRepository _productImageRepository;
         readonly IProjectCollectionArtworkRepository _artworkRepository;
         readonly IProjectBlueprintsRepository _projectBlueprintsRepository;
+        readonly IProjectCollectionArtworkPlacementRepository _artworkPlacementRepository;
         readonly IImageService _imageService;
 
         public PrintifyImagesController(
             IProjectCollectionProductImageRepository productImageRepository,
             IProjectCollectionArtworkRepository artworkRepository,
             IProjectBlueprintsRepository projectBlueprintsRepository,
+            IProjectCollectionArtworkPlacementRepository artworkPlacementRepository,
             IImageService imageService)
         {
             _productImageRepository = productImageRepository;
             _artworkRepository = artworkRepository;
             _projectBlueprintsRepository = projectBlueprintsRepository;
+            _artworkPlacementRepository = artworkPlacementRepository;
             _imageService = imageService;
         }
 
@@ -76,6 +79,7 @@ namespace Artsy.API.Controllers
                         if (!art.Accepted || !art.Active) continue;
                         if (!usedItemIds.Contains(art.ItemId)) continue;
 
+                        // Include the base artwork image (combined seamless image for groups, or main image)
                         byte[]? artBytes;
                         string fileName;
                         if (art.Opacity)
@@ -101,10 +105,51 @@ namespace Artsy.API.Controllers
                             fileName = $"artworks/{art.Id}.jpg";
                         }
 
-                        if (artBytes == null || artBytes.Length == 0) continue;
-                        var entry = archive.CreateEntry(fileName);
-                        using var entryStream = entry.Open();
-                        await entryStream.WriteAsync(artBytes, 0, artBytes.Length);
+                        if (artBytes != null && artBytes.Length > 0)
+                        {
+                            var entry = archive.CreateEntry(fileName);
+                            using var entryStream = entry.Open();
+                            await entryStream.WriteAsync(artBytes, 0, artBytes.Length);
+                        }
+
+                        // Include individual placement images (both group segments and non-group placements)
+                        if (art.TotalPlacements > 0)
+                        {
+                            var placements = await _artworkPlacementRepository.GetByArtworkIdAsync(art.Id);
+                            foreach (var placement in placements)
+                            {
+                                byte[]? placementBytes;
+                                string placementFileName;
+
+                                if (art.Opacity)
+                                {
+                                    placementBytes = await _imageService.GetProjectCollectionArtworkPlacementFullSizePngAsync(
+                                        art.ProjectId, art.CollectionId, art.ItemId, art.Id, placement.Index);
+                                    if (placementBytes == null || placementBytes.Length == 0)
+                                    {
+                                        placementBytes = await _imageService.GetProjectCollectionArtworkPlacementPngAsync(
+                                            art.ProjectId, art.CollectionId, art.ItemId, art.Id, placement.Index);
+                                    }
+                                    placementFileName = $"artworks/{art.Id}_{placement.Index}.png";
+                                }
+                                else
+                                {
+                                    placementBytes = await _imageService.GetProjectCollectionArtworkPlacementFullSizeAsync(
+                                        art.ProjectId, art.CollectionId, art.ItemId, art.Id, placement.Index);
+                                    if (placementBytes == null || placementBytes.Length == 0)
+                                    {
+                                        placementBytes = await _imageService.GetProjectCollectionArtworkPlacementImageAsync(
+                                            art.ProjectId, art.CollectionId, art.ItemId, art.Id, placement.Index);
+                                    }
+                                    placementFileName = $"artworks/{art.Id}_{placement.Index}.jpg";
+                                }
+
+                                if (placementBytes == null || placementBytes.Length == 0) continue;
+                                var pEntry = archive.CreateEntry(placementFileName);
+                                using var pEntryStream = pEntry.Open();
+                                await pEntryStream.WriteAsync(placementBytes, 0, placementBytes.Length);
+                            }
+                        }
                     }
                 }
 

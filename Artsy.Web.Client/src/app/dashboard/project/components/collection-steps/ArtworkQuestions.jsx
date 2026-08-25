@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useMemo, useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { useSession } from '@/context/session';
 import { useCollection } from '@/context/collection';
 import { CustomImages } from '@/api/user/customImages';
@@ -8,6 +8,7 @@ import Select from '@/components/forms/select';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 import Spinner from '@/components/ui/spinner';
+const TokenCostBreakdownModal = lazy(() => import('../TokenCostBreakdownModal'));
 
 export default function ArtworkQuestions() {
   const session = useSession();
@@ -26,7 +27,9 @@ export default function ArtworkQuestions() {
   const [referencePreviews, setReferencePreviews] = useState([]);
   const [customImageRefs, setCustomImageRefs] = useState([]);
   const [calculatedTokens, setCalculatedTokens] = useState(null);
+  const [estimateGenerations, setEstimateGenerations] = useState(null);
   const [estimatingTokens, setEstimatingTokens] = useState(false);
+  const [showCostBreakdown, setShowCostBreakdown] = useState(false);
   const estimateTimerRef = useRef(null);
 
   const latestRef = useRef({});
@@ -126,11 +129,18 @@ export default function ArtworkQuestions() {
     setEstimatingTokens(true);
     estimateTimerRef.current = setTimeout(async () => {
       try {
-        const res = await api.estimateItemTokens(currentItem.id, selectedImageModel.id);
+        const res = await api.estimateItemTokens(currentItem.id, selectedImageModel.id, collectionId);
         if (res.data.success) {
-          setCalculatedTokens(res.data.data);
+          const data = res.data.data;
+          const total = typeof data === 'number' ? data : data.totalTokens;
+          setCalculatedTokens(total);
+          setEstimateGenerations(data?.generations || null);
+          if (data?.generations) {
+            console.log(`[EstimateItemTokens] Item ${currentItem.id}:`, JSON.stringify(data, null, 2));
+          }
         } else {
           setCalculatedTokens(null);
+          setEstimateGenerations(null);
         }
       } catch {
         setCalculatedTokens(null);
@@ -139,7 +149,7 @@ export default function ArtworkQuestions() {
       }
     }, 500);
     return () => { if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current); };
-  }, [currentItem, selectedImageModel, currentArtwork, api]);
+  }, [currentItem, selectedImageModel, currentArtwork, api, collectionId]);
 
   const modelOptions = useMemo(() =>
     (imageModels || []).map((m) => ({ value: m.id, label: m.name })),
@@ -164,6 +174,11 @@ export default function ArtworkQuestions() {
       <h3 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
         Artwork {currentItemIndex + 1} of {aiItems.length}: {currentItem?.title || 'Untitled'}
       </h3>
+      {currentArtwork?.needsRegeneration && (
+        <p className="text-center text-sm text-yellow-600 dark:text-yellow-400 mb-4">
+          Product selections have changed. Please regenerate this artwork to include placements for all selected products.
+        </p>
+      )}
       {thumbImages.length > 0 && (
         <div className="w-full max-w-[300px] mx-auto rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 mb-4">
           <Carousel
@@ -192,31 +207,38 @@ export default function ArtworkQuestions() {
       )}
       <div className="flex flex-wrap items-end gap-4 justify-between mb-4">
         <div className="min-w-[200px]">
-          <div className="flex items-end gap-3">
-            <Select
-              label="AI Image Model"
-              name="imageModel"
-              value={selectedImageModel?.id || ''}
-              onChange={handleModelChange}
-              options={modelOptions}
-              fitContent
-            />
-            {estimatingTokens ? (
-              <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400" style={{ marginBottom: '2em' }}>
-                <Spinner className="text-sm" />
-                <span>Estimating...</span>
-              </div>
-            ) : calculatedTokens !== null ? (
-              <div className="text-sm text-gray-500 dark:text-gray-400" style={{ marginBottom: '2em' }}>
+          <Select
+            label="AI Image Model"
+            name="imageModel"
+            value={selectedImageModel?.id || ''}
+            onChange={handleModelChange}
+            options={modelOptions}
+            fitContent
+          />
+        </div>
+        <div className="flex items-center gap-3" style={{ marginBottom: '2em' }}>
+          {estimatingTokens ? (
+            <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+              <Spinner className="text-sm" />
+              <span>Estimating...</span>
+            </div>
+          ) : calculatedTokens !== null ? (
+            <>
+              {estimateGenerations && estimateGenerations.length > 0 && (
+                <ButtonOutline color="gray" size="small" onClick={() => setShowCostBreakdown(true)}>
+                  Cost Breakdown
+                </ButtonOutline>
+              )}
+              <div className="text-sm text-gray-500 dark:text-gray-400">
                 <span className="font-medium">Token Cost: <span className="text-white font-bold">{calculatedTokens.toLocaleString()}</span></span>
               </div>
-            ) : null}
-          </div>
+            </>
+          ) : null}
         </div>
       </div>
       <div className="max-h-[40vh] overflow-y-auto">
         {currentItemQuestions.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">No questions for this artwork.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">No questions for this artwork.</p>
         ) : (
           <div className="space-y-4">
             {currentItemQuestions.map((question) => (
@@ -239,6 +261,15 @@ export default function ArtworkQuestions() {
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
         <ButtonOutline onClick={handleNext}>Generate Artwork</ButtonOutline>
       </div>
+      {showCostBreakdown && (
+        <Suspense fallback={null}>
+          <TokenCostBreakdownModal
+            show={showCostBreakdown}
+            onClose={() => setShowCostBreakdown(false)}
+            generations={estimateGenerations}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

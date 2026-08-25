@@ -10,7 +10,7 @@ import Spinner from '@/components/ui/spinner';
 
 export default function ReadyToGenerate() {
   const {
-    collectionId, setCollectionId, collectionArtwork, setCollectionArtwork, blueprints, estimate,
+    collectionId, setCollectionId, collectionArtwork, setCollectionArtwork, blueprints,
     isGeneratingAll, generatingProgress, generatingMessage,
     generationError, setGenerationError,
     generatedArtworks, currentGeneratingIndex, currentGeneratingItemId,
@@ -24,15 +24,10 @@ export default function ReadyToGenerate() {
   const { refreshTokens } = useDashboard();
 
   const acceptedArtworks = useMemo(() => {
-    const noUpscaleItemIds = new Set(
-      (estimate?.generations || [])
-        .filter(gen => gen.needsUpscale === false)
-        .map(gen => String(gen.itemId))
-    );
     return collectionArtwork.filter(a =>
-      a.active && a.imageModel !== 'custom' && !noUpscaleItemIds.has(String(a.itemId))
+      a.active && a.imageModel !== 'custom'
     );
-  }, [collectionArtwork, estimate]);
+  }, [collectionArtwork]);
   const [thumbRetried, setThumbRetried] = useState({});
   const [thumbFailed, setThumbFailed] = useState({});
   const retryRef = useRef({});
@@ -101,12 +96,10 @@ export default function ReadyToGenerate() {
   }, [artworkImages, thumbRetried, thumbFailed]);
 
   const pendingCount = useMemo(() => {
-    if (!estimate?.generations) return 0;
-    return estimate.generations.filter(gen =>
-      gen.needsUpscale !== false &&
-      !collectionArtwork.some(a => String(a.itemId) === String(gen.itemId) && a.fullSize)
+    return collectionArtwork.filter(a =>
+      a.active && a.imageModel !== 'custom' && !a.fullSize
     ).length;
-  }, [estimate, collectionArtwork]);
+  }, [collectionArtwork]);
 
   const pendingTokens = pendingCount * 2;
 
@@ -302,7 +295,7 @@ export default function ReadyToGenerate() {
         </>
       ) : (
         <>
-          {estimate?.needsRegeneration && (
+          {collectionArtwork.some(a => a.needsRegeneration) && (
             <p className="text-center text-sm text-yellow-600 dark:text-yellow-400 mb-4">
               Blueprint placements have changed. Some artworks need to be regenerated.
             </p>

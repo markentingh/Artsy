@@ -24,7 +24,7 @@ export default function Modal({ title, children, onClose, top = false, className
     };
   }, []);
 
-  const handleBackdropClick = (e) => {
+  const handleBackdropMouseDown = (e) => {
     if (e.target === e.currentTarget) {
       onClose();
     }
@@ -37,7 +37,7 @@ export default function Modal({ title, children, onClose, top = false, className
           ? 'fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 pt-[6em] pb-4'
           : 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4'
       }
-      onClick={handleBackdropClick}
+      onMouseDown={handleBackdropMouseDown}
     >
       <div
         ref={innerRef}

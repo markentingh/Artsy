@@ -145,9 +145,9 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
             <div
               key={bp.id}
               onClick={() => handleEditBlueprint(bp)}
-              className="w-[250px] rounded-lg bg-white dark:bg-gray-800 shadow hover:shadow-md cursor-pointer overflow-hidden transition"
+              className="w-[300px] bg-white dark:bg-gray-800 rounded-lg shadow p-4 hover:shadow-md transition cursor-pointer"
             >
-              <div className="aspect-square w-full relative">
+              <div className="w-full mb-3 rounded-lg overflow-hidden relative">
                 <Carousel
                   images={(() => {
                     const cfg = (() => {
@@ -164,16 +164,19 @@ export default function ProductsSection({ projectId, onProductsChanged }) {
                   singleImage
                   infiniteScroll
                   placeholder="No Image"
-                  imageClassName="!max-h-none w-full h-full object-cover"
+                  imageClassName="!max-w-[260px] object-contain"
+                  maxHeight="260px"
                 />
-                <div className="absolute bottom-2 right-2">
+                <div className="absolute bottom-2 right-4">
                   <Checked checked={bp.configured} />
                 </div>
               </div>
-              <div className="p-3">
+              <div>
                 <p className="text-sm font-medium truncate" title={bp.name}>{bp.name}</p>
                 <div className="flex items-center justify-between mt-1">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">Blueprint #{bp.blueprintId}</span>
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {bp.minPrice != null ? `$${Number(bp.minPrice).toFixed(2)}` : 'No price set'}
+                  </span>
                   <ButtonIcon name="delete" color="red" onClick={(e) => handleDeleteBlueprint(bp, e)} title="Remove product" />
                 </div>
               </div>

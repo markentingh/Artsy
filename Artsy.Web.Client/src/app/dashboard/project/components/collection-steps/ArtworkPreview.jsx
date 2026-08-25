@@ -18,10 +18,14 @@ export default function ArtworkPreview() {
     doGeneratePreview, advanceToNextItem,
     setCollectionArtwork,
     api, onClose, onSaved, setArtworkPreview, setStep, STEPS, goBack,
+    previewGenerationIndex, previewGenerationTotal, generatingMessage,
+    previewGenerationThumbs,
   } = useCollection();
 
   const [changeMode, setChangeMode] = useState('regenerate');
   const [isFixing, setIsFixing] = useState(false);
+
+  const stripThumb = (url) => (url || '').replace('thumb=true&', '').replace('&thumb=true', '').replace('?thumb=true', '?').replace(/\?$/, '');
 
   const rnd = () => Math.floor(Math.random() * 100000);
 
@@ -182,38 +186,51 @@ export default function ArtworkPreview() {
         Artwork {currentItemIndex + 1} of {aiItems.length}: {currentItem?.title || 'Untitled'}
       </h3>
       <div className="flex flex-col items-center gap-4">
-        <div className="w-[350px] max-w-full min-h-[100px] flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden">
-          {isGenerating ? (
+        <div className="min-h-[100px] flex items-center justify-center">
+          {isGenerating && previewGenerationThumbs.length === 0 ? (
             <Spinner className="text-3xl my-16" />
-          ) : (hasOpacity || hasVariants) && carouselImages ? (
-            <div
-              className="w-full"
-              style={hasOpacity ? {
-                backgroundImage: 'url(/checkerboard.png)',
-                backgroundSize: '20px 20px',
-                backgroundRepeat: 'repeat',
-              } : undefined}
-            >
-              <Carousel
-                images={carouselImages}
-                alt="Artwork preview"
-                singleImage
-                infiniteScroll
-                imageClassName="!max-w-[350px] !max-h-[350px] object-contain"
-                onImageClick={(_src, index) => setArtworkPreview({ images: fullSizeImages || carouselImages, src: fullSizeImages?.[index] || _src, _idx: index })}
-              />
+          ) : previewGenerationThumbs.length > 0 ? (
+            <div className="flex flex-wrap justify-center gap-2 max-w-[400px]">
+              {previewGenerationThumbs.map((thumb) => (
+                <img
+                  key={thumb.index}
+                  src={thumb.url}
+                  alt={`Generation ${thumb.index + 1}`}
+                  className="w-[120px] h-[120px] object-contain rounded border border-gray-300 dark:border-gray-600 cursor-pointer bg-gray-100 dark:bg-gray-700"
+                  onClick={() => setArtworkPreview({ images: previewGenerationThumbs.map(t => stripThumb(t.url)), src: stripThumb(thumb.url), _idx: thumb.index })}
+                />
+              ))}
+              {isGenerating && (
+                <div className="w-[120px] h-[120px] flex items-center justify-center rounded border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700">
+                  <Spinner className="text-2xl" />
+                </div>
+              )}
             </div>
           ) : previewImageData ? (
             <img
               src={previewImageData}
               alt="Preview"
               className="!max-w-[350px] !max-h-[350px] object-contain cursor-pointer"
-              onClick={() => setArtworkPreview({ images: fullSizeImages || [previewImageData], src: fullSizeImages?.[0] || previewImageData })}
+              onClick={() => setArtworkPreview({ images: (fullSizeImages || [previewImageData]).map(stripThumb), src: stripThumb(fullSizeImages?.[0] || previewImageData) })}
             />
           ) : (
             <span className="text-sm text-gray-500 dark:text-gray-400 my-16">No preview generated yet.</span>
           )}
         </div>
+
+        {isGenerating && previewGenerationTotal > 0 && (
+          <div className="w-full max-w-[350px]">
+            <p className="text-center text-sm text-gray-500 dark:text-gray-400 mb-2">
+              {generatingMessage || `Generating artwork ${previewGenerationIndex + 1} of ${previewGenerationTotal}`}
+            </p>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-blue-500 h-full rounded-full transition-all duration-300"
+                style={{ width: `${Math.round(((previewGenerationIndex + 1) / previewGenerationTotal) * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {showChanges && !isGenerating && (
           <div className="w-full max-w-[512px]">
