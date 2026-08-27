@@ -316,6 +316,164 @@ namespace Artsy.API.Controllers.Admin
         }
         #endregion
 
+        #region AppUserSubscriptionDetails
+        [HttpGet("user-subscriptions/details")]
+        public async Task<IActionResult> GetUserSubscriptionDetails([FromQuery] Guid appUserId)
+        {
+            try
+            {
+                var user = await _appUserRepository.FindByGuidAsync(appUserId, true);
+                if (user == null)
+                    return Json(new ApiResponse { success = false, message = "User not found." });
+
+                var subscription = (await _appUserSubscriptionRepository.GetAllAsync())
+                    .Where(s => s.AppUserId == appUserId && !s.Cancelled)
+                    .OrderByDescending(s => s.DateCreated)
+                    .FirstOrDefault();
+
+                if (subscription == null)
+                    return Json(new ApiResponse { success = false, message = "No active subscription found." });
+
+                var subPlan = await _subscriptionRepository.GetByIdAsync(subscription.SubscriptionId);
+                var product = subPlan != null
+                    ? (await _productRepository.GetAllAsync()).FirstOrDefault(p => p.Id == subPlan.MonthlyProductId || p.Id == subPlan.YearlyProductId)
+                    : null;
+
+                // Calculate unused tokens for the current billing month
+                var billingMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+                var monthTokens = await _appUserAITokenRepository.GetByAppUserAndMonthAsync(appUserId, billingMonth);
+                var monthTokensList = monthTokens.ToList();
+                var totalTokens = monthTokensList.Sum(t => t.Tokens);
+                var totalUsed = monthTokensList.Sum(t => t.TokensUsed);
+                var unusedTokens = totalTokens - totalUsed;
+
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = new
+                    {
+                        subscriptionId = subscription.Id,
+                        appUserId = subscription.AppUserId,
+                        email = user.Email,
+                        subscriptionTitle = subPlan?.Title ?? "",
+                        startDate = subscription.StartDate,
+                        endDate = subscription.EndDate,
+                        cancelled = subscription.Cancelled,
+                        dateCreated = subscription.DateCreated,
+                        tokens = product?.Tokens ?? 0,
+                        unusedTokens,
+                        price = product?.Price ?? 0,
+                        productTitle = product?.Title ?? ""
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("user-subscriptions/ai-tokens")]
+        public async Task<IActionResult> GetUserAITokens([FromQuery] Guid appUserId, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        {
+            try
+            {
+                if (appUserId == Guid.Empty)
+                    return Json(new ApiResponse { success = false, message = "AppUserId is required." });
+
+                if (page < 1) page = 1;
+                if (pageSize < 1) pageSize = 10;
+                if (pageSize > 100) pageSize = 100;
+
+                var (items, total) = await _appUserAITokenRepository.GetPagedByAppUserIdAsync(appUserId, page, pageSize);
+
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = new
+                    {
+                        items = items.Select(t => new
+                        {
+                            t.Id,
+                            t.AppUserId,
+                            t.InvoiceId,
+                            billingMonth = t.BillingMonth,
+                            tokens = t.Tokens,
+                            tokensUsed = t.TokensUsed,
+                            dateCreated = t.DateCreated
+                        }),
+                        total,
+                        page,
+                        pageSize,
+                        totalPages = (int)Math.Ceiling((double)total / pageSize)
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("user-subscriptions/add-tokens")]
+        public async Task<IActionResult> AddUserTokens([FromBody] AddUserTokensRequest request)
+        {
+            try
+            {
+                if (request.AppUserId == Guid.Empty)
+                    return Json(new ApiResponse { success = false, message = "AppUserId is required." });
+
+                var user = await _appUserRepository.FindByGuidAsync(request.AppUserId, true);
+                if (user == null)
+                    return Json(new ApiResponse { success = false, message = "User not found." });
+
+                var product = await _productRepository.GetByIdAsync(request.ProductId);
+                if (product == null)
+                    return Json(new ApiResponse { success = false, message = "Product not found." });
+
+                // Find the user's active subscription to associate the invoice with
+                var subscription = (await _appUserSubscriptionRepository.GetAllAsync())
+                    .Where(s => s.AppUserId == request.AppUserId && !s.Cancelled)
+                    .OrderByDescending(s => s.DateCreated)
+                    .FirstOrDefault();
+
+                var invoice = await _invoiceRepository.CreateAsync(new Invoice
+                {
+                    AppUserId = request.AppUserId,
+                    SubscriptionId = subscription?.SubscriptionId ?? 0,
+                    ProductId = product.Id,
+                    Price = product.Price
+                });
+
+                var billingMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+                var tokenRecord = await _appUserAITokenRepository.CreateAsync(new AppUserAIToken
+                {
+                    AppUserId = request.AppUserId,
+                    InvoiceId = invoice.Id,
+                    BillingMonth = billingMonth,
+                    Tokens = product.Tokens,
+                    TokensUsed = 0
+                });
+
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = new
+                    {
+                        id = tokenRecord.Id,
+                        invoiceId = invoice.Id,
+                        tokens = product.Tokens,
+                        productTitle = product.Title
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+        #endregion
+
         #region Invoices
         [HttpGet("invoices")]
         public async Task<IActionResult> GetInvoices()

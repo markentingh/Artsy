@@ -24,6 +24,7 @@ namespace Artsy.API.Services
         readonly IProjectBlueprintPlacementGroupRepository _placementGroupRepository;
         readonly IProjectBlueprintPlacementGroupImageRepository _placementGroupImageRepository;
         readonly IProjectCollectionProductRepository _projectCollectionProductRepository;
+        readonly IProjectCollectionArtworkReferenceRepository _projectCollectionArtworkReferenceRepository;
 
         public ArtworkGenerationPlanService(
             IProjectItemRepository projectItemRepository,
@@ -38,7 +39,8 @@ namespace Artsy.API.Services
             IOpacityService opacityService,
             IProjectBlueprintPlacementGroupRepository placementGroupRepository,
             IProjectBlueprintPlacementGroupImageRepository placementGroupImageRepository,
-            IProjectCollectionProductRepository projectCollectionProductRepository)
+            IProjectCollectionProductRepository projectCollectionProductRepository,
+            IProjectCollectionArtworkReferenceRepository projectCollectionArtworkReferenceRepository)
         {
             _projectItemRepository = projectItemRepository;
             _projectItemArtworkRepository = projectItemArtworkRepository;
@@ -53,6 +55,7 @@ namespace Artsy.API.Services
             _placementGroupRepository = placementGroupRepository;
             _placementGroupImageRepository = placementGroupImageRepository;
             _projectCollectionProductRepository = projectCollectionProductRepository;
+            _projectCollectionArtworkReferenceRepository = projectCollectionArtworkReferenceRepository;
         }
 
         public async Task<ArtworkGenerationPlan> BuildPlanAsync(
@@ -369,6 +372,35 @@ namespace Artsy.API.Services
                             ImageBytes = imageBytes,
                             Type = reference.ArtworkId.HasValue ? "artwork" : "custom",
                             Id = (reference.ArtworkId ?? reference.CustomImageId).ToString(),
+                            Width = dims?.width ?? 0,
+                            Height = dims?.height ?? 0
+                        });
+                    }
+                }
+            }
+
+            // Load collection artwork references (custom images only, resized to 1024 max)
+            if (collectionId != Guid.Empty)
+            {
+                var collectionRefs = await _projectCollectionArtworkReferenceRepository.GetByCollectionAndItemIdAsync(collectionId, itemId);
+                if (collectionRefs != null && collectionRefs.Any())
+                {
+                    foreach (var colRef in collectionRefs)
+                    {
+                        var customImg = await _customImageRepository.GetByIdAsync(colRef.CustomImageId);
+                        if (customImg == null) continue;
+
+                        var rawBytes = await _imageService.GetCustomImageAsync(customImg.AppUserId, customImg.Id, customImg.Extension);
+                        if (rawBytes == null || rawBytes.Length == 0) continue;
+
+                        // Resize to 1024 max width/height
+                        var resizedBytes = await _imageService.ResizeImageMaxAsync(rawBytes, 1024);
+                        var dims = await _imageService.GetImageDimensionsAsync(resizedBytes);
+                        referenceImages.Add(new ArtworkReferenceImage
+                        {
+                            ImageBytes = resizedBytes,
+                            Type = "custom",
+                            Id = customImg.Id.ToString(),
                             Width = dims?.width ?? 0,
                             Height = dims?.height ?? 0
                         });

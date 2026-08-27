@@ -3,12 +3,15 @@ import ButtonIcon from '@/components/ui/button-icon';
 import ButtonOutline from '@/components/ui/button-outline';
 import Icon from '@/components/ui/icon';
 import SubscribeModal from './SubscribeModal';
+import UserSubscriptionDetails from './UserSubscriptionDetails';
 
 export default function UserSubscriptionsTab({ api, showMessage }) {
   const [subscriptions, setSubscriptions] = useState([]);
   const [products, setProducts] = useState([]);
   const [allSubscriptions, setAllSubscriptions] = useState([]);
   const [showSubscribeModal, setShowSubscribeModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedAppUserId, setSelectedAppUserId] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -62,7 +65,7 @@ export default function UserSubscriptionsTab({ api, showMessage }) {
           <thead className="bg-gray-100 dark:bg-gray-700">
             <tr>
               <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Subscription ID</th>
+              <th className="px-4 py-3">Subscription</th>
               <th className="px-4 py-3">Start Date</th>
               <th className="px-4 py-3">End Date</th>
               <th className="px-4 py-3">Status</th>
@@ -73,7 +76,7 @@ export default function UserSubscriptionsTab({ api, showMessage }) {
             {subscriptions.map(s => (
               <tr key={s.id} className="border-b border-gray-200 dark:border-gray-700">
                 <td className="px-4 py-3 text-sm">{s.email || s.appUserId}</td>
-                <td className="px-4 py-3">{s.subscriptionId}</td>
+                <td className="px-4 py-3">{allSubscriptions.find(sub => sub.id === s.subscriptionId)?.title || `#${s.subscriptionId}`}</td>
                 <td className="px-4 py-3">{new Date(s.startDate).toLocaleDateString()}</td>
                 <td className="px-4 py-3">{s.endDate ? new Date(s.endDate).toLocaleDateString() : '-'}</td>
                 <td className="px-4 py-3">
@@ -82,9 +85,12 @@ export default function UserSubscriptionsTab({ api, showMessage }) {
                     : <span className="text-green-600">Active</span>}
                 </td>
                 <td className="px-4 py-3">
-                  {!s.cancelled && (
-                    <ButtonIcon name="delete" color="red" onClick={() => handleCancel(s.id)} title="Cancel" />
-                  )}
+                  <div className="flex items-center gap-2">
+                    <ButtonIcon name="edit" onClick={() => { setSelectedAppUserId(s.appUserId); setShowDetailsModal(true); }} title="Details" />
+                    {!s.cancelled && (
+                      <ButtonIcon name="delete" color="red" onClick={() => handleCancel(s.id)} title="Cancel" />
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -98,6 +104,12 @@ export default function UserSubscriptionsTab({ api, showMessage }) {
           </tbody>
         </table>
       </div>
+      <UserSubscriptionDetails
+        show={showDetailsModal}
+        appUserId={selectedAppUserId}
+        api={api}
+        onClose={() => setShowDetailsModal(false)}
+      />
     </div>
   );
 }

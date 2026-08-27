@@ -4,7 +4,6 @@ import { useDashboard } from '@/context/dashboard';
 import { artworkImageUrl, artworkThumbUrl } from '@/utils/artworkUrls';
 import TextArea from '@/components/forms/textarea';
 import Select from '@/components/forms/select';
-import Input from '@/components/forms/input';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 import Spinner from '@/components/ui/spinner';
@@ -24,52 +23,10 @@ export default function ProductImagePrompt() {
     setArtworkPreview,
     mockups, printifyProducts, loadMockups,
     imageModels, selectedProductImageModel, setSelectedProductImageModel,
-    collectionProducts, setCollectionProducts,
   } = useCollection();
   const { refreshTokens } = useDashboard();
 
   const combo = selectedProductCombos[currentProductComboIndex];
-
-  // Product name: load from collectionProducts, default to blueprint name
-  const collectionProduct = useMemo(() => {
-    if (!combo) return null;
-    return collectionProducts.find(p => p.projectBlueprintId === combo.projectBlueprintId);
-  }, [combo, collectionProducts]);
-
-  const [productName, setProductName] = useState('');
-  const productNameTimerRef = useRef(null);
-
-  useEffect(() => {
-    if (!combo) return;
-    const bp = blueprints.find(b => b.id === combo.projectBlueprintId);
-    const existing = collectionProduct?.name;
-    setProductName(existing || bp?.name || '');
-  }, [combo, collectionProduct, blueprints]);
-
-  const handleProductNameChange = useCallback((e) => {
-    const value = e.target.value;
-    setProductName(value);
-    if (!collectionId || !combo) return;
-    if (productNameTimerRef.current) clearTimeout(productNameTimerRef.current);
-    productNameTimerRef.current = setTimeout(async () => {
-      try {
-        await api.updateCollectionProductName({
-          collectionId,
-          projectBlueprintId: combo.projectBlueprintId,
-          name: value,
-        });
-        setCollectionProducts(prev => prev.map(p =>
-          p.projectBlueprintId === combo.projectBlueprintId
-            ? { ...p, name: value }
-            : p
-        ));
-      } catch { /* ignore */ }
-    }, 1000);
-  }, [collectionId, combo, api, setCollectionProducts]);
-
-  useEffect(() => () => {
-    if (productNameTimerRef.current) clearTimeout(productNameTimerRef.current);
-  }, []);
 
   useEffect(() => {
     if (collectionId && mockups.length === 0) {
@@ -94,9 +51,8 @@ export default function ProductImagePrompt() {
 
   useEffect(() => {
     if (!combo || comboMockups.length === 0 || combo.selectedMockupImageIds !== undefined) return;
-    const allIds = comboMockups.map(m => m.id);
     setSelectedProductCombos(prev => prev.map((c, i) =>
-      i === currentProductComboIndex ? { ...c, selectedMockupImageIds: allIds } : c
+      i === currentProductComboIndex ? { ...c, selectedMockupImageIds: [] } : c
     ));
   }, [combo, comboMockups, currentProductComboIndex, setSelectedProductCombos]);
 
@@ -125,35 +81,79 @@ export default function ProductImagePrompt() {
   const [showCostBreakdown, setShowCostBreakdown] = useState(false);
   const estimateTimerRef = useRef(null);
 
-  const placementItemId = useMemo(() => {
-    if (!combo) return null;
+  const blueprintPlacements = useMemo(() => {
+    if (!combo) return [];
     const bp = blueprints.find(b => b.id === combo.projectBlueprintId);
-    if (!bp || !bp.placementJson) return null;
+    if (!bp || !bp.placementJson) return [];
     try {
       const placementArr = JSON.parse(bp.placementJson);
-      if (!placementArr || !Array.isArray(placementArr) || placementArr.length === 0) return null;
-      const placement = placementArr[0];
-      if (placement && placement.source === 'item' && placement.itemId) return String(placement.itemId);
+      if (!placementArr || !Array.isArray(placementArr)) return [];
+      return placementArr.filter(p => p.source === 'item' && p.itemId);
     } catch { /* skip */ }
-    return null;
+    return [];
   }, [combo, blueprints]);
+
+  const placementItemId = useMemo(() => {
+    if (blueprintPlacements.length === 0) return null;
+    return String(blueprintPlacements[0].itemId);
+  }, [blueprintPlacements]);
+
+  // Fetch placement group IDs for this blueprint so we can filter group placements
+  const [blueprintGroupIds, setBlueprintGroupIds] = useState(new Set());
+  useEffect(() => {
+    if (!projectId || !combo) { setBlueprintGroupIds(new Set()); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.getPlacementGroups(projectId, combo.blueprintId);
+        if (!cancelled && res.data.success) {
+          setBlueprintGroupIds(new Set((res.data.data || []).map(g => g.id)));
+        }
+      } catch { /* skip */ }
+    })();
+    return () => { cancelled = true; };
+  }, [projectId, combo, api]);
 
   const artworkImages = useMemo(() => {
     if (!collectionId || !placementItemId) return [];
     const result = [];
     for (const a of collectionArtwork.filter(a => a.active && String(a.itemId) === placementItemId)) {
-      const totalPlacements = a.totalPlacements || 0;
-      if (totalPlacements > 0) {
-        for (let i = 0; i < totalPlacements; i++) {
-          result.push({
-            itemId: a.itemId,
-            artworkId: a.id,
-            placementIndex: i,
-            url: artworkImageUrl(collectionId, a.itemId, a.id, { placementIndex: i }),
-            thumbUrl: artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex: i }),
-          });
+      const artworkPlacements = a.placements || [];
+      if (artworkPlacements.length > 0) {
+        // Only show placement images that match this product's blueprint placements
+        for (const bpPlacement of blueprintPlacements) {
+          const [pw, ph] = (bpPlacement.dimensions || '').split('x').map(n => parseInt(n) || 0);
+          const position = bpPlacement.position || '';
+
+          // Match by position (for group placements, only if groupId belongs to this blueprint), then by aspect ratio
+          let matched = artworkPlacements.find(p =>
+            p.groupId && p.position && position &&
+            blueprintGroupIds.has(p.groupId) &&
+            String(p.position).toLowerCase() === String(position).toLowerCase()
+          );
+
+          if (!matched && pw > 0 && ph > 0) {
+            const placementRatio = pw / ph;
+            matched = artworkPlacements.find(p => {
+              if (!p.groupId && p.width > 0 && p.height > 0) {
+                return Math.abs((p.width / p.height) - placementRatio) < 0.01;
+              }
+              return false;
+            });
+          }
+
+          if (matched) {
+            result.push({
+              itemId: a.itemId,
+              artworkId: a.id,
+              placementIndex: matched.index,
+              url: artworkImageUrl(collectionId, a.itemId, a.id, { placementIndex: matched.index }),
+              thumbUrl: artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex: matched.index }),
+            });
+          }
         }
       } else {
+        // No placement variants — show the base artwork
         result.push({
           itemId: a.itemId,
           artworkId: a.id,
@@ -164,7 +164,7 @@ export default function ProductImagePrompt() {
       }
     }
     return result;
-  }, [collectionId, collectionArtwork, api, placementItemId]);
+  }, [collectionId, collectionArtwork, placementItemId, blueprintPlacements, blueprintGroupIds]);
 
   const existingProductImage = useMemo(() => {
     if (!combo || !collectionId) return null;
@@ -262,17 +262,13 @@ export default function ProductImagePrompt() {
   }, [combo, collectionId, projectId, api, productImagePrompt, selectedProductImageModel, comboMockups]);
 
   const handleNext = useCallback(() => {
-    if (!productName.trim()) {
-      setMessage({ type: 'error', text: 'Enter a product title.' });
-      return;
-    }
     if (!productImagePrompt.trim()) {
       setMessage({ type: 'error', text: 'Enter a product image prompt.' });
       return;
     }
     setProductImageGenerateTrigger(prev => prev + 1);
     setStep(STEPS.PRODUCT_IMAGE_PREVIEW);
-  }, [productName, productImagePrompt, setStep, setMessage, STEPS, setProductImageGenerateTrigger]);
+  }, [productImagePrompt, setStep, setMessage, STEPS, setProductImageGenerateTrigger]);
 
   const moveToNextCombo = useCallback(() => {
     const nextIndex = currentProductComboIndex >= selectedProductCombos.length - 1
@@ -303,7 +299,7 @@ export default function ProductImagePrompt() {
                 alt="Artwork & Product"
                 singleImage
                 infiniteScroll
-                imageClassName="!max-h-none w-full h-full object-contain"
+                imageClassName="!max-h-[350px] w-full h-full object-contain"
                 onImageError={handleImageError}
                 onImageClick={(_src, index) => setArtworkPreview({ images: fullSizeImages, _idx: index, alt: 'Image Preview' })}
                 placeholder="No Thumbnail"
@@ -314,9 +310,6 @@ export default function ProductImagePrompt() {
             <div className="w-full max-w-[300px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 mb-2 p-8 text-center">
               <span className="text-sm text-gray-500 dark:text-gray-400">No Thumbnail</span>
             </div>
-          )}
-          {!productName.trim() && (
-            <p className="text-sm text-red-600 dark:text-red-400 mt-2">Product title is required.</p>
           )}
         </div>
       )}
@@ -351,29 +344,18 @@ export default function ProductImagePrompt() {
       )}
 
       <div className="mb-4">
-        <div className="grid grid-cols-2 gap-4 mb-2">
-          <div>
-            <Input
-              label="Product Title"
-              name="productName"
-              value={productName}
-              onChange={handleProductNameChange}
-              placeholder="Product name..."
-            />
-          </div>
-          <div>
-            <div className="flex items-end justify-between gap-3">
-              <Select
-                label="AI Image Model"
-                name="productImageModel"
-                value={selectedProductImageModel?.id || ''}
-                onChange={(value) => {
-                  const model = imageModels.find(m => m.id === value);
-                  setSelectedProductImageModel(model || null);
-                }}
-                options={modelOptions}
-                fitContent
-              />
+        <div className="flex items-end justify-between gap-3 mb-2">
+          <Select
+            label="AI Image Model"
+            name="productImageModel"
+            value={selectedProductImageModel?.id || ''}
+            onChange={(value) => {
+              const model = imageModels.find(m => m.id === value);
+              setSelectedProductImageModel(model || null);
+            }}
+            options={modelOptions}
+            fitContent
+          />
               {estimatingTokens ? (
                 <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400" style={{ marginBottom: '2em' }}>
                   <Spinner className="text-sm" />
@@ -391,8 +373,6 @@ export default function ProductImagePrompt() {
                   </div>
                 </div>
               ) : null}
-            </div>
-          </div>
         </div>
         <TextArea
           name="productImagePrompt"
@@ -407,7 +387,7 @@ export default function ProductImagePrompt() {
       <div className="buttons flex justify-end gap-2 mt-auto">
         <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
-        <ButtonOutline onClick={handleNext} disabled={!productImagePrompt.trim() || !productName.trim()}>
+        <ButtonOutline onClick={handleNext} disabled={!productImagePrompt.trim()}>
           Generate Image
         </ButtonOutline>
       </div>

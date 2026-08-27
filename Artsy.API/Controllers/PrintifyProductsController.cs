@@ -985,7 +985,7 @@ namespace Artsy.API.Controllers
                 if (record == null)
                     return Json(new ApiResponse { success = false, message = "Printify product not found." });
 
-                var response = await _printifyService.UpdateProductAsync(userId, record.PrintifyShopId, record.PrintifyProductId, null!);
+                var response = await _printifyService.UpdateProductAsync(userId, record.PrintifyShopId, record.PrintifyProductId, (PrintifyProductRequest)null!);
                 if (response == null)
                     return Json(new ApiResponse { success = false, message = "Failed to update product on Printify." });
 

@@ -48,6 +48,7 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<IProjectCollectionAnswerRepository, ProjectCollectionAnswerRepository>();
             builder.Services.AddTransient<IProjectItemPreviewRepository, ProjectItemPreviewRepository>();
             builder.Services.AddTransient<IProjectItemReferenceRepository, ProjectItemReferenceRepository>();
+            builder.Services.AddTransient<IProjectCollectionArtworkReferenceRepository, ProjectCollectionArtworkReferenceRepository>();
             builder.Services.AddTransient<ILLMModelsRepository, LLMModelsRepository>();
             builder.Services.AddTransient<IImageGenerationModelRepository, ImageGenerationModelRepository>();
             builder.Services.AddTransient<IPrintifyBlueprintRepository, PrintifyBlueprintRepository>();

@@ -20,6 +20,21 @@ namespace Artsy.API.Models.Collections
         public int Height { get; set; }
     }
 
+    public class ReferenceImageDto
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = "";
+
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "";
+
+        [JsonPropertyName("width")]
+        public int Width { get; set; }
+
+        [JsonPropertyName("height")]
+        public int Height { get; set; }
+    }
+
     public class CollectionArtworkGenerationDto
     {
         [JsonPropertyName("itemId")]
@@ -42,6 +57,9 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("placements")]
         public List<EstimatePlacementDto> Placements { get; set; } = new();
+
+        [JsonPropertyName("referenceImages")]
+        public List<ReferenceImageDto> ReferenceImages { get; set; } = new();
     }
 
     public class EstimateCollectionTokensResponse

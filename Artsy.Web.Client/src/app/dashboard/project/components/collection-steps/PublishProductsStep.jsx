@@ -1,16 +1,19 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState } from 'react';
 import { useCollection } from '@/context/collection';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 import CarouselElements from '@/components/ui/carousel-elements';
+import EditCollectionProductDetails from './EditCollectionProductDetails';
 
 export default function PublishProductsStep() {
   const {
-    blueprints, allProductImages, collectionId,
+    blueprints, allProductImages, collectionId, api,
     goBack, onClose,
-    collectionProducts, setArtworkPreview, mockups,
+    collectionProducts, setCollectionProducts, setArtworkPreview, mockups,
     printifyProducts,
   } = useCollection();
+
+  const [editProductBp, setEditProductBp] = useState(null);
 
   // Only show active products
   const activeBlueprints = useMemo(() => {
@@ -115,6 +118,8 @@ export default function PublishProductsStep() {
           elements={activeBlueprints.map((bp) => {
             const images = getBlueprintImages(bp);
             const printifyId = printifyProductIdMap[bp.id];
+            const cp = collectionProducts.find(c => c.projectBlueprintId === bp.id);
+            const displayName = (cp && cp.name) ? cp.name : bp.name;
             return (
               <div
                 key={bp.id}
@@ -123,7 +128,7 @@ export default function PublishProductsStep() {
                 <div className="w-full mb-3 rounded-lg overflow-hidden relative">
                   <Carousel
                     images={images}
-                    alt={bp.name}
+                    alt={displayName}
                     singleImage
                     infiniteScroll
                     placeholder="No Image"
@@ -133,19 +138,28 @@ export default function PublishProductsStep() {
                   />
                 </div>
                 <div>
-                  <p className="text-sm font-medium truncate" title={bp.name}>{bp.name}</p>
+                  <p className="text-sm font-medium truncate" title={displayName}>{displayName}</p>
                   <div className="flex items-center justify-between mt-1">
                     <span className="text-gray-500 dark:text-gray-400">
                       {getMinPrice(bp)}
                     </span>
-                    {printifyId && (
+                    <div className="flex items-center gap-2">
                       <ButtonOutline
                         size="small"
-                        onClick={() => window.open(`https://printify.com/app/product-details/${printifyId}`, '_blank', 'noopener noreferrer')}
+                        onClick={() => setEditProductBp(bp)}
                       >
-                        View on Printify
+                        Edit Details
                       </ButtonOutline>
-                    )}
+                      {printifyId && (
+                        <ButtonOutline
+                          size="small"
+                          color="green"
+                          onClick={() => window.open(`https://printify.com/app/product-details/${printifyId}`, '_blank', 'noopener noreferrer')}
+                        >
+                          View on Printify
+                        </ButtonOutline>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -162,27 +176,52 @@ export default function PublishProductsStep() {
       <div className="grid grid-cols-2 gap-6 mt-auto">
         <div>
           <h4 className="font-medium mb-2">Download Mockup Images</h4>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            <a href={downloadUrl} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 underline">Download</a> all mockup images and manually upload them to your products on Printify since their API does not currently support mockup uploads.
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+            Download the AI generated product images for all of your products within this collection and upload them to your each of your Printify products. To do so, Click on the "View on Printify" button for each product listed above and then upload your mockup images under the "Selected mockups" section within your Printify product details page.
           </p>
+          <ButtonOutline
+            size="small"
+            onClick={() => window.open(downloadUrl, '_blank', 'noopener noreferrer')}
+            disabled={!downloadUrl}
+          >
+            Download Mockups
+          </ButtonOutline>
         </div>
         <div>
           <h4 className="font-medium mb-2">Manual Publishing</h4>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            You must go to Printify.com and manually publish each product yourself. Use the "View on Printify" button next to each product above to find it quickly.
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+            You must go to Printify.com and manually publish each product yourself. Make sure to check the details of each product, upload your product images as mockups, add tags, select listing attributes, check shipping and pricing settings, and if you want to publish your product as a draft within your e-commerce store, check the box "Hide in store" under Publishing settings.
           </p>
+          <ButtonOutline
+            size="small"
+            onClick={() => window.open('https://printify.com/app/store/products/', '_blank', 'noopener noreferrer')}
+          >
+            View Products
+          </ButtonOutline>
         </div>
         <div>
           <h4 className="font-medium mb-2">Multi-Product Publishing</h4>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            You can add your products to a new multi-product listing by clicking the <a href="https://printify.com/app/store/products/?tab=multiProductListings" target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 underline">Multi-Product Listings tab</a> in the My Products section of your Printify dashboard.
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+            You can add your products to a new multi-product listing in the My Products section of your Printify dashboard. This will convert all your products within this collection into a single listing within your e-commerce store and can save you potential listing fees in the long term.
           </p>
+          <ButtonOutline
+            size="small"
+            onClick={() => window.open('https://printify.com/app/store/products/?tab=multiProductListings', '_blank', 'noopener noreferrer')}
+          >
+            Multi-Product Listings
+          </ButtonOutline>
         </div>
         <div>
           <h4 className="font-medium mb-2">Manual Personalization</h4>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            You can set up a <a href="https://help.printify.com/hc/en-us/articles/29856933892241-How-do-I-set-up-product-personalization" target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 underline">manual personalization</a> for each of your products to allow your customers to describe how they want to change the image, which will generate a new AI image for their order.
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+            You can set up manual personalization for each of your products to allow your customers to describe how they want to change the image, which will generate a new AI image for their order.
           </p>
+          <ButtonOutline
+            size="small"
+            onClick={() => window.open('https://help.printify.com/hc/en-us/articles/29856933892241-How-do-I-set-up-product-personalization', '_blank', 'noopener noreferrer')}
+          >
+            Manual Personalization
+          </ButtonOutline>
         </div>
       </div>
 
@@ -190,6 +229,29 @@ export default function PublishProductsStep() {
         <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Close</ButtonOutline>
       </div>
+
+      <EditCollectionProductDetails
+        show={!!editProductBp}
+        collectionId={collectionId}
+        projectBlueprintId={editProductBp?.id}
+        blueprintName={editProductBp?.name}
+        collectionProducts={collectionProducts}
+        allProductImages={allProductImages}
+        mockups={mockups}
+        printifyProducts={printifyProducts}
+        api={api}
+        onClose={() => setEditProductBp(null)}
+        onSaved={() => {
+          if (collectionId) {
+            api.getCollectionProducts(collectionId).then(res => {
+              if (res.data.success) {
+                const products = res.data.data || [];
+                setCollectionProducts(prev => products.length > 0 ? products : prev);
+              }
+            }).catch(() => {});
+          }
+        }}
+      />
     </div>
   );
 }

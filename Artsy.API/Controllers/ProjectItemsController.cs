@@ -316,6 +316,31 @@ namespace Artsy.API.Controllers
                 // Build detailed response with per-task tokens and placements
                 var generations = new List<CollectionArtworkGenerationDto>();
                 var totalTokens = 0m;
+
+                // Build reference image list with names
+                var referenceImageDtos = new List<ReferenceImageDto>();
+                foreach (var refImg in plan.ReferenceImages.Where(r => r.Width > 0 && r.Height > 0))
+                {
+                    string refName = "";
+                    if (refImg.Type == "artwork" && Guid.TryParse(refImg.Id, out var refItemId))
+                    {
+                        var refItem = await _projectItemRepository.GetByIdAsync(refItemId);
+                        refName = refItem?.Title ?? "Artwork";
+                    }
+                    else if (refImg.Type == "custom" && Guid.TryParse(refImg.Id, out var customImgId))
+                    {
+                        var customImg = await _customImageRepository.GetByIdAsync(customImgId);
+                        refName = customImg?.FileName ?? "Custom Image";
+                    }
+                    referenceImageDtos.Add(new ReferenceImageDto
+                    {
+                        Name = refName,
+                        Type = refImg.Type,
+                        Width = refImg.Width,
+                        Height = refImg.Height
+                    });
+                }
+
                 foreach (var task in plan.Tasks)
                 {
                     var result = tokenizer.CalculateTokens(
@@ -342,7 +367,8 @@ namespace Artsy.API.Controllers
                             Position = p.Position,
                             Width = p.Width,
                             Height = p.Height
-                        }).ToList()
+                        }).ToList(),
+                        ReferenceImages = referenceImageDtos
                     });
 
                     totalTokens += result.PlatformTokens;

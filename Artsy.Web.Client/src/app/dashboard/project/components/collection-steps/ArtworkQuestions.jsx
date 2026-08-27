@@ -8,7 +8,9 @@ import Select from '@/components/forms/select';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 import Spinner from '@/components/ui/spinner';
+import Icon from '@/components/ui/icon';
 const TokenCostBreakdownModal = lazy(() => import('../TokenCostBreakdownModal'));
+const CustomImageSelector = lazy(() => import('../CustomImageSelector'));
 
 export default function ArtworkQuestions() {
   const session = useSession();
@@ -26,6 +28,9 @@ export default function ArtworkQuestions() {
   const [previews, setPreviews] = useState([]);
   const [referencePreviews, setReferencePreviews] = useState([]);
   const [customImageRefs, setCustomImageRefs] = useState([]);
+  const [collectionRefs, setCollectionRefs] = useState([]);
+  const [showImageSelector, setShowImageSelector] = useState(false);
+  const [deletingRefId, setDeletingRefId] = useState(null);
   const [calculatedTokens, setCalculatedTokens] = useState(null);
   const [estimateGenerations, setEstimateGenerations] = useState(null);
   const [estimatingTokens, setEstimatingTokens] = useState(false);
@@ -72,12 +77,55 @@ export default function ArtworkQuestions() {
       }
     }).catch(() => {});
 
+    // Load collection artwork references
+    if (collectionId) {
+      api.getCollectionArtworkReferences(collectionId, currentItem.id).then((res) => {
+        if (!cancelled && res.data.success) {
+          setCollectionRefs(res.data.data || []);
+        }
+      }).catch(() => {});
+    } else {
+      setCollectionRefs([]);
+    }
+
     return () => { cancelled = true; };
-  }, [currentItem]);
+  }, [currentItem, collectionId, api]);
 
   const handleItemAnswerChange = useCallback((questionId, value) => {
     setItemAnswers((prev) => ({ ...prev, [questionId]: value }));
   }, [setItemAnswers]);
+
+  const handleAddReference = useCallback(async (customImage) => {
+    if (!customImage || !collectionId || !currentItem) return;
+    try {
+      const colId = await ensureCollection();
+      if (!colId) return;
+      const res = await api.addCollectionArtworkReference({
+        collectionId: colId,
+        itemId: currentItem.id,
+        customImageId: customImage.id,
+      });
+      if (res.data.success) {
+        setCollectionRefs(prev => [...prev, res.data.data]);
+      }
+    } catch (error) {
+      console.error('Failed to add reference:', error);
+    }
+  }, [collectionId, currentItem, api, ensureCollection]);
+
+  const handleDeleteReference = useCallback(async (refId) => {
+    setDeletingRefId(refId);
+    try {
+      const res = await api.deleteCollectionArtworkReference({ id: refId });
+      if (res.data.success) {
+        setCollectionRefs(prev => prev.filter(r => r.id !== refId));
+      }
+    } catch (error) {
+      console.error('Failed to delete reference:', error);
+    } finally {
+      setDeletingRefId(null);
+    }
+  }, [api]);
 
   const handleNext = useCallback(async () => {
     const colId = await ensureCollection();
@@ -108,6 +156,19 @@ export default function ArtworkQuestions() {
     const ownThumbs = previews.map(p => api.getItemPreviewUrl(currentItem.id, p.id, true));
     return [...refThumbs, ...customThumbs, ...ownThumbs];
   }, [currentItem, previews, referencePreviews, customImageRefs, api]);
+
+  // Collection reference images for the carousel
+  const collectionRefImages = useMemo(() => {
+    return collectionRefs.map(r => ({
+      id: r.id,
+      thumb: getCustomImageUrl(r.customImageId, true),
+      full: getCustomImageUrl(r.customImageId, false),
+      fileName: r.fileName,
+    }));
+  }, [collectionRefs, getCustomImageUrl]);
+
+  const collectionRefThumbs = useMemo(() => collectionRefImages.map(r => r.thumb), [collectionRefImages]);
+  const collectionRefFulls = useMemo(() => collectionRefImages.map(r => r.full), [collectionRefImages]);
 
   useEffect(() => {
     loadImageModels();
@@ -149,7 +210,7 @@ export default function ArtworkQuestions() {
       }
     }, 500);
     return () => { if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current); };
-  }, [currentItem, selectedImageModel, currentArtwork, api, collectionId]);
+  }, [currentItem, selectedImageModel, currentArtwork, api, collectionId, collectionRefs]);
 
   const modelOptions = useMemo(() =>
     (imageModels || []).map((m) => ({ value: m.id, label: m.name })),
@@ -168,6 +229,29 @@ export default function ArtworkQuestions() {
     const ownFulls = previews.map(p => api.getItemPreviewUrl(currentItem.id, p.id, false));
     return [...refFulls, ...customFulls, ...ownFulls];
   }, [currentItem, previews, referencePreviews, customImageRefs, api]);
+
+  const renderReferenceOverlay = useCallback((i) => {
+    const ref = collectionRefImages[i];
+    if (!ref) return null;
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleDeleteReference(ref.id);
+        }}
+        disabled={deletingRefId === ref.id}
+        className="absolute bottom-1 right-1 w-7 h-7 flex items-center justify-center bg-black/60 text-white rounded hover:bg-red-600/80 transition"
+        title="Remove reference"
+      >
+        {deletingRefId === ref.id ? (
+          <Spinner className="text-sm" />
+        ) : (
+          <Icon name="delete" />
+        )}
+      </button>
+    );
+  }, [collectionRefImages, deletingRefId, handleDeleteReference]);
 
   return (
     <div className="flex flex-col h-full">
@@ -256,10 +340,28 @@ export default function ArtworkQuestions() {
           </div>
         )}
       </div>
+
+      {/* References carousel */}
+      {collectionRefThumbs.length > 0 && (
+        <div className="mt-4">
+          <h4 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">References</h4>
+          <Carousel
+            images={collectionRefThumbs}
+            alt="Reference Images"
+            imageWidth="120px"
+            imageHeight="120px"
+            imageClassName="object-contain"
+            onImageClick={(_src, index) => setArtworkPreview({ images: collectionRefFulls, src: collectionRefFulls[index], alt: 'Reference Preview' })}
+            overlayRender={renderReferenceOverlay}
+          />
+        </div>
+      )}
+
       <div className="buttons flex justify-end gap-2 mt-4 mt-auto">
         <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
-        <ButtonOutline onClick={handleNext}>Generate Artwork</ButtonOutline>
+        <ButtonOutline onClick={() => setShowImageSelector(true)}>+ Image Reference</ButtonOutline>
+        <ButtonOutline color="green" onClick={handleNext}>Generate Artwork</ButtonOutline>
       </div>
       {showCostBreakdown && (
         <Suspense fallback={null}>
@@ -267,6 +369,18 @@ export default function ArtworkQuestions() {
             show={showCostBreakdown}
             onClose={() => setShowCostBreakdown(false)}
             generations={estimateGenerations}
+          />
+        </Suspense>
+      )}
+      {showImageSelector && (
+        <Suspense fallback={null}>
+          <CustomImageSelector
+            show={showImageSelector}
+            onSelect={(img) => {
+              handleAddReference(img);
+              setShowImageSelector(false);
+            }}
+            onClose={() => setShowImageSelector(false)}
           />
         </Suspense>
       )}

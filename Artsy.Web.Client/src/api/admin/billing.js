@@ -14,6 +14,9 @@ const Billing = (args) => Api({ ...args, useToken: true }).endpoints(({ api }) =
     getUserSubscriptions: () => api.get(`${apiPath}/user-subscriptions`),
     cancelUserSubscription: (id) => api.post(`${apiPath}/user-subscriptions/cancel`, { id }),
     startUserSubscription: (request) => api.post(`${apiPath}/user-subscriptions/start`, request),
+    getUserSubscriptionDetails: (appUserId) => api.get(`${apiPath}/user-subscriptions/details`, { params: { appUserId } }),
+    getUserAITokens: (appUserId, page = 1, pageSize = 10) => api.get(`${apiPath}/user-subscriptions/ai-tokens`, { params: { appUserId, page, pageSize } }),
+    addUserTokens: (request) => api.post(`${apiPath}/user-subscriptions/add-tokens`, request),
     getInvoices: () => api.get(`${apiPath}/invoices`),
   };
 });

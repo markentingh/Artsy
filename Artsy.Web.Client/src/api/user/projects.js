@@ -101,6 +101,9 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     saveCollectionProducts: (request) => api.post(`${apiPath}/save-collection-products`, request),
     getCollectionProducts: (collectionId) => api.get(`${apiPath}/get-collection-products?collectionId=${collectionId}`),
     updateCollectionProductName: (request) => api.post(`${apiPath}/update-collection-product-name`, request),
+    getCollectionProductDetails: (collectionId, projectBlueprintId) => api.get(`${apiPath}/get-collection-product-details?collectionId=${collectionId}&projectBlueprintId=${projectBlueprintId}`),
+    updateCollectionProductDetails: (request) => api.post(`${apiPath}/update-collection-product-details`, request),
+    generateCollectionProductInfo: (request) => api.post(`${apiPath}/generate-collection-product-info`, request),
     getProductBlueprintImages: (projectBlueprintId) => api.get(`${apiPath}/get-product-blueprint-images?projectBlueprintId=${projectBlueprintId}`),
     getAllProductBlueprintImages: (projectId) => api.get(`${apiPath}/get-all-product-blueprint-images?projectId=${projectId}`),
     createProductBlueprintImage: (request) => api.post(`${apiPath}/create-product-blueprint-image`, request),
@@ -122,6 +125,9 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     createIdeaVariation: (projectId, ideaId) => api.post(`${apiPath}/${projectId}/ideas/${ideaId}/variations`),
     deleteIdea: (projectId, ideaId) => api.delete(`${apiPath}/${projectId}/ideas/${ideaId}`),
     makeIdeaCollection: (projectId, ideaId, request) => api.post(`${apiPath}/${projectId}/ideas/${ideaId}/collection`, request),
+    getCollectionArtworkReferences: (collectionId, itemId) => api.get(`${apiPath}/get-collection-artwork-references?collectionId=${collectionId}&itemId=${itemId}`),
+    addCollectionArtworkReference: (request) => api.post(`${apiPath}/add-collection-artwork-reference`, request),
+    deleteCollectionArtworkReference: (request) => api.post(`${apiPath}/delete-collection-artwork-reference`, request),
 
   };
 });

@@ -46,5 +46,19 @@ namespace Artsy.Data.Repositories
             const string query = @"UPDATE public.""AppUserAITokens"" SET ""TokensUsed"" = @tokensUsed WHERE ""Id"" = @id";
             await _dbConnection.ExecuteAsync(query, new { id, tokensUsed });
         }
+
+        public async Task<(IEnumerable<AppUserAIToken> Items, int Total)> GetPagedByAppUserIdAsync(Guid appUserId, int page, int pageSize)
+        {
+            var offset = (page - 1) * pageSize;
+            const string countQuery = @"SELECT COUNT(*) FROM public.""AppUserAITokens"" WHERE ""AppUserId"" = @appUserId";
+            const string itemsQuery = @"
+                SELECT * FROM public.""AppUserAITokens""
+                WHERE ""AppUserId"" = @appUserId
+                ORDER BY ""DateCreated"" DESC
+                LIMIT @pageSize OFFSET @offset";
+            var total = await _dbConnection.ExecuteScalarAsync<int>(countQuery, new { appUserId });
+            var items = await _dbConnection.QueryAsync<AppUserAIToken>(itemsQuery, new { appUserId, pageSize, offset });
+            return (items, total);
+        }
     }
 }

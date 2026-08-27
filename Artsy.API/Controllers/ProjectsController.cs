@@ -50,6 +50,7 @@ namespace Artsy.API.Controllers
         readonly IProjectCollectionPrintifyProductMockupRepository _mockupRepository;
         readonly IProjectCollectionProductRepository _productRepository;
         readonly ICustomImageRepository _customImageRepository;
+        readonly IProjectCollectionArtworkReferenceRepository _projectCollectionArtworkReferenceRepository;
         readonly TokenCostOptions _tokenCostOptions;
         readonly IAITokenService _aiTokenService;
         readonly IArtworkGenerationPlanService _artworkGenerationPlanService;
@@ -89,6 +90,7 @@ namespace Artsy.API.Controllers
             IProjectCollectionPrintifyProductMockupRepository mockupRepository,
             IProjectCollectionProductRepository productRepository,
             ICustomImageRepository customImageRepository,
+            IProjectCollectionArtworkReferenceRepository projectCollectionArtworkReferenceRepository,
             IOptions<TokenCostOptions> tokenCostOptions,
             IAITokenService aiTokenService,
             IArtworkGenerationPlanService artworkGenerationPlanService)
@@ -127,6 +129,7 @@ namespace Artsy.API.Controllers
             _mockupRepository = mockupRepository;
             _productRepository = productRepository;
             _customImageRepository = customImageRepository;
+            _projectCollectionArtworkReferenceRepository = projectCollectionArtworkReferenceRepository;
             _tokenCostOptions = tokenCostOptions.Value;
             _aiTokenService = aiTokenService;
             _artworkGenerationPlanService = artworkGenerationPlanService;

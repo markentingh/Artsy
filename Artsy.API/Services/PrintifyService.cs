@@ -18,6 +18,7 @@ namespace Artsy.API.Services
         Task<bool> PublishProductAsync(Guid userId, int shopId, string productId, PrintifyPublishRequest request);
         Task<bool> UnpublishProductAsync(Guid userId, int shopId, string productId);
         Task<PrintifyProductResponse?> UpdateProductAsync(Guid userId, int shopId, string productId, PrintifyProductRequest product);
+        Task<PrintifyProductResponse?> UpdateProductAsync(Guid userId, int shopId, string productId, string jsonBody);
         Task<PrintifyProductResponse?> GetProductAsync(Guid userId, int shopId, string productId);
         Task<bool> DeleteProductAsync(Guid userId, int shopId, string productId);
     }
@@ -170,15 +171,24 @@ namespace Artsy.API.Services
 
         public async Task<PrintifyProductResponse?> UpdateProductAsync(Guid userId, int shopId, string productId, PrintifyProductRequest product)
         {
+            return await UpdateProductAsync(userId, shopId, productId, JsonSerializer.Serialize(product));
+        }
+
+        public async Task<PrintifyProductResponse?> UpdateProductAsync(Guid userId, int shopId, string productId, string jsonBody)
+        {
             var token = await GetAccessTokenAsync(userId);
             if (string.IsNullOrEmpty(token))
                 return null;
 
             using var client = CreatePrintifyClient(token);
-            var content = new StringContent(JsonSerializer.Serialize(product), Encoding.UTF8, "application/json");
+            var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
             var response = await client.PutAsync($"{BaseUrl}/shops/{shopId}/products/{productId}.json", content);
             if (!response.IsSuccessStatusCode)
+            {
+                var errBody = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"[PrintifyService] UpdateProductAsync failed ({(int)response.StatusCode}): {errBody}");
                 return null;
+            }
 
             var json = await response.Content.ReadAsStringAsync();
             return JsonSerializer.Deserialize<PrintifyProductResponse>(json);

@@ -10,6 +10,7 @@ import Checked from '@/components/ui/checked';
 import Icon from '@/components/ui/icon';
 import Tooltip from '@/components/ui/tooltip';
 import ConfirmModal from '@/components/ui/confirm-modal';
+import EditCollectionProductDetails from './EditCollectionProductDetails';
 
 export default function CreateProducts() {
   const session = useSession();
@@ -21,7 +22,7 @@ export default function CreateProducts() {
     setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex,
     setProductBlueprintImages, setProductImagePrompt, loadImageModels,
     ensureCollection, loadMockups,
-    collectionProducts,
+    collectionProducts, setCollectionProducts, mockups,
   } = useCollection();
 
   const printifyProductsApi = PrintifyProducts(session);
@@ -33,6 +34,7 @@ export default function CreateProducts() {
   const [deletingProduct, setDeletingProduct] = useState({});
   const [productToDelete, setProductToDelete] = useState(null);
   const [archivingUpload, setArchivingUpload] = useState({});
+  const [editProductBp, setEditProductBp] = useState(null);
 
   const createdBlueprints = useMemo(() => {
     const map = {};
@@ -642,16 +644,24 @@ export default function CreateProducts() {
             const variantCount = variantCountByBlueprint[bp.id] || 0;
             const isCreated = createdBlueprints[bp.id] || false;
             const pp = printifyProducts.find(p => p.projectBlueprintId === bp.id);
+            const cp = collectionProducts.find(c => c.projectBlueprintId === bp.id);
+            const displayName = (cp && cp.name) ? cp.name : bp.name;
             return (
               <Item key={bp.id}>
                 <div className="flex items-center w-full">
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {bp.name}
+                    {displayName}
                   </span>
                   <div className="ml-auto flex items-center gap-3">
                     <span className="text-xs text-gray-500 dark:text-gray-400">
                       {variantCount} {variantCount === 1 ? 'variant' : 'variants'}
                     </span>
+                    <ButtonOutline
+                      size="small"
+                      onClick={() => setEditProductBp(bp)}
+                    >
+                      Edit Details
+                    </ButtonOutline>
                     {isCreated && pp && (
                       <>
                         <ButtonOutline
@@ -716,6 +726,29 @@ export default function CreateProducts() {
         confirmLabel="Delete"
         onConfirm={() => productToDelete && handleDeleteProduct(productToDelete)}
         onClose={() => setProductToDelete(null)}
+      />
+      <EditCollectionProductDetails
+        show={!!editProductBp}
+        collectionId={collectionId}
+        projectBlueprintId={editProductBp?.id}
+        blueprintName={editProductBp?.name}
+        collectionProducts={collectionProducts}
+        allProductImages={allProductImages}
+        mockups={mockups}
+        printifyProducts={printifyProducts}
+        api={api}
+        onClose={() => setEditProductBp(null)}
+        onSaved={() => {
+          // Refresh collection products to reflect name changes
+          if (collectionId) {
+            api.getCollectionProducts(collectionId).then(res => {
+              if (res.data.success) {
+                const products = res.data.data || [];
+                setCollectionProducts(prev => products.length > 0 ? products : prev);
+              }
+            }).catch(() => {});
+          }
+        }}
       />
     </div>
   );

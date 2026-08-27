@@ -1,17 +1,18 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useCollection } from '@/context/collection';
+import { useDashboard } from '@/context/dashboard';
 import { artworkImageUrl, artworkJpgWithBgUrl } from '@/utils/artworkUrls';
 import TextArea from '@/components/forms/textarea';
 import Select from '@/components/forms/select';
 import ButtonOutline from '@/components/ui/button-outline';
-import Carousel from '@/components/ui/carousel';
+import Button from '@/components/ui/button';
 import Spinner from '@/components/ui/spinner';
 import Tooltip from '@/components/ui/tooltip';
 
 export default function ArtworkPreview() {
   const {
     aiItems, currentItemIndex, currentItem,
-    isGenerating, previewImageData, currentArtwork,
+    isGenerating, previewImageData, currentArtwork, setCurrentArtwork,
     showChanges, setShowChanges,
     requestedChanges, setRequestedChanges,
     collectionId, ensureCollection, projectId,
@@ -20,10 +21,15 @@ export default function ArtworkPreview() {
     api, onClose, onSaved, setArtworkPreview, setStep, STEPS, goBack,
     previewGenerationIndex, previewGenerationTotal, generatingMessage,
     previewGenerationThumbs,
+    itemAnswers, buildProjectAnswers, selectedImageModel,
   } = useCollection();
+
+  const { refreshTokens } = useDashboard();
 
   const [changeMode, setChangeMode] = useState('regenerate');
   const [isFixing, setIsFixing] = useState(false);
+  const [regeneratingIndex, setRegeneratingIndex] = useState(null);
+  const [regeneratedCacheBust, setRegeneratedCacheBust] = useState({});
 
   const stripThumb = (url) => (url || '').replace('thumb=true&', '').replace('&thumb=true', '').replace('?thumb=true', '?').replace(/\?$/, '');
 
@@ -107,6 +113,82 @@ export default function ArtworkPreview() {
     return [artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust: rnd() })];
   }, [currentArtwork, hasOpacity, hasVariants, totalPlacements, collectionId, currentItem]);
 
+  // Build the grid of placement thumbnail images (same pattern as ReadyToGenerate step)
+  const placementGridImages = useMemo(() => {
+    if (!currentArtwork || !collectionId || !currentItem) return [];
+    const images = [];
+    const cacheBust = rnd();
+
+    // For group artworks, show the base combined image (not individual segments)
+    if (currentArtwork.hasGroups) {
+      images.push({
+        index: 0,
+        thumb: artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { thumb: true, cacheBust }),
+        full: artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust }),
+      });
+    }
+
+    // Show non-group placement thumbnails
+    const nonGroupPlacements = (currentArtwork.placements || []).filter(p => !p.groupId);
+    for (const p of nonGroupPlacements) {
+      images.push({
+        index: p.index,
+        thumb: artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { thumb: true, cacheBust, placementIndex: p.index }),
+        full: artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust, placementIndex: p.index }),
+      });
+    }
+
+    // If no placements at all, show the base artwork
+    if (images.length === 0) {
+      images.push({
+        index: 0,
+        thumb: previewImageData || artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { thumb: true, cacheBust }),
+        full: artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust }),
+      });
+    }
+
+    return images;
+  }, [currentArtwork, collectionId, currentItem, previewImageData]);
+
+  const handleRegeneratePlacement = useCallback(async (placementIndex) => {
+    if (!currentItem || regeneratingIndex !== null) return;
+    setRegeneratingIndex(placementIndex);
+    try {
+      const colId = collectionId || await ensureCollection();
+      if (!colId) { setRegeneratingIndex(null); return; }
+
+      const answerList = [
+        ...buildProjectAnswers(),
+        ...Object.entries(itemAnswers || {})
+          .filter(([_, value]) => value && value.trim())
+          .map(([questionId, answer]) => ({ questionId, answer })),
+      ];
+
+      const res = await api.generateCollectionArtwork({
+        projectId,
+        collectionId: colId,
+        itemId: currentItem.id,
+        width: 2048,
+        height: 2048,
+        answers: answerList,
+        requestedChanges: null,
+        modelId: selectedImageModel?.id,
+        generationIndex: placementIndex,
+      });
+
+      if (res.data.success) {
+        // The API returns the artwork entity without the placements array,
+        // so we only update the cache bust for this specific placement to refresh its image
+        setRegeneratedCacheBust(prev => ({ ...prev, [placementIndex]: Math.floor(Math.random() * 1000000) }));
+        refreshTokens();
+      }
+    } catch (error) {
+      console.error('Regenerate placement error:', error?.response?.data || error);
+    } finally {
+      setRegeneratingIndex(null);
+    }
+  }, [currentItem, regeneratingIndex, collectionId, ensureCollection, buildProjectAnswers, itemAnswers, api, projectId, selectedImageModel, refreshTokens]);
+
   const handleTryAgain = useCallback(() => {
     setStep(STEPS.ARTWORK_QUESTIONS);
   }, [setStep, STEPS]);
@@ -189,7 +271,7 @@ export default function ArtworkPreview() {
         <div className="min-h-[100px] flex items-center justify-center">
           {isGenerating && previewGenerationThumbs.length === 0 ? (
             <Spinner className="text-3xl my-16" />
-          ) : previewGenerationThumbs.length > 0 ? (
+          ) : isGenerating && previewGenerationThumbs.length > 0 ? (
             <div className="flex flex-wrap justify-center gap-2 max-w-[400px]">
               {previewGenerationThumbs.map((thumb) => (
                 <img
@@ -205,6 +287,50 @@ export default function ArtworkPreview() {
                   <Spinner className="text-2xl" />
                 </div>
               )}
+            </div>
+          ) : placementGridImages.length > 0 ? (
+            <div className="flex flex-wrap justify-center gap-3 max-w-[500px]">
+              {placementGridImages.map((img) => {
+                const isRegenerating = regeneratingIndex === img.index;
+                const r = regeneratedCacheBust[img.index];
+                const thumbSrc = r
+                  ? `${img.thumb}${img.thumb.includes('?') ? '&' : '?'}r=${r}`
+                  : img.thumb;
+                return (
+                  <div
+                    key={img.index}
+                    className="group relative w-[150px] h-[150px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 cursor-pointer bg-gray-100 dark:bg-gray-700"
+                    onClick={() => setArtworkPreview({ images: placementGridImages.map(p => p.full), src: img.full, alt: 'Artwork Preview' })}
+                  >
+                    {isRegenerating ? (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Spinner className="text-2xl" />
+                      </div>
+                    ) : (
+                      <>
+                        <img
+                          src={thumbSrc}
+                          alt={`Placement ${img.index + 1}`}
+                          className="w-full h-full object-contain"
+                        />
+                        <div className="absolute inset-x-0 bottom-0 p-1 opacity-0 group-hover:opacity-100 transition">
+                          <Button
+                            color="green"
+                            size="small"
+                            className="!w-full !text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRegeneratePlacement(img.index);
+                            }}
+                          >
+                            Regenerate
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ) : previewImageData ? (
             <img
@@ -261,7 +387,7 @@ export default function ArtworkPreview() {
         )}
       </div>
       <div className="buttons flex justify-end gap-2 items-center pt-4 mt-auto">
-        {!showChanges && !isGenerating && previewImageData && (
+        {!showChanges && !isGenerating && (previewImageData || placementGridImages.length > 0) && (
           <>
             <Tooltip text="Either make changes to the generated artwork using a prompt to edit the artwork, accept the currently generated artwork, or try again by changing the original prompt text." className="pr-8" />
             <ButtonOutline color="gray" onClick={handleMakeChanges}>Make Changes</ButtonOutline>

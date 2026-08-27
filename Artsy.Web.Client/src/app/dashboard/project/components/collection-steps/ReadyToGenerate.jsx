@@ -36,12 +36,18 @@ export default function ReadyToGenerate() {
     const thumbs = [];
     const cacheBust = Math.floor(Math.random() * 1000000);
 
-    // For group artworks, show the base combined image (not individual segments)
-    if (a.hasGroups) {
-      thumbs.push({
-        url: artworkThumbUrl(collectionId, a.itemId, a.id, { cacheBust }),
-        artwork: a,
-      });
+    // For group artworks, show one image per group (the combined image before cutting)
+    if (a.hasGroups && a.groupPlacements) {
+      for (const grp of a.groupPlacements) {
+        const groupFullSize = grp.placements.every(p => p.fullSize);
+        thumbs.push({
+          url: artworkThumbUrl(collectionId, a.itemId, a.id, { cacheBust }),
+          artwork: a,
+          placementIndex: -1,
+          groupId: grp.groupId,
+          fullSize: groupFullSize,
+        });
+      }
     }
 
     // Show non-group placement thumbnails
@@ -50,6 +56,8 @@ export default function ReadyToGenerate() {
       thumbs.push({
         url: artworkThumbUrl(collectionId, a.itemId, a.id, { placementIndex: p.index, cacheBust }),
         artwork: a,
+        placementIndex: p.index,
+        fullSize: p.fullSize, // per-placement fullSize
       });
     }
 
@@ -58,6 +66,8 @@ export default function ReadyToGenerate() {
       thumbs.push({
         url: artworkThumbUrl(collectionId, a.itemId, a.id, { cacheBust }),
         artwork: a,
+        placementIndex: -1,
+        fullSize: a.fullSize,
       });
     }
 
@@ -96,10 +106,9 @@ export default function ReadyToGenerate() {
   }, [artworkImages, thumbRetried, thumbFailed]);
 
   const pendingCount = useMemo(() => {
-    return collectionArtwork.filter(a =>
-      a.active && a.imageModel !== 'custom' && !a.fullSize
-    ).length;
-  }, [collectionArtwork]);
+    // Count the number of placement images that need upscaling (per-placement fullSize)
+    return artworkImages.filter(img => !img.fullSize).length;
+  }, [artworkImages]);
 
   const pendingTokens = pendingCount * 2;
 
@@ -176,20 +185,28 @@ export default function ReadyToGenerate() {
   }, [collectionId, ensureCollection, loadImageModels, setStep, STEPS]);
 
   const renderOverlay = (i) => {
-    const artwork = artworkImages[i]?.artwork;
-    if (!artwork) return null;
+    const img = artworkImages[i];
+    const artwork = img?.artwork;
+    if (!artwork || !img) return null;
 
-    const isAlreadyUpscaled = artwork.fullSize;
+    const isAlreadyUpscaled = img.fullSize; // per-placement fullSize
     const isCurrent = isGeneratingAll && artwork?.itemId === currentItemGenId;
     const isDone = generatedArtworks.some(g => g.itemId === artwork?.itemId);
     const isUpscalingAgain = upscalingAgain[artwork.itemId];
 
+    // Only show spinner on the first non-upscaled image for the current item
     if (isCurrent && !isDone && !isAlreadyUpscaled) {
-      return (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg">
-          <Spinner className="text-2xl text-white" />
-        </div>
+      const isFirstPendingForCurrent = !artworkImages.slice(0, i).some(
+        prev => prev.artwork?.itemId === artwork.itemId && !prev.fullSize
       );
+      if (isFirstPendingForCurrent) {
+        return (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg">
+            <Spinner className="text-2xl text-white" />
+          </div>
+        );
+      }
+      return null;
     }
     if (isUpscalingAgain) {
       return (
@@ -285,7 +302,7 @@ export default function ReadyToGenerate() {
       ) : upscaleComplete ? (
         <>
           <p className="text-center text-lg mb-4">
-            Upscaling complete! {artworkImages.filter(img => img.artwork?.fullSize).length} artwork{artworkImages.filter(img => img.artwork?.fullSize).length !== 1 ? 's' : ''} upscaled to full size.
+            Upscaling complete! {artworkImages.filter(img => img.fullSize).length} artwork{artworkImages.filter(img => img.fullSize).length !== 1 ? 's' : ''} upscaled to full size.
           </p>
           <div className="buttons flex justify-end gap-2 mt-auto">
             <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
@@ -307,7 +324,7 @@ export default function ReadyToGenerate() {
           ) : (
             <>
               <p className="text-center text-lg mb-2">
-                Ready to upscale {pendingCount} artwork{pendingCount !== 1 ? 's' : ''} to full size.
+                Ready to upscale {pendingCount} artwork{pendingCount !== 1 ? 's' : ''} at full size.
               </p>
               <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-6">
                 This will cost {pendingTokens} tokens.

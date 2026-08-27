@@ -556,11 +556,42 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   }, [currentItemIndex, collectionArtwork, aiItems, blueprintItemIds, loadItemData, collectionId, ensureCollection, loadImageModels, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex, blueprints, api, printifyImageIndexByColor]);
   advanceToNextItemRef.current = advanceToNextItem;
 
+  // Check if an artwork has any placements that still need upscaling
+  const hasPendingPlacements = (a) => {
+    if (a.hasGroups) {
+      // Group image needs upscaling if any group placement isn't fullSize
+      const groupPlacements = (a.placements || []).filter(p => p.groupId);
+      if (groupPlacements.length > 0 && groupPlacements.some(p => !p.fullSize)) return true;
+      if (groupPlacements.length === 0 && !a.fullSize) return true;
+    }
+    const pending = (a.placements || []).filter(p => !p.groupId && !p.fullSize);
+    if (pending.length > 0) return true;
+    if (!a.fullSize && (!a.placements || a.placements.length === 0)) return true;
+    return false;
+  };
+
   const doGenerateAll = useCallback(async (colId) => {
-    // Find artwork items that haven't been upscaled yet
+    // Find artwork items that have at least one placement needing upscaling
     const pendingItems = collectionArtwork.filter(a =>
-      !a.fullSize && aiItems.some(item => String(item.id) === String(a.itemId))
+      aiItems.some(item => String(item.id) === String(a.itemId)) &&
+      hasPendingPlacements(a)
     );
+
+    // Count total placement images that need upscaling (per-placement)
+    const countPendingImages = (a) => {
+      let count = 0;
+      if (a.hasGroups) {
+        // Group image needs upscaling if any group placement isn't fullSize
+        const groupPlacements = (a.placements || []).filter(p => p.groupId);
+        const groupNeedsUpscale = groupPlacements.length > 0 ? groupPlacements.some(p => !p.fullSize) : !a.fullSize;
+        if (groupNeedsUpscale) count++;
+      }
+      const pendingPlacements = (a.placements || []).filter(p => !p.groupId && !p.fullSize);
+      count += pendingPlacements.length;
+      if (count === 0 && !a.fullSize && (!a.placements || a.placements.length === 0)) count = 1;
+      return count;
+    };
+    const totalImageCount = pendingItems.reduce((sum, a) => sum + countPendingImages(a), 0);
 
     if (pendingItems.length === 0) {
       setUpscaleComplete(true);
@@ -573,18 +604,20 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     setCurrentGeneratingIndex(0);
     setCurrentGeneratingItemId(null);
     setGenerationError(null);
-    setGeneratingMessage(`Generating artwork 1 of ${pendingItems.length}...`);
+    setGeneratingMessage(`Generating artwork 1 of ${totalImageCount}...`);
     cancelRef.current = false;
 
     const results = [];
+    let imagesProcessed = 0;
     for (let i = 0; i < pendingItems.length; i++) {
       if (cancelRef.current) break;
 
       const art = pendingItems[i];
       const item = aiItems.find(a => a.id === art.itemId);
+      const imgCount = countPendingImages(art);
       setCurrentGeneratingIndex(i);
       setCurrentGeneratingItemId(art.itemId);
-      setGeneratingMessage(`Generating artwork ${i + 1} of ${pendingItems.length}: ${item?.title || 'Untitled'} (${art.width}x${art.height})...`);
+      setGeneratingMessage(`Generating artwork ${imagesProcessed + 1} of ${totalImageCount}: ${item?.title || 'Untitled'} (${art.width}x${art.height})...`);
 
       try {
         const res = await api.upscaleArtwork({
@@ -598,11 +631,11 @@ export function CollectionProvider({ children, projectId, project, collectionId:
           const url = artworkImageUrl(colId, art.itemId, artwork.id, { thumb: true, cacheBust: Math.floor(Math.random() * 100000) });
           results.push({ itemId: art.itemId, artworkId: artwork.id, url, width: art.width, height: art.height });
           setGeneratedArtworks([...results]);
-          setCollectionArtwork(prev => prev.map(a =>
-            String(a.itemId) === String(art.itemId)
-              ? { ...a, fullSize: true }
-              : a
-          ));
+          // Refresh from server to get accurate per-placement fullSize data
+          const artRes = await api.getCollectionArtwork(colId);
+          if (artRes.data.success) {
+            setCollectionArtwork(artRes.data.data || []);
+          }
         } else {
           setGenerationError(res.data.message || 'Failed to generate artwork');
           setIsGeneratingAll(false);
@@ -614,7 +647,8 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         return;
       }
 
-      setGeneratingProgress(Math.round(((i + 1) / pendingItems.length) * 100));
+      imagesProcessed += imgCount;
+      setGeneratingProgress(Math.round((imagesProcessed / totalImageCount) * 100));
     }
 
     setIsGeneratingAll(false);
@@ -838,6 +872,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
           title: pbi.title,
           variantColor: pbi.variantColor,
           variantIds: pbi.variantIds || [],
+          prompt: pbi.prompt || '',
         };
       }
       const existingImg = allProductImages.find(img =>
@@ -883,7 +918,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
     if (step === STEPS.PRODUCT_IMAGE_PROMPT && selectedProductCombos.length > 0) {
       if (currentProductComboIndex > 0) {
-        // Back from prompt (combo N) → preview of combo N-1
+        // Back from prompt (combo N) → preview of combo N-1 (no auto-generation)
         const prevIndex = currentProductComboIndex - 1;
         const prevCombo = selectedProductCombos[prevIndex];
         setCurrentProductComboIndex(prevIndex);
@@ -892,6 +927,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
           img.productImageId === prevCombo.productImageId
         );
         setProductImagePrompt(existing?.prompt || prevCombo.prompt || '');
+        setProductImageGenerateTrigger(0);
         setStep(STEPS.PRODUCT_IMAGE_PREVIEW);
       } else {
         // Back from prompt (combo 0) → create products

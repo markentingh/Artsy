@@ -29,6 +29,12 @@ export default function TokenCostBreakdownModal({ show, onClose, generations }) 
         return false;
       })();
 
+      // Check if this is a product image generation (placements have width=0, height=0)
+      const isProductImageGen = (gen.placements || []).length > 0 &&
+        gen.placements.every(p => p.width === 0 && p.height === 0);
+
+      const referenceImages = gen.referenceImages || [];
+
       const content = (
         <div className="space-y-4">
           {/* First row: dimensions, tokens, optional seamless tag */}
@@ -48,8 +54,29 @@ export default function TokenCostBreakdownModal({ show, onClose, generations }) 
             )}
           </div>
 
-          {/* Per-blueprint sections */}
-          {Array.from(byBlueprint.values()).map((bp) => (
+          {/* Reference images list */}
+          {referenceImages.length > 0 && (
+            <div>
+              <h5 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
+                Reference Images
+              </h5>
+              <List inModal>
+                {referenceImages.map((ref, idx) => (
+                  <Item key={idx} className="justify-between">
+                    <span className="text-sm text-gray-600 dark:text-gray-300 truncate" title={ref.name}>
+                      {ref.name}
+                    </span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400 ml-4 flex-shrink-0">
+                      {ref.width} x {ref.height}
+                    </span>
+                  </Item>
+                ))}
+              </List>
+            </div>
+          )}
+
+          {/* Per-blueprint sections (only for artwork generation, not product image generation) */}
+          {!isProductImageGen && Array.from(byBlueprint.values()).map((bp) => (
             <div key={bp.blueprintId}>
               <h5 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
                 {bp.blueprintName || `Blueprint ${bp.blueprintId}`}
