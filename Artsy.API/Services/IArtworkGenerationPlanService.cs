@@ -134,6 +134,7 @@ namespace Artsy.API.Services
             Guid itemId,
             string? requestedChanges = null,
             List<GenerateProjectItemPreviewAnswer>? answers = null,
-            int resolutionTier = 1);
+            int resolutionTier = 1,
+            string design = "artwork");
     }
 }

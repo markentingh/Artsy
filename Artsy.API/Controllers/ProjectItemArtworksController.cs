@@ -69,7 +69,8 @@ namespace Artsy.API.Controllers
                     {
                         ItemId = request.ItemId,
                         ProjectId = item.ProjectId,
-                        Prompt = request.Prompt ?? ""
+                        Prompt = request.Prompt ?? "",
+                        OptionalPrompt = request.OptionalPrompt
                     };
                     var created = await _projectItemArtworkRepository.CreateAsync(artwork);
                     return Json(new ApiResponse { success = true, data = created });
@@ -77,6 +78,7 @@ namespace Artsy.API.Controllers
                 else
                 {
                     artwork.Prompt = request.Prompt ?? "";
+                    artwork.OptionalPrompt = request.OptionalPrompt;
                     await _projectItemArtworkRepository.UpdateAsync(artwork);
                     return Json(new ApiResponse { success = true, data = artwork });
                 }
@@ -216,7 +218,8 @@ namespace Artsy.API.Controllers
                         ItemId = request.ItemId,
                         ProjectId = item.ProjectId,
                         ArtworkType = "ai",
-                        AspectRatio = request.AspectRatio
+                        AspectRatio = request.AspectRatio,
+                        Design = string.IsNullOrWhiteSpace(request.Design) ? "artwork" : request.Design
                     };
                     var created = await _projectItemArtworkRepository.CreateAsync(artwork);
                     return Json(new ApiResponse { success = true, data = created });
@@ -224,6 +227,8 @@ namespace Artsy.API.Controllers
                 else
                 {
                     artwork.AspectRatio = request.AspectRatio;
+                    if (!string.IsNullOrWhiteSpace(request.Design))
+                        artwork.Design = request.Design;
                     await _projectItemArtworkRepository.UpdateAsync(artwork);
                     return Json(new ApiResponse { success = true, data = artwork });
                 }

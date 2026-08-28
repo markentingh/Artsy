@@ -64,7 +64,8 @@ namespace Artsy.API.Services
             Guid itemId,
             string? requestedChanges = null,
             List<GenerateProjectItemPreviewAnswer>? answers = null,
-            int resolutionTier = 1)
+            int resolutionTier = 1,
+            string design = "artwork")
         {
             var artworkList = await _projectItemArtworkRepository.GetByItemIdAsync(itemId);
             var artwork = artworkList.FirstOrDefault();
@@ -132,6 +133,10 @@ namespace Artsy.API.Services
                 finalPrompt += $" the background for this image must be a completely flat, uniform, solid color using {hexColor} hex color with no gradients, textures, shadows, or objects, filling the entire background area, so that we can apply a chroma key to the image later";
             }
 
+            // Append optional user-provided prompt at the very bottom
+            if (!string.IsNullOrWhiteSpace(artwork.OptionalPrompt))
+                finalPrompt += $" {artwork.OptionalPrompt.Trim()}";
+
             // --- Collect blueprint placements for this item ---
             var allBlueprints = await _projectBlueprintRepository.GetByProjectIdAsync(projectId);
             // Filter to only active collection products when a collectionId is provided
@@ -144,6 +149,37 @@ namespace Artsy.API.Services
                 {
                     blueprints = allBlueprints.Where(bp => activeBlueprintIds.Contains(bp.Id));
                 }
+            }
+
+            // --- Pattern mode: generate ONE artwork based on the item's aspect ratio ---
+            var isPattern = string.Equals(design, "pattern", StringComparison.OrdinalIgnoreCase);
+            if (isPattern)
+            {
+                var (patW, patH) = ImageGenerationForOpenAI.GetDimensionsFromAspectRatio(artwork.AspectRatio, resolutionTier);
+                var patternTask = new ArtworkGenerationTask
+                {
+                    Width = patW,
+                    Height = patH,
+                    NeedsCrop = false,
+                    NeedsMask = false,
+                    VariantIndex = 0
+                };
+
+                // Collect reference images (same as artwork mode)
+                var patternRefImages = await CollectReferenceImagesAsync(projectId, collectionId, itemId, artwork);
+
+                return new ArtworkGenerationPlan
+                {
+                    Artwork = artwork,
+                    FinalPrompt = finalPrompt,
+                    HasOpacity = hasOpacity,
+                    ReferenceImages = patternRefImages,
+                    Tasks = new List<ArtworkGenerationTask> { patternTask },
+                    TotalPlacements = 0,
+                    NeedsUpscale = true,
+                    Width = patW,
+                    Height = patH
+                };
             }
             var itemPlacements = new List<(string Position, int W, int H, string CropX, string CropY, int BlueprintId, string BlueprintName)>();
             foreach (var bp in blueprints)
@@ -330,6 +366,38 @@ namespace Artsy.API.Services
             }
 
             // --- Collect reference images ---
+            var referenceImages = await CollectReferenceImagesAsync(projectId, collectionId, itemId, artwork);
+
+            // Determine if this artwork needs upscaling.
+            // An artwork needs upscaling if it has product placements or seamless groups,
+            // OR if it's not solely used as a reference by other items.
+            var needsUpscale = variantGroups.Count > 0 || seamlessGroups.Count > 0;
+            if (!needsUpscale)
+            {
+                // Check if any other item references this item's artwork
+                var allReferences = await _projectItemReferenceRepository.GetByProjectIdAsync(projectId);
+                var isReferencedByOthers = allReferences.Any(r => r.ArtworkId == itemId && r.ItemId != itemId);
+                // If not referenced by others, it's a standalone artwork that needs upscaling
+                needsUpscale = !isReferencedByOthers;
+            }
+
+            return new ArtworkGenerationPlan
+            {
+                Artwork = artwork,
+                FinalPrompt = finalPrompt,
+                HasOpacity = hasOpacity,
+                ReferenceImages = referenceImages,
+                Tasks = tasks,
+                TotalPlacements = variantGroups.Count + seamlessGroups.Sum(g => g.Value.Count),
+                NeedsUpscale = needsUpscale,
+                Width = baseWidth,
+                Height = baseHeight
+            };
+        }
+
+        private async Task<List<ArtworkReferenceImage>> CollectReferenceImagesAsync(
+            Guid projectId, Guid collectionId, Guid itemId, ProjectItemArtwork artwork)
+        {
             var referenceImages = new List<ArtworkReferenceImage>();
             var references = await _projectItemReferenceRepository.GetByItemIdAsync(itemId);
             if (references != null && references.Any())
@@ -408,31 +476,7 @@ namespace Artsy.API.Services
                 }
             }
 
-            // Determine if this artwork needs upscaling.
-            // An artwork needs upscaling if it has product placements or seamless groups,
-            // OR if it's not solely used as a reference by other items.
-            var needsUpscale = variantGroups.Count > 0 || seamlessGroups.Count > 0;
-            if (!needsUpscale)
-            {
-                // Check if any other item references this item's artwork
-                var allReferences = await _projectItemReferenceRepository.GetByProjectIdAsync(projectId);
-                var isReferencedByOthers = allReferences.Any(r => r.ArtworkId == itemId && r.ItemId != itemId);
-                // If not referenced by others, it's a standalone artwork that needs upscaling
-                needsUpscale = !isReferencedByOthers;
-            }
-
-            return new ArtworkGenerationPlan
-            {
-                Artwork = artwork,
-                FinalPrompt = finalPrompt,
-                HasOpacity = hasOpacity,
-                ReferenceImages = referenceImages,
-                Tasks = tasks,
-                TotalPlacements = variantGroups.Count + seamlessGroups.Sum(g => g.Value.Count),
-                NeedsUpscale = needsUpscale,
-                Width = baseWidth,
-                Height = baseHeight
-            };
+            return referenceImages;
         }
     }
 }

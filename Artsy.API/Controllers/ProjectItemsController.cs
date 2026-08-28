@@ -269,7 +269,7 @@ namespace Artsy.API.Controllers
         }
 
         [HttpGet("estimate-item-tokens")]
-        public async Task<IActionResult> EstimateItemTokens([FromQuery] Guid itemId, [FromQuery] int modelId = 0, [FromQuery] Guid? collectionId = null)
+        public async Task<IActionResult> EstimateItemTokens([FromQuery] Guid itemId, [FromQuery] int modelId = 0, [FromQuery] Guid? collectionId = null, [FromQuery] string? design = null)
         {
             var userId = GetUserId();
             if (userId == Guid.Empty)
@@ -290,7 +290,7 @@ namespace Artsy.API.Controllers
 
                 // Build the generation plan with collectionId so it filters by active products
                 // Use resolutionTier 2 (2K) to match the actual collection wizard generation
-                var plan = await _artworkGenerationPlanService.BuildPlanAsync(item.ProjectId, collectionId ?? Guid.Empty, itemId, resolutionTier: 2);
+                var plan = await _artworkGenerationPlanService.BuildPlanAsync(item.ProjectId, collectionId ?? Guid.Empty, itemId, resolutionTier: 2, design: design ?? "artwork");
 
                 ImageGenerationModel? model;
                 if (modelId > 0)
@@ -347,7 +347,7 @@ namespace Artsy.API.Controllers
                         plan.FinalPrompt,
                         task.Width,
                         task.Height,
-                        "high",
+                        "medium",
                         inputImageDimensions,
                         "auto",
                         tokenCost

@@ -3,7 +3,9 @@ import Modal from '@/components/ui/modal';
 import Accordion from '@/components/ui/accordion';
 import { List, Item } from '@/components/ui/list';
 
-export default function TokenCostBreakdownModal({ show, onClose, generations }) {
+export default function TokenCostBreakdownModal({ show, onClose, generations, design }) {
+  const isPattern = design === 'pattern';
+
   const accordionItems = useMemo(() => {
     if (!generations || generations.length === 0) return [];
 
@@ -37,7 +39,7 @@ export default function TokenCostBreakdownModal({ show, onClose, generations }) 
 
       const content = (
         <div className="space-y-4">
-          {/* First row: dimensions, tokens, optional seamless tag */}
+          {/* First row: dimensions, tokens, optional tag */}
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-4">
               <span className="text-gray-500 dark:text-gray-400">
@@ -47,7 +49,11 @@ export default function TokenCostBreakdownModal({ show, onClose, generations }) 
                 Tokens: <span className="font-medium text-gray-700 dark:text-gray-200">{gen.tokens}</span>
               </span>
             </div>
-            {isSeamlessGroup && (
+            {isPattern ? (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                Seamless Pattern
+              </span>
+            ) : isSeamlessGroup && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
                 Seamless Placements Group
               </span>
@@ -75,8 +81,8 @@ export default function TokenCostBreakdownModal({ show, onClose, generations }) 
             </div>
           )}
 
-          {/* Per-blueprint sections (only for artwork generation, not product image generation) */}
-          {!isProductImageGen && Array.from(byBlueprint.values()).map((bp) => (
+          {/* Per-blueprint sections (only for artwork generation, not product image generation, not pattern) */}
+          {!isPattern && !isProductImageGen && Array.from(byBlueprint.values()).map((bp) => (
             <div key={bp.blueprintId}>
               <h5 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
                 {bp.blueprintName || `Blueprint ${bp.blueprintId}`}
@@ -103,7 +109,7 @@ export default function TokenCostBreakdownModal({ show, onClose, generations }) 
         content,
       };
     });
-  }, [generations]);
+  }, [generations, isPattern]);
 
   return (
     <Modal

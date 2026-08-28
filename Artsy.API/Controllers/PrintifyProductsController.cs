@@ -689,6 +689,55 @@ namespace Artsy.API.Controllers
                                 int placementIndex = 0;
                                 Guid? artworkPlacementId = null;
 
+                                // Pattern mode: use the single artwork image with pattern settings for all placements
+                                if (string.Equals(art.Design, "pattern", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    if (string.IsNullOrWhiteSpace(printifyImageId))
+                                        continue;
+
+                                    PrintifyPatternRequest? patternRequest = null;
+                                    double patternScale = 1;
+                                    if (!string.IsNullOrWhiteSpace(art.PatternJson))
+                                    {
+                                        try
+                                        {
+                                            var patternOpts = JsonSerializer.Deserialize<PatternSettingsDto>(art.PatternJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                            if (patternOpts != null)
+                                            {
+                                                patternRequest = new PrintifyPatternRequest
+                                                {
+                                                    SpacingX = patternOpts.SpacingX,
+                                                    SpacingY = patternOpts.SpacingY,
+                                                    Angle = patternOpts.Angle,
+                                                    Offset = patternOpts.Offset,
+                                                };
+                                                patternScale = patternOpts.Scale > 0 ? patternOpts.Scale : 1;
+                                            }
+                                        }
+                                        catch { }
+                                    }
+
+                                    placeholders.Add(new PrintifyPlaceholderRequest
+                                    {
+                                        Position = position,
+                                        Images = new List<PrintifyPlaceholderImageRequest>
+                                        {
+                                            new PrintifyPlaceholderImageRequest
+                                            {
+                                                Id = printifyImageId,
+                                                X = 0.5,
+                                                Y = 0.5,
+                                                Scale = patternScale,
+                                                Angle = 0,
+                                                Pattern = patternRequest,
+                                            }
+                                        },
+                                    });
+
+                                    savedPlacements.Add((art.Id, null, 0, position, JsonSerializer.Serialize(variantIds)));
+                                    continue;
+                                }
+
                                 if (art.TotalPlacements > 0 && artworkPlacementsMap.TryGetValue(art.Id, out var placementVariants))
                                 {
                                     var (pw, ph) = placement.GetDimensions();

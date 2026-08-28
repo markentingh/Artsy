@@ -34,5 +34,11 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("generationIndex")]
         public int? GenerationIndex { get; set; }
+
+        [JsonPropertyName("design")]
+        public string Design { get; set; } = "artwork";
+
+        [JsonPropertyName("patternJson")]
+        public string? PatternJson { get; set; }
     }
 }

@@ -32,7 +32,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     getItemArtwork: (itemId) => api.get(`${apiPath}/get-item-artwork?itemId=${itemId}`),
     updateItemPrompt: (request) => api.post(`${apiPath}/update-item-prompt`, request),
     updateItemImageModel: (request) => api.post(`${apiPath}/update-item-image-model`, request),
-    estimateItemTokens: (itemId, modelId = '', collectionId = '') => api.get(`${apiPath}/estimate-item-tokens?itemId=${itemId}&modelId=${modelId || ''}${collectionId ? `&collectionId=${collectionId}` : ''}`),
+    estimateItemTokens: (itemId, modelId = '', collectionId = '', design = '') => api.get(`${apiPath}/estimate-item-tokens?itemId=${itemId}&modelId=${modelId || ''}${collectionId ? `&collectionId=${collectionId}` : ''}${design ? `&design=${design}` : ''}`),
     updateItemArtworkType: (request) => api.post(`${apiPath}/update-item-artwork-type`, request),
     updateItemAspectRatio: (request) => api.post(`${apiPath}/update-item-aspect-ratio`, request),
     updateItemIgnoredQuestions: (request) => api.post(`${apiPath}/update-item-ignored-questions`, request),

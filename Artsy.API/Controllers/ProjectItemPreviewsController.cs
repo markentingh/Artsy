@@ -88,16 +88,39 @@ namespace Artsy.API.Controllers
 
                 var promptBuilder = new StringBuilder(artwork.Prompt ?? "");
 
+                // Build question lookup for both project and item questions
+                var projectQuestions = await _projectQuestionRepository.GetByProjectIdAsync(item.ProjectId);
+                var itemQuestions = await _projectItemQuestionRepository.GetByItemIdAsync(request.ItemId);
+                var questionLookup = new Dictionary<Guid, string>();
+                foreach (var q in projectQuestions)
+                    questionLookup[q.Id] = q.Question;
+                foreach (var q in itemQuestions)
+                    questionLookup[q.Id] = q.Question;
+
+                // Load saved collection answers (project + item answers) when collectionId is provided
+                if (request.CollectionId.HasValue && request.CollectionId.Value != Guid.Empty)
+                {
+                    var collectionAnswers = await _projectCollectionAnswerRepository.GetByCollectionIdAsync(request.CollectionId.Value);
+                    if (collectionAnswers != null && collectionAnswers.Any())
+                    {
+                        foreach (var ans in collectionAnswers)
+                        {
+                            if (string.IsNullOrWhiteSpace(ans.Answer) || !ans.QuestionId.HasValue) continue;
+                            // Only include answers for this item or project-level answers (no ItemId)
+                            if (ans.ItemId.HasValue && ans.ItemId.Value != request.ItemId) continue;
+                            if (questionLookup.TryGetValue(ans.QuestionId.Value, out var questionText))
+                            {
+                                promptBuilder.AppendLine();
+                                promptBuilder.AppendLine($"Question: {questionText}");
+                                promptBuilder.AppendLine($"Answer: {ans.Answer}");
+                            }
+                        }
+                    }
+                }
+
+                // Also include any answers passed directly in the request
                 if (request.Answers != null && request.Answers.Count > 0)
                 {
-                    var projectQuestions = await _projectQuestionRepository.GetByProjectIdAsync(item.ProjectId);
-                    var itemQuestions = await _projectItemQuestionRepository.GetByItemIdAsync(request.ItemId);
-                    var questionLookup = new Dictionary<Guid, string>();
-                    foreach (var q in projectQuestions)
-                        questionLookup[q.Id] = q.Question;
-                    foreach (var q in itemQuestions)
-                        questionLookup[q.Id] = q.Question;
-
                     foreach (var answer in request.Answers)
                     {
                         if (string.IsNullOrWhiteSpace(answer.Answer))
@@ -115,6 +138,12 @@ namespace Artsy.API.Controllers
                 if (string.IsNullOrWhiteSpace(finalPrompt))
                     return Json(new ApiResponse { success = false, message = "Prompt is required to generate a preview." });
 
+                // For pattern design mode, append seamless repeating pattern instructions to the prompt
+                if (string.Equals(request.Design, "pattern", StringComparison.OrdinalIgnoreCase))
+                {
+                    finalPrompt += ". Design this as a seamless repeating pattern that tiles perfectly without visible seams or borders. The artwork should be a continuous tileable pattern that can be repeated horizontally and vertically.";
+                }
+
                 // Append chroma key background instruction if OpacityJson has chroma keys
                 var opacitySettings = _opacityService.ParseOpacityJson(artwork.OpacityJson);
                 if (opacitySettings != null && opacitySettings.ChromaKeys.Count > 0)
@@ -123,6 +152,10 @@ namespace Artsy.API.Controllers
                     var hexColor = $"#{firstColor.R:X2}{firstColor.G:X2}{firstColor.B:X2}";
                     finalPrompt += $" the background for this image must be a solid color using {hexColor} hex color so that we can apply a chroma key to the image later";
                 }
+
+                // Append optional user-provided prompt at the very bottom
+                if (!string.IsNullOrWhiteSpace(artwork.OptionalPrompt))
+                    finalPrompt += $" {artwork.OptionalPrompt.Trim()}";
 
                 modelRequest.Prompt = finalPrompt;
                 // Use the artwork's aspect ratio to determine preview dimensions at 1K
@@ -161,6 +194,26 @@ namespace Artsy.API.Controllers
                         {
                             inputImages.Add(imageBytes);
                             inputImageRefs.Add(new { type = reference.ArtworkId.HasValue ? "artwork" : "custom", id = (reference.ArtworkId ?? reference.CustomImageId).ToString() });
+                        }
+                    }
+                }
+
+                // Load collection artwork references (custom images added in the collection wizard)
+                if (request.CollectionId.HasValue && request.CollectionId.Value != Guid.Empty)
+                {
+                    var collectionRefs = await _projectCollectionArtworkReferenceRepository.GetByCollectionAndItemIdAsync(request.CollectionId.Value, request.ItemId);
+                    if (collectionRefs != null && collectionRefs.Any())
+                    {
+                        foreach (var colRef in collectionRefs)
+                        {
+                            var customImg = await _customImageRepository.GetByIdAsync(colRef.CustomImageId);
+                            if (customImg == null) continue;
+
+                            var rawBytes = await _imageService.GetCustomImageAsync(customImg.AppUserId, customImg.Id, customImg.Extension);
+                            if (rawBytes == null || rawBytes.Length == 0) continue;
+
+                            inputImages.Add(rawBytes);
+                            inputImageRefs.Add(new { type = "custom", id = customImg.Id.ToString() });
                         }
                     }
                 }

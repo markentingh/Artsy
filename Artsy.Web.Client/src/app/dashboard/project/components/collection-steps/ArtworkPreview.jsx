@@ -8,6 +8,7 @@ import ButtonOutline from '@/components/ui/button-outline';
 import Button from '@/components/ui/button';
 import Spinner from '@/components/ui/spinner';
 import Tooltip from '@/components/ui/tooltip';
+import PatternPreview from './PatternPreview';
 
 export default function ArtworkPreview() {
   const {
@@ -22,6 +23,7 @@ export default function ArtworkPreview() {
     previewGenerationIndex, previewGenerationTotal, generatingMessage,
     previewGenerationThumbs,
     itemAnswers, buildProjectAnswers, selectedImageModel,
+    design, patternSettings,
   } = useCollection();
 
   const { refreshTokens } = useDashboard();
@@ -262,12 +264,20 @@ export default function ArtworkPreview() {
     advanceToNextItem();
   }, [ensureCollection, aiItems, currentItemIndex, api, advanceToNextItem, setCollectionArtwork, onSaved]);
 
+  const isPattern = design === 'pattern';
+
   return (
     <div className="flex flex-col h-full">
       <h3 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
         Artwork {currentItemIndex + 1} of {aiItems.length}: {currentItem?.title || 'Untitled'}
       </h3>
       <div className="flex flex-col items-center gap-4">
+        {isPattern && !isGenerating && previewImageData && (
+          <PatternPreview
+            patternSettings={patternSettings}
+            previewImage={previewImageData}
+          />
+        )}
         <div className="min-h-[100px] flex items-center justify-center">
           {isGenerating && previewGenerationThumbs.length === 0 ? (
             <Spinner className="text-3xl my-16" />

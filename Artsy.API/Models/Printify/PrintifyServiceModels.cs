@@ -135,16 +135,16 @@ namespace Artsy.API.Models.Printify
     public class PrintifyPatternRequest
     {
         [JsonPropertyName("spacing_x")]
-        public int SpacingX { get; set; }
+        public double SpacingX { get; set; }
 
         [JsonPropertyName("spacing_y")]
-        public int SpacingY { get; set; }
+        public double SpacingY { get; set; }
 
-        [JsonPropertyName("scale")]
-        public int Scale { get; set; }
+        [JsonPropertyName("angle")]
+        public double Angle { get; set; }
 
         [JsonPropertyName("offset")]
-        public int Offset { get; set; }
+        public double Offset { get; set; }
     }
 
     public class PrintifyProductResponse

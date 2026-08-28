@@ -12,6 +12,8 @@ export default function SelectProductsStep() {
     project, blueprints, collectionId, collectionProducts,
     STEPS, setStep, onClose, goBack,
     setMessage, ensureCollection, api,
+    projectQuestions, collectionArtwork, aiItems, blueprintItemIds,
+    setCurrentItemIndex, loadItemData,
   } = useCollection();
 
   const { getBlueprintImageUrl } = Printify(session);
@@ -85,13 +87,31 @@ export default function SelectProductsStep() {
       }));
 
       await api.saveCollectionProducts({ collectionId: colId, products });
-      setStep(STEPS.PROJECT_QUESTIONS);
+
+      // Skip project questions step if there are no project questions
+      if (projectQuestions.length === 0) {
+        const acceptedItemIds = new Set(
+          collectionArtwork.filter(a => a.accepted).map(a => String(a.itemId))
+        );
+        const firstBlueprintItemIndex = aiItems.findIndex(item =>
+          blueprintItemIds.has(String(item.id)) &&
+          !acceptedItemIds.has(String(item.id))
+        );
+        if (firstBlueprintItemIndex === -1) {
+          setStep(STEPS.READY_TO_GENERATE);
+        } else {
+          setCurrentItemIndex(firstBlueprintItemIndex);
+          loadItemData(firstBlueprintItemIndex);
+        }
+      } else {
+        setStep(STEPS.PROJECT_QUESTIONS);
+      }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save product selection' });
     } finally {
       setSaving(false);
     }
-  }, [collectionId, ensureCollection, blueprints, checkMap, api, setStep, STEPS, setMessage]);
+  }, [collectionId, ensureCollection, blueprints, checkMap, api, setStep, STEPS, setMessage, projectQuestions, collectionArtwork, aiItems, blueprintItemIds, setCurrentItemIndex, loadItemData]);
 
   if (blueprints.length === 0) {
     return (

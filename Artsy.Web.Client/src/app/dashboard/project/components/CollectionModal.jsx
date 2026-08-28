@@ -22,7 +22,7 @@ const stepTitle = (step, title) => {
   switch (step) {
     case STEPS.SELECT_PRODUCTS: return `${prefix} - Select Products`;
     case STEPS.PROJECT_QUESTIONS: return `${prefix} - Project Questions`;
-    case STEPS.ARTWORK_QUESTIONS: return `${prefix} - Artwork Questions`;
+    case STEPS.ARTWORK_QUESTIONS: return `${prefix} - Artwork Generation`;
     case STEPS.ARTWORK_PREVIEW: return `${prefix} - Artwork Preview`;
     case STEPS.READY_TO_GENERATE: return `${prefix} - Ready to Upscale`;
     case STEPS.PRODUCT_IMAGE_PROMPT: return `${prefix} - Product Image Prompt`;
@@ -220,14 +220,29 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
       return;
     }
     if (resumeStep === STEPS.PROJECT_QUESTIONS) {
+      setStep(STEPS.PROJECT_QUESTIONS);
       setResumeStep(null);
       setInitialLoading(false);
       return;
     }
     if (resumeStep === 'artwork_resume') {
       if (!aiItemsLoaded) return;
-      if (initialCollectionId && collectionArtwork.length === 0) return;
       setResumeStep(null);
+
+      // No artwork yet — start at the first artwork item
+      if (collectionArtwork.length === 0) {
+        const firstBlueprintItemIndex = aiItems.findIndex(item =>
+          blueprintItemIds.has(String(item.id))
+        );
+        if (firstBlueprintItemIndex !== -1) {
+          setCurrentItemIndex(firstBlueprintItemIndex);
+          loadItemData(firstBlueprintItemIndex);
+        } else {
+          setStep(STEPS.READY_TO_GENERATE);
+        }
+        setInitialLoading(false);
+        return;
+      }
 
       const artworkItemIds = new Set(
         collectionArtwork.map(a => String(a.itemId))

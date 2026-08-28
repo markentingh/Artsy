@@ -144,6 +144,8 @@ namespace Artsy.API.Controllers
                         printifyImageId = a.PrintifyImageId,
                         opacity = a.Opacity,
                         totalPlacements = a.TotalPlacements,
+                        design = a.Design,
+                        patternJson = a.PatternJson,
                         needsRegeneration,
                         hasGroups = groupPlacements.Count > 0,
                         groupPlacements,
@@ -254,10 +256,18 @@ namespace Artsy.API.Controllers
                 // Build the generation plan (placements, variants, references, prompt, mask requirements)
                 var plan = await _artworkGenerationPlanService.BuildPlanAsync(
                     request.ProjectId, request.CollectionId, request.ItemId,
-                    request.RequestedChanges, request.Answers, resolutionTier: 2);
+                    request.RequestedChanges, request.Answers, resolutionTier: 2,
+                    design: request.Design ?? "artwork");
 
                 if (string.IsNullOrWhiteSpace(plan.FinalPrompt))
                     return Json(new ApiResponse { success = false, message = "Prompt is required to generate artwork." });
+
+                // For pattern design mode, append seamless repeating pattern instructions to the prompt
+                var isPattern = string.Equals(request.Design, "pattern", StringComparison.OrdinalIgnoreCase);
+                if (isPattern)
+                {
+                    plan.FinalPrompt += ". Design this as a seamless repeating pattern that tiles perfectly without visible seams or borders. The artwork should be a continuous tileable pattern that can be repeated horizontally and vertically.";
+                }
 
                 var opacitySettings = _opacityService.ParseOpacityJson(plan.Artwork.OpacityJson);
 
@@ -298,6 +308,8 @@ namespace Artsy.API.Controllers
                     TotalPlacements = plan.TotalPlacements,
                     FullSize = !isFirstGeneration && existingArtwork != null ? existingArtwork.FullSize : false,
                     Accepted = !isFirstGeneration && existingArtwork != null ? existingArtwork.Accepted : false,
+                    Design = string.IsNullOrWhiteSpace(request.Design) ? "artwork" : request.Design,
+                    PatternJson = request.PatternJson ?? "",
                 };
                 var created = await _projectCollectionArtworkRepository.UpsertAsync(collectionArtwork);
 
@@ -317,7 +329,7 @@ namespace Artsy.API.Controllers
                         previousResponseId = created.ResponseId;
                     }
 
-                    var genQuality = request.IsFullSize ? "high" : "medium";
+                    var genQuality = "medium";
                     var tokenCost = _tokenCostOptions.Cost > 0 ? _tokenCostOptions.Cost : 0.01m;
                     var tokenizer = imageGen.CreateTokenizer(genModel);
 
@@ -1776,7 +1788,7 @@ namespace Artsy.API.Controllers
                             int taskTokensInt;
                             if (tokenizer != null)
                             {
-                                var tokenCalc = tokenizer.CalculateTokens(plan.FinalPrompt, task.Width, task.Height, "high", null, "auto", tokenCost);
+                                var tokenCalc = tokenizer.CalculateTokens(plan.FinalPrompt, task.Width, task.Height, "medium", null, "auto", tokenCost);
                                 taskTokensInt = tokenCalc.PlatformTokens;
                             }
                             else

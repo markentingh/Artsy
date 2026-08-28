@@ -9,5 +9,8 @@ namespace Artsy.API.Models.Projects
 
         [JsonPropertyName("aspectRatio")]
         public string AspectRatio { get; set; } = "1:1";
+
+        [JsonPropertyName("design")]
+        public string? Design { get; set; }
     }
 }

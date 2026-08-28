@@ -49,6 +49,8 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const [artworkType, setArtworkType] = useState('ai');
   const [aspectRatio, setAspectRatio] = useState('1:1');
   const [initialAspectRatio, setInitialAspectRatio] = useState('1:1');
+  const [designType, setDesignType] = useState('artwork');
+  const [initialDesignType, setInitialDesignType] = useState('artwork');
   const [customImageId, setCustomImageId] = useState(null);
   const [showCustomImageSelector, setShowCustomImageSelector] = useState(false);
   const [showReferenceCustomImageSelector, setShowReferenceCustomImageSelector] = useState(false);
@@ -141,6 +143,8 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setArtworkType('ai');
     setAspectRatio('1:1');
     setInitialAspectRatio('1:1');
+    setDesignType('artwork');
+    setInitialDesignType('artwork');
     setCustomImageId(null);
     setShowCustomImageSelector(false);
     setQuestions([]);
@@ -195,6 +199,8 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
           setArtworkType(response.data.data?.artworkType || 'ai');
           setAspectRatio(response.data.data?.aspectRatio || '1:1');
           setInitialAspectRatio(response.data.data?.aspectRatio || '1:1');
+          setDesignType(response.data.data?.design || 'artwork');
+          setInitialDesignType(response.data.data?.design || 'artwork');
           setCustomImageId(response.data.data?.customImageId || null);
           try {
             const ignored = response.data.data?.ignoredQuestions;
@@ -447,7 +453,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
     setAspectRatio(value);
     if (!item) return;
     try {
-      const response = await updateItemAspectRatio({ itemId: item.id, aspectRatio: value });
+      const response = await updateItemAspectRatio({ itemId: item.id, aspectRatio: value, design: designType });
       if (response.data.success) {
         setMessage(null);
         setInitialAspectRatio(value);
@@ -456,6 +462,22 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save aspect ratio' });
+    }
+  };
+
+  const handleDesignChange = async (value) => {
+    setDesignType(value);
+    if (!item) return;
+    try {
+      const response = await updateItemAspectRatio({ itemId: item.id, aspectRatio, design: value });
+      if (response.data.success) {
+        setMessage(null);
+        setInitialDesignType(value);
+      } else {
+        setMessage({ type: 'error', text: response.data.message || 'Failed to save design' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to save design' });
     }
   };
 
@@ -610,6 +632,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
         itemId: item.id,
         modelId: selectedImageModelId,
         answers: answerList,
+        design: designType,
       });
       if (response.data.success) {
         const updated = await getItemPreviews(item.id);
@@ -789,6 +812,21 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
               placeholder="Select aspect ratio..."
             />
           )}
+          {artworkType === 'ai' && (
+            <div className="mt-3">
+              <Select
+                label="Design"
+                name="design"
+                value={designType}
+                onChange={(e) => handleDesignChange(e.target.value)}
+                options={[
+                  { value: 'artwork', label: 'Artwork' },
+                  { value: 'pattern', label: 'Pattern' },
+                ]}
+                fitContent
+              />
+            </div>
+          )}
         </div>
       )}
       {(titleDirty || socialMedia !== initialSocialMedia) && (
@@ -804,7 +842,7 @@ export default function EditArtworkModal({ show, item, onClose, onChanged }) {
   const questionTabContent = (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300">Artwork Questions</h3>
+        <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300">Artwork Generation</h3>
         <ButtonOutline onClick={handleOpenNewQuestion}>
           New Question
         </ButtonOutline>

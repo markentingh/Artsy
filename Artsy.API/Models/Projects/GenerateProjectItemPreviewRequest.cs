@@ -12,5 +12,11 @@ namespace Artsy.API.Models.Projects
 
         [JsonPropertyName("answers")]
         public List<GenerateProjectItemPreviewAnswer> Answers { get; set; } = new();
+
+        [JsonPropertyName("design")]
+        public string? Design { get; set; }
+
+        [JsonPropertyName("collectionId")]
+        public Guid? CollectionId { get; set; }
     }
 }

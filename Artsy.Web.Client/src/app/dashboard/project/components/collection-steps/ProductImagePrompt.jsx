@@ -362,15 +362,15 @@ export default function ProductImagePrompt() {
                   <span>Estimating...</span>
                 </div>
               ) : tokenEstimate != null ? (
-                <div className="flex items-center gap-3" style={{ marginBottom: '2em' }}>
+                <div className="flex flex-col items-end gap-1" style={{ marginBottom: '2em' }}>
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    <span className="font-medium">Token Cost: <span className="text-white font-bold">{tokenEstimate.toLocaleString()}</span></span>
+                  </div>
                   {estimateGenerations && estimateGenerations.length > 0 && (
                     <ButtonOutline color="gray" size="small" onClick={() => setShowCostBreakdown(true)}>
                       Cost Breakdown
                     </ButtonOutline>
                   )}
-                  <div className="text-sm text-gray-500 dark:text-gray-400">
-                    <span className="font-medium">Token Cost: <span className="text-white font-bold">{tokenEstimate.toLocaleString()}</span></span>
-                  </div>
                 </div>
               ) : null}
         </div>

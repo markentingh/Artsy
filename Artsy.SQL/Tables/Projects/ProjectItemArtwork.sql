@@ -17,6 +17,8 @@ ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "CustomImageId"
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "IgnoredQuestions" TEXT NULL;
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "OpacityJson" TEXT NULL;
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "AspectRatio" VARCHAR(16) NOT NULL DEFAULT '1:1';
+ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "Design" VARCHAR(16) NOT NULL DEFAULT 'artwork';
+ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "OptionalPrompt" TEXT NULL;
 
 CREATE INDEX IF NOT EXISTS "IX_ProjectItemArtwork_ProjectId" ON public."ProjectItemArtwork" ("ProjectId");
 CREATE INDEX IF NOT EXISTS "IX_ProjectItemArtwork_ItemId" ON public."ProjectItemArtwork" ("ItemId");

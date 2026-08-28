@@ -188,6 +188,16 @@ export default function CreateProducts() {
     acceptedArtwork.flatMap(a => {
       const thumbs = [];
 
+      // Pattern mode: show only the base artwork image (1 image used across all placements)
+      if (a.design === 'pattern') {
+        thumbs.push({
+          ...a,
+          imageUrl: artworkThumbUrl(collectionId, a.itemId, a.id),
+          type: 'artwork',
+        });
+        return thumbs;
+      }
+
       // Show group placements as separate thumbnails
       if (a.hasGroups && a.groupPlacements) {
         for (const grp of a.groupPlacements) {
