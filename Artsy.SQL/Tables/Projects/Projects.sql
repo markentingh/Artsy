@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS public."Projects" (
     "PublishToPrintify" BOOLEAN NOT NULL DEFAULT TRUE,
     "PostToInstagram" BOOLEAN NOT NULL DEFAULT TRUE,
     "PrintifyStoreId" INTEGER NULL,
+    "InstagramId" UUID NULL,
+    "SocialMediaPrompt" TEXT NULL,
+    "SocialMediaDescription" TEXT NULL,
     "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -8,6 +8,9 @@ namespace Artsy.Data.Interfaces.Orders
         Task<OrderItemArtwork?> GetByIdAsync(Guid id);
         Task<OrderItemArtwork> CreateAsync(OrderItemArtwork artwork);
         Task UpdateAsync(OrderItemArtwork artwork);
+        Task UpdateActiveAsync(Guid id, bool active, DateTime updated);
+        Task UpdateOpacityAsync(Guid id, bool opacity);
+        Task UpdateAcceptedAsync(Guid id, bool accepted, DateTime updated);
         Task DeleteAsync(Guid id);
     }
 }

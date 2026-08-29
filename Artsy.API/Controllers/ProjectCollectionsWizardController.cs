@@ -107,7 +107,7 @@ namespace Artsy.API.Controllers
                     bool needsRegeneration = false;
                     try
                     {
-                        var plan = await _artworkGenerationPlanService.BuildPlanAsync(collection.ProjectId, collectionId, a.ItemId, resolutionTier: 2);
+                        var plan = await _artworkGenerationPlanService.BuildPlanAsync(collection.ProjectId, collectionId, a.ItemId, resolutionTier: 2, design: a.Design ?? "artwork");
                         needsRegeneration = a.TotalPlacements != plan.TotalPlacements;
                     }
                     catch { /* if plan fails, assume no regeneration needed */ }
@@ -146,6 +146,7 @@ namespace Artsy.API.Controllers
                         totalPlacements = a.TotalPlacements,
                         design = a.Design,
                         patternJson = a.PatternJson,
+                        optionalPrompt = a.OptionalPrompt,
                         needsRegeneration,
                         hasGroups = groupPlacements.Count > 0,
                         groupPlacements,
@@ -310,6 +311,7 @@ namespace Artsy.API.Controllers
                     Accepted = !isFirstGeneration && existingArtwork != null ? existingArtwork.Accepted : false,
                     Design = string.IsNullOrWhiteSpace(request.Design) ? "artwork" : request.Design,
                     PatternJson = request.PatternJson ?? "",
+                    OptionalPrompt = request.OptionalPrompt,
                 };
                 var created = await _projectCollectionArtworkRepository.UpsertAsync(collectionArtwork);
 
@@ -833,9 +835,8 @@ namespace Artsy.API.Controllers
                     await _projectCollectionArtworkPlacementRepository.SetFullSizeAsync(p.Id, false);
                     await _projectCollectionArtworkPlacementRepository.SetPrintifyImageIdAsync(p.Id, "");
                 }
-                artwork.FullSize = false;
                 await _projectCollectionArtworkRepository.SetPrintifyImageIdAsync(artwork.Id, "");
-                await _projectCollectionArtworkRepository.UpdateAsync(artwork);
+                await _projectCollectionArtworkRepository.UpdateFullSizeAsync(artwork.Id, false);
 
                 // Regenerate thumbnail after segments are re-cut and flipped
                 if (artwork.Opacity)
@@ -1144,7 +1145,7 @@ namespace Artsy.API.Controllers
                 var allPlacements = await _projectCollectionArtworkPlacementRepository.GetByArtworkIdAsync(artwork.Id);
                 var allPlacementList = allPlacements.ToList();
                 artwork.FullSize = allPlacementList.Count == 0 || allPlacementList.All(p => p.FullSize);
-                await _projectCollectionArtworkRepository.UpdateAsync(artwork);
+                await _projectCollectionArtworkRepository.UpdateFullSizeAsync(artwork.Id, artwork.FullSize);
 
                 var upscaledImageModel = await _imageGenerationModelRepository.GetByModelKeyAsync(artwork.ImageModel);
 
@@ -1197,6 +1198,40 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
                 await _projectCollectionRepository.DeleteAsync(request.Id);
+                return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("update-collection-artwork-optional-prompt")]
+        public async Task<IActionResult> UpdateCollectionArtworkOptionalPrompt([FromBody] UpdateCollectionArtworkOptionalPromptRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.CollectionId == Guid.Empty || request.ItemId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Collection ID and Item ID are required." });
+
+            try
+            {
+                var collection = await _projectCollectionRepository.GetByIdAsync(request.CollectionId);
+                if (collection == null || collection.Status != 1)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var project = await _projectRepository.GetByIdAsync(collection.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                var artwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(request.CollectionId, request.ItemId);
+                if (artwork == null)
+                    return Json(new ApiResponse { success = false, message = "Collection artwork not found." });
+
+                await _projectCollectionArtworkRepository.UpdateOptionalPromptAsync(request.CollectionId, request.ItemId, request.OptionalPrompt);
+
                 return Json(new ApiResponse { success = true });
             }
             catch (Exception ex)
@@ -1417,7 +1452,7 @@ namespace Artsy.API.Controllers
                     else if (!existing.Active)
                     {
                         existing.Active = true;
-                        await _projectCollectionProductImageRepository.UpdateAsync(existing);
+                        await _projectCollectionProductImageRepository.UpdateActiveAsync(existing.Id, existing.Active);
                     }
                 }
 
@@ -1775,11 +1810,11 @@ namespace Artsy.API.Controllers
                 {
                     try
                     {
-                        var plan = await _artworkGenerationPlanService.BuildPlanAsync(request.ProjectId, request.CollectionId ?? Guid.Empty, aiItem.Id, resolutionTier: 2);
+                        var existingArt = existingArtworkByItem.TryGetValue(aiItem.Id, out var existingList) ? existingList.FirstOrDefault() : null;
+                        var plan = await _artworkGenerationPlanService.BuildPlanAsync(request.ProjectId, request.CollectionId ?? Guid.Empty, aiItem.Id, resolutionTier: 2, design: existingArt?.Design ?? "artwork");
                         var itemTokens = 0m;
 
                         // Check if the plan's total placements matches the stored TotalPlacements on existing artwork
-                        var existingArt = existingArtworkByItem.TryGetValue(aiItem.Id, out var existingList) ? existingList.FirstOrDefault() : null;
                         var itemNeedsRegeneration = existingArt != null && existingArt.TotalPlacements != plan.TotalPlacements;
 
                         foreach (var task in plan.Tasks)
@@ -2739,7 +2774,7 @@ namespace Artsy.API.Controllers
                     if (collectionProduct != null && collectionProduct.Name != request.ProductName)
                     {
                         collectionProduct.Name = request.ProductName;
-                        await _productRepository.UpdateAsync(collectionProduct);
+                        await _productRepository.UpdateNameAsync(collectionProduct.Id, collectionProduct.Name);
                     }
                 }
 
@@ -2797,7 +2832,7 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Product image not found." });
 
                 productImage.Accepted = true;
-                await _projectCollectionProductImageRepository.UpdateAsync(productImage);
+                await _projectCollectionProductImageRepository.UpdateAcceptedAsync(productImage.Id, productImage.Accepted);
 
                 return Json(new ApiResponse { success = true });
             }
@@ -3126,7 +3161,7 @@ namespace Artsy.API.Controllers
                     else
                     {
                         existing.Active = sel.Active;
-                        await _productRepository.UpdateAsync(existing);
+                        await _productRepository.UpdateActiveAsync(existing.Id, existing.Active);
                     }
                 }
 

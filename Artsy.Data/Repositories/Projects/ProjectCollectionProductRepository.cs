@@ -84,5 +84,23 @@ namespace Artsy.Data.Repositories.Projects
             const string query = @"DELETE FROM public.""ProjectCollectionProducts"" WHERE ""Id"" = @id";
             await _dbConnection.ExecuteAsync(query, new { id });
         }
+
+        public async Task UpdateNameAsync(Guid id, string name)
+        {
+            const string query = @"
+        UPDATE public.""ProjectCollectionProducts""
+        SET ""Name"" = @name
+        WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, name });
+        }
+
+        public async Task UpdateActiveAsync(Guid id, bool active)
+        {
+            const string query = @"
+        UPDATE public.""ProjectCollectionProducts""
+        SET ""Active"" = @active
+        WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, active });
+        }
     }
 }

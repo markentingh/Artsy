@@ -23,7 +23,7 @@ export default function PatternSettings({ patternSettings, setPatternSettings })
             onChange={(e) => handleChange('spacingX', e.target.value)}
             className="px-2 py-1 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             style={{ width: '5em' }}
-            placeholder="0.5"
+            placeholder="1"
           />
         </div>
         <div>
@@ -36,7 +36,7 @@ export default function PatternSettings({ patternSettings, setPatternSettings })
             onChange={(e) => handleChange('spacingY', e.target.value)}
             className="px-2 py-1 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             style={{ width: '5em' }}
-            placeholder="0.5"
+            placeholder="1"
           />
         </div>
         <div>

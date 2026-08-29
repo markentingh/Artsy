@@ -93,7 +93,7 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
                 question.Question = request.Question.Trim();
-                await _projectQuestionRepository.UpdateAsync(question);
+                await _projectQuestionRepository.UpdateQuestionAsync(question.Id, question.Question);
                 return Json(new ApiResponse { success = true, data = question });
             }
             catch (Exception ex)

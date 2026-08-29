@@ -380,6 +380,22 @@ export default function CreateProducts() {
             if (response.data.data.mockupsDownloaded) {
               successCount++;
             }
+          } else if (response.data.data?.recreate) {
+            // Product no longer exists on Printify — remove stale record and create a new one
+            setPrintifyProducts(prev => prev.filter(p => p.projectBlueprintId !== bp.id));
+            const createResponse = await printifyProductsApi.create({
+              collectionId,
+              projectBlueprintId: bp.id,
+            });
+
+            if (createResponse.data.success) {
+              setPrintifyProducts(prev => [...prev.filter(p => p.projectBlueprintId !== bp.id), createResponse.data.data]);
+              if (createResponse.data.data.mockupsDownloaded) {
+                successCount++;
+              }
+            } else {
+              setMessage({ type: 'error', text: createResponse.data.message || `Failed to create product for ${bp.name}` });
+            }
           } else {
             setMessage({ type: 'error', text: response.data.message || `Failed to download mockups for ${bp.name}` });
           }

@@ -8,6 +8,8 @@ namespace Artsy.Data.Interfaces.Projects
         Task<ProjectCollection?> GetByIdAsync(Guid id);
         Task<ProjectCollection> CreateAsync(ProjectCollection collection);
         Task UpdateAsync(ProjectCollection collection);
+        Task UpdateTitleAsync(Guid id, string title);
+        Task UpdateDescriptionAsync(Guid id, string? description);
         Task DeleteAsync(Guid id);
     }
 }

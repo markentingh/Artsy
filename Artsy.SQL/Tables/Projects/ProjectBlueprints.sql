@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS public."ProjectBlueprints"
     "Status" INT NOT NULL DEFAULT 1,
     "Description" TEXT NOT NULL DEFAULT '',
     "SafetyInfo" TEXT NOT NULL DEFAULT '',
-    "PricingJson" TEXT NOT NULL DEFAULT '[]'
+    "PricingJson" TEXT NOT NULL DEFAULT '[]',
+    "PrintProviderId" INT NOT NULL DEFAULT 0
 );
 
 ALTER TABLE public."ProjectBlueprints" ADD COLUMN IF NOT EXISTS "Status" INT NOT NULL DEFAULT 1;

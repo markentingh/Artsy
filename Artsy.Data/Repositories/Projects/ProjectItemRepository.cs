@@ -57,6 +57,24 @@ namespace Artsy.Data.Repositories.Projects
             await _dbConnection.ExecuteAsync(query, item);
         }
 
+        public async Task UpdateTitleAsync(Guid id, string title)
+        {
+            const string query = @"
+                UPDATE public.""ProjectItems""
+                SET ""Title"" = @title
+                WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, title });
+        }
+
+        public async Task UpdateSocialMediaAsync(Guid id, bool socialMedia)
+        {
+            const string query = @"
+                UPDATE public.""ProjectItems""
+                SET ""SocialMedia"" = @socialMedia
+                WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, socialMedia });
+        }
+
         public async Task ReorderAsync(IEnumerable<Guid> itemIds)
         {
             var idList = itemIds.ToList();

@@ -66,6 +66,24 @@ namespace Artsy.Data.Repositories.Projects
             await _dbConnection.ExecuteAsync(query, project);
         }
 
+        public async Task UpdateTitleAsync(Guid id, Guid appUserId, string title)
+        {
+            const string query = @"UPDATE public.""Projects"" SET ""Title"" = @title WHERE ""Id"" = @id AND ""AppUserId"" = @appUserId";
+            await _dbConnection.ExecuteAsync(query, new { id, appUserId, title });
+        }
+
+        public async Task UpdateKeyAsync(Guid id, Guid appUserId, string key)
+        {
+            const string query = @"UPDATE public.""Projects"" SET ""Key"" = @key WHERE ""Id"" = @id AND ""AppUserId"" = @appUserId";
+            await _dbConnection.ExecuteAsync(query, new { id, appUserId, key });
+        }
+
+        public async Task UpdatePublishToPrintifyAsync(Guid id, Guid appUserId, bool publishToPrintify)
+        {
+            const string query = @"UPDATE public.""Projects"" SET ""PublishToPrintify"" = @publishToPrintify WHERE ""Id"" = @id AND ""AppUserId"" = @appUserId";
+            await _dbConnection.ExecuteAsync(query, new { id, appUserId, publishToPrintify });
+        }
+
         public async Task UpdatePrintifyStoreIdAsync(Guid id, Guid appUserId, int? printifyStoreId)
         {
             const string query = @"UPDATE public.""Projects"" SET ""PrintifyStoreId"" = @printifyStoreId WHERE ""Id"" = @id AND ""AppUserId"" = @appUserId";

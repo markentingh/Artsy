@@ -46,6 +46,15 @@ namespace Artsy.Data.Repositories.Projects
             await _dbConnection.ExecuteAsync(query, idea);
         }
 
+        public async Task UpdateMetadataJsonAsync(Guid id, string metadataJson)
+        {
+            const string query = @"
+        UPDATE public.""ProjectIdeas""
+        SET ""MetadataJson"" = @metadataJson
+        WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, metadataJson });
+        }
+
         public async Task DeleteAsync(Guid id)
         {
             const string deleteVariationsQuery = @"DELETE FROM public.""ProjectIdeaVariations"" WHERE ""ProjectIdeaId"" = @id";

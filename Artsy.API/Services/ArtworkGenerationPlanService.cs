@@ -133,9 +133,13 @@ namespace Artsy.API.Services
                 finalPrompt += $" the background for this image must be a completely flat, uniform, solid color using {hexColor} hex color with no gradients, textures, shadows, or objects, filling the entire background area, so that we can apply a chroma key to the image later";
             }
 
-            // Append optional user-provided prompt at the very bottom
-            if (!string.IsNullOrWhiteSpace(artwork.OptionalPrompt))
-                finalPrompt += $" {artwork.OptionalPrompt.Trim()}";
+            // Append optional user-provided prompt from collection artwork at the very bottom
+            if (collectionId != Guid.Empty)
+            {
+                var collectionArtwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(collectionId, itemId);
+                if (collectionArtwork != null && !string.IsNullOrWhiteSpace(collectionArtwork.OptionalPrompt))
+                    finalPrompt += $" {collectionArtwork.OptionalPrompt.Trim()}";
+            }
 
             // --- Collect blueprint placements for this item ---
             var allBlueprints = await _projectBlueprintRepository.GetByProjectIdAsync(projectId);

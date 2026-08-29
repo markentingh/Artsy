@@ -16,5 +16,7 @@ namespace Artsy.Data.Interfaces.Projects
         Task AcceptAsync(Guid collectionId, Guid itemId);
         Task DeleteAsync(Guid collectionId, Guid itemId);
         Task SetPrintifyImageIdAsync(Guid artworkId, string printifyImageId);
+        Task UpdateOptionalPromptAsync(Guid collectionId, Guid itemId, string? optionalPrompt);
+        Task UpdateFullSizeAsync(Guid artworkId, bool fullSize);
     }
 }

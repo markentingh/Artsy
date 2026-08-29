@@ -201,7 +201,7 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
                 item.Title = request.Title;
-                await _projectItemRepository.UpdateAsync(item);
+                await _projectItemRepository.UpdateTitleAsync(item.Id, item.Title);
                 return Json(new ApiResponse { success = true, data = item });
             }
             catch (Exception ex)
@@ -231,7 +231,7 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
                 item.SocialMedia = request.SocialMedia;
-                await _projectItemRepository.UpdateAsync(item);
+                await _projectItemRepository.UpdateSocialMediaAsync(item.Id, item.SocialMedia);
                 return Json(new ApiResponse { success = true, data = item });
             }
             catch (Exception ex)

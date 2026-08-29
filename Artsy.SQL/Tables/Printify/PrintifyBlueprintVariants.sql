@@ -8,7 +8,22 @@ CREATE TABLE IF NOT EXISTS public."PrintifyBlueprintVariants"
     "Options" TEXT NOT NULL DEFAULT '{}',
     "Size" VARCHAR(64) NOT NULL DEFAULT '',
     "DecorationMethods" TEXT NOT NULL DEFAULT '[]',
-    "DateUpdated" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "DateUpdated" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "Depth" VARCHAR(32),
+    "Design" VARCHAR(32),
+    "Finish" VARCHAR(32),
+    "Flavor" VARCHAR(32),
+    "Hands" VARCHAR(32),
+    "Length" VARCHAR(32),
+    "Material" VARCHAR(32),
+    "Paper" VARCHAR(32),
+    "Quantity" VARCHAR(32),
+    "Scent" VARCHAR(32),
+    "Shape" VARCHAR(32),
+    "Surface" VARCHAR(32),
+    "Type" VARCHAR(32),
+    "Voltage" VARCHAR(32),
+    "Weight" VARCHAR(32)
 );
 
 CREATE INDEX IF NOT EXISTS idx_printify_variants_blueprint_provider

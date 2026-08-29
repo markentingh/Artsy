@@ -51,6 +51,15 @@ namespace Artsy.Data.Repositories.Projects
             await _dbConnection.ExecuteAsync(query, question);
         }
 
+        public async Task UpdateQuestionAsync(Guid id, string question)
+        {
+            const string query = @"
+        UPDATE public.""ProjectItemQuestions""
+        SET ""Question"" = @question
+        WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, question });
+        }
+
         public async Task DeleteAsync(Guid id)
         {
             const string query = @"UPDATE public.""ProjectItemQuestions"" SET ""Status"" = 0 WHERE ""Id"" = @id";

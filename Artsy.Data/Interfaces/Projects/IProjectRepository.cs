@@ -10,6 +10,9 @@ namespace Artsy.Data.Interfaces.Projects
         Task<Project?> GetByKeyAsync(string key);
         Task<Project> CreateAsync(Project project);
         Task UpdateAsync(Project project);
+        Task UpdateTitleAsync(Guid id, Guid appUserId, string title);
+        Task UpdateKeyAsync(Guid id, Guid appUserId, string key);
+        Task UpdatePublishToPrintifyAsync(Guid id, Guid appUserId, bool publishToPrintify);
         Task UpdatePrintifyStoreIdAsync(Guid id, Guid appUserId, int? printifyStoreId);
         Task UpdateInstagramIdAsync(Guid id, Guid appUserId, Guid? instagramId);
         Task UpdatePostToInstagramAsync(Guid id, Guid appUserId, bool postToInstagram);

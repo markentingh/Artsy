@@ -9,6 +9,8 @@ namespace Artsy.Data.Interfaces.Projects
         Task<ProjectItem?> GetByIdAsync(Guid id);
         Task<ProjectItem> CreateAsync(ProjectItem item);
         Task UpdateAsync(ProjectItem item);
+        Task UpdateTitleAsync(Guid id, string title);
+        Task UpdateSocialMediaAsync(Guid id, bool socialMedia);
         Task ReorderAsync(IEnumerable<Guid> itemIds);
         Task DeleteAsync(Guid id);
     }

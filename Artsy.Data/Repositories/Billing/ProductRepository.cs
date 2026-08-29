@@ -49,6 +49,15 @@ namespace Artsy.Data.Repositories
             await _dbConnection.ExecuteAsync(query, product);
         }
 
+        public async Task UpdateDetailsAsync(int id, string title, int price, int tokens)
+        {
+            const string query = @"
+                UPDATE public.""Products""
+                SET ""Title"" = @title, ""Price"" = @price, ""Tokens"" = @tokens
+                WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, title, price, tokens });
+        }
+
         public async Task ArchiveAsync(int id)
         {
             const string query = @"UPDATE public.""Products"" SET ""Archived"" = TRUE WHERE ""Id"" = @id";

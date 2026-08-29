@@ -49,6 +49,7 @@ export default function ArtworkQuestions() {
   const [previewImageOverride, setPreviewImageOverride] = useState(null);
   const optionalPromptTimerRef = useRef(null);
   const optionalPromptRef = useRef(null);
+  const loadedOptionalPromptRef = useRef('');
 
   const autoResizeTextarea = useCallback((el) => {
     if (!el) return;
@@ -63,19 +64,27 @@ export default function ArtworkQuestions() {
     }
   }, [optionalPrompt, autoResizeTextarea]);
 
-  // Debounced auto-save of optional prompt (2 second delay)
+  // Track the loaded value so auto-save only fires on user edits, not on load
   useEffect(() => {
-    if (!currentItem) return;
+    loadedOptionalPromptRef.current = optionalPrompt;
+  }, [currentItem]); // only update when item changes, not on every keystroke
+
+  // Debounced auto-save of optional prompt to collection artwork (2 second delay)
+  // Only fires if the value differs from what was loaded (i.e. user actually edited it)
+  useEffect(() => {
+    if (!currentItem || !collectionId) return;
+    if (optionalPrompt === loadedOptionalPromptRef.current) return;
     if (optionalPromptTimerRef.current) clearTimeout(optionalPromptTimerRef.current);
     optionalPromptTimerRef.current = setTimeout(async () => {
       try {
-        await api.updateItemPrompt({ itemId: currentItem.id, prompt: currentArtwork?.prompt || '', optionalPrompt });
+        await api.updateCollectionArtworkOptionalPrompt({ collectionId, itemId: currentItem.id, optionalPrompt });
+        loadedOptionalPromptRef.current = optionalPrompt;
       } catch (error) {
         console.error('Failed to auto-save optional prompt:', error?.response?.data || error);
       }
     }, 2000);
     return () => { if (optionalPromptTimerRef.current) clearTimeout(optionalPromptTimerRef.current); };
-  }, [optionalPrompt, currentItem, api, currentArtwork]);
+  }, [optionalPrompt, currentItem, api, collectionId]);
 
   const latestRef = useRef({});
   latestRef.current = { collectionArtwork, collectionId, getCustomImageUrl };
@@ -295,8 +304,10 @@ export default function ArtworkQuestions() {
       } else if (currentArtwork?.design !== design) {
         await api.updateItemAspectRatio({ itemId: currentItem.id, aspectRatio: currentArtwork?.aspectRatio || '1:1', design });
       }
-      // 3. Save optional prompt
-      await api.updateItemPrompt({ itemId: currentItem.id, prompt: currentArtwork?.prompt || '', optionalPrompt });
+      // 3. Save optional prompt to collection artwork
+      if (collectionId) {
+        await api.updateCollectionArtworkOptionalPrompt({ collectionId, itemId: currentItem.id, optionalPrompt });
+      }
 
       const answerList = [
         ...buildProjectAnswers(),

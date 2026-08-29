@@ -8,6 +8,7 @@ namespace Artsy.Data.Interfaces.Projects
         Task<ProjectIdea?> GetByIdAsync(Guid id);
         Task<ProjectIdea> CreateAsync(ProjectIdea idea);
         Task UpdateAsync(ProjectIdea idea);
+        Task UpdateMetadataJsonAsync(Guid id, string metadataJson);
         Task DeleteAsync(Guid id);
     }
 }

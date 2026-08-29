@@ -375,7 +375,7 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
                 project.Title = request.Title.Trim();
-                await _projectRepository.UpdateAsync(project);
+                await _projectRepository.UpdateTitleAsync(project.Id, userId, project.Title);
                 return Json(new ApiResponse { success = true, data = project });
             }
             catch (Exception ex)
@@ -415,7 +415,7 @@ namespace Artsy.API.Controllers
                 }
 
                 project.Key = cleanKey;
-                await _projectRepository.UpdateAsync(project);
+                await _projectRepository.UpdateKeyAsync(project.Id, userId, project.Key);
                 return Json(new ApiResponse { success = true, data = project });
             }
             catch (Exception ex)
@@ -441,7 +441,7 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
                 project.PublishToPrintify = request.PublishToPrintify;
-                await _projectRepository.UpdateAsync(project);
+                await _projectRepository.UpdatePublishToPrintifyAsync(project.Id, userId, project.PublishToPrintify);
                 if (request.PrintifyStoreId.HasValue)
                 {
                     await _projectRepository.UpdatePrintifyStoreIdAsync(request.Id, userId, request.PrintifyStoreId);

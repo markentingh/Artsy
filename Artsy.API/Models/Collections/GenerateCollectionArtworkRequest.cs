@@ -40,5 +40,8 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("patternJson")]
         public string? PatternJson { get; set; }
+
+        [JsonPropertyName("optionalPrompt")]
+        public string? OptionalPrompt { get; set; }
     }
 }

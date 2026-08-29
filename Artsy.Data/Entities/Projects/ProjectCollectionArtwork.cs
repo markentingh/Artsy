@@ -20,5 +20,6 @@ namespace Artsy.Data.Entities.Projects
         public int TotalPlacements { get; set; } = 1;
         public string Design { get; set; } = "artwork";
         public string PatternJson { get; set; } = "";
+        public string? OptionalPrompt { get; set; }
     }
 }

@@ -16,5 +16,7 @@ namespace Artsy.Data.Interfaces.Projects
         Task SetInactiveAsync(Guid collectionId, Guid projectBlueprintId, Guid productImageId);
         Task DeleteByCollectionAndBlueprintIdAsync(Guid collectionId, Guid projectBlueprintId);
         Task DeleteAsync(Guid id);
+        Task UpdateActiveAsync(Guid id, bool active);
+        Task UpdateAcceptedAsync(Guid id, bool accepted);
     }
 }

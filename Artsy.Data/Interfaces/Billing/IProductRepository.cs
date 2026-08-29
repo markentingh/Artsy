@@ -9,6 +9,7 @@ namespace Artsy.Data.Interfaces
         Task<IEnumerable<Product>> GetAllAsync();
         Task<IEnumerable<Product>> GetActiveAsync();
         Task UpdateAsync(Product product);
+        Task UpdateDetailsAsync(int id, string title, int price, int tokens);
         Task ArchiveAsync(int id);
     }
 }

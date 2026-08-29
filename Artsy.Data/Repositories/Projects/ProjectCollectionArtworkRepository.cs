@@ -87,10 +87,10 @@ namespace Artsy.Data.Repositories.Projects
         {
             artwork.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectCollectionArtwork"" (""Id"", ""ProjectId"", ""CollectionId"", ""ItemId"", ""Active"", ""Width"", ""Height"", ""ImageModel"", ""Prompt"", ""Accepted"", ""ResponseId"", ""FullSize"", ""Index"", ""Opacity"", ""TotalPlacements"", ""Design"", ""PatternJson"")
-                VALUES (@Id, @ProjectId, @CollectionId, @ItemId, @Active, @Width, @Height, @ImageModel, @Prompt, @Accepted, @ResponseId, @FullSize, @Index, @Opacity, @TotalPlacements, @Design, @PatternJson)
+                INSERT INTO public.""ProjectCollectionArtwork"" (""Id"", ""ProjectId"", ""CollectionId"", ""ItemId"", ""Active"", ""Width"", ""Height"", ""ImageModel"", ""Prompt"", ""Accepted"", ""ResponseId"", ""FullSize"", ""Index"", ""Opacity"", ""TotalPlacements"", ""Design"", ""PatternJson"", ""OptionalPrompt"")
+                VALUES (@Id, @ProjectId, @CollectionId, @ItemId, @Active, @Width, @Height, @ImageModel, @Prompt, @Accepted, @ResponseId, @FullSize, @Index, @Opacity, @TotalPlacements, @Design, @PatternJson, @OptionalPrompt)
                 ON CONFLICT (""CollectionId"", ""ItemId"")
-                DO UPDATE SET ""Active"" = EXCLUDED.""Active"", ""Width"" = EXCLUDED.""Width"", ""Height"" = EXCLUDED.""Height"", ""ImageModel"" = EXCLUDED.""ImageModel"", ""Prompt"" = EXCLUDED.""Prompt"", ""FullSize"" = EXCLUDED.""FullSize"", ""Index"" = EXCLUDED.""Index"", ""Opacity"" = EXCLUDED.""Opacity"", ""TotalPlacements"" = EXCLUDED.""TotalPlacements"", ""Design"" = EXCLUDED.""Design"", ""PatternJson"" = EXCLUDED.""PatternJson""
+                DO UPDATE SET ""Active"" = EXCLUDED.""Active"", ""Width"" = EXCLUDED.""Width"", ""Height"" = EXCLUDED.""Height"", ""ImageModel"" = EXCLUDED.""ImageModel"", ""Prompt"" = EXCLUDED.""Prompt"", ""FullSize"" = EXCLUDED.""FullSize"", ""Index"" = EXCLUDED.""Index"", ""Opacity"" = EXCLUDED.""Opacity"", ""TotalPlacements"" = EXCLUDED.""TotalPlacements"", ""Design"" = EXCLUDED.""Design"", ""PatternJson"" = EXCLUDED.""PatternJson"", ""OptionalPrompt"" = EXCLUDED.""OptionalPrompt""
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectCollectionArtwork>(query, artwork);
         }
@@ -100,7 +100,7 @@ namespace Artsy.Data.Repositories.Projects
             const string query = @"
                 UPDATE public.""ProjectCollectionArtwork""
                 SET ""Active"" = @Active, ""Width"" = @Width, ""Height"" = @Height,
-                    ""ImageModel"" = @ImageModel, ""Prompt"" = @Prompt, ""Accepted"" = @Accepted, ""ResponseId"" = @ResponseId, ""FullSize"" = @FullSize, ""Index"" = @Index, ""Opacity"" = @Opacity, ""TotalPlacements"" = @TotalPlacements, ""Design"" = @Design, ""PatternJson"" = @PatternJson
+                    ""ImageModel"" = @ImageModel, ""Prompt"" = @Prompt, ""Accepted"" = @Accepted, ""ResponseId"" = @ResponseId, ""FullSize"" = @FullSize, ""Index"" = @Index, ""Opacity"" = @Opacity, ""TotalPlacements"" = @TotalPlacements, ""Design"" = @Design, ""PatternJson"" = @PatternJson, ""OptionalPrompt"" = @OptionalPrompt
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, artwork);
         }
@@ -129,6 +129,24 @@ namespace Artsy.Data.Repositories.Projects
                 SET ""PrintifyImageId"" = @printifyImageId
                 WHERE ""Id"" = @artworkId";
             await _dbConnection.ExecuteAsync(query, new { artworkId, printifyImageId });
+        }
+
+        public async Task UpdateOptionalPromptAsync(Guid collectionId, Guid itemId, string? optionalPrompt)
+        {
+            const string query = @"
+                UPDATE public.""ProjectCollectionArtwork""
+                SET ""OptionalPrompt"" = @optionalPrompt
+                WHERE ""CollectionId"" = @collectionId AND ""ItemId"" = @itemId";
+            await _dbConnection.ExecuteAsync(query, new { collectionId, itemId, optionalPrompt });
+        }
+
+        public async Task UpdateFullSizeAsync(Guid artworkId, bool fullSize)
+        {
+            const string query = @"
+        UPDATE public.""ProjectCollectionArtwork""
+        SET ""FullSize"" = @fullSize
+        WHERE ""Id"" = @artworkId";
+            await _dbConnection.ExecuteAsync(query, new { artworkId, fullSize });
         }
     }
 }

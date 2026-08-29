@@ -9,6 +9,7 @@ namespace Artsy.Data.Interfaces.Projects
         Task<ProjectItemQuestion?> GetByIdAsync(Guid id);
         Task<ProjectItemQuestion> CreateAsync(ProjectItemQuestion question);
         Task UpdateAsync(ProjectItemQuestion question);
+        Task UpdateQuestionAsync(Guid id, string question);
         Task DeleteAsync(Guid id);
     }
 }

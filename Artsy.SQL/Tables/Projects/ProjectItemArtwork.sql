@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS public."ProjectItemArtwork"
     "CustomImageId" UUID NULL,
     "IgnoredQuestions" TEXT NULL,
     "OpacityJson" TEXT NULL,
-    "AspectRatio" VARCHAR(16) NOT NULL DEFAULT '1:1'
+    "AspectRatio" VARCHAR(16) NOT NULL DEFAULT '1:1',
+    "Design" VARCHAR(16) NOT NULL DEFAULT 'artwork'
 );
 
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "ArtworkType" VARCHAR(16) NOT NULL DEFAULT 'ai';
@@ -18,7 +19,6 @@ ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "IgnoredQuestio
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "OpacityJson" TEXT NULL;
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "AspectRatio" VARCHAR(16) NOT NULL DEFAULT '1:1';
 ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "Design" VARCHAR(16) NOT NULL DEFAULT 'artwork';
-ALTER TABLE public."ProjectItemArtwork" ADD COLUMN IF NOT EXISTS "OptionalPrompt" TEXT NULL;
 
 CREATE INDEX IF NOT EXISTS "IX_ProjectItemArtwork_ProjectId" ON public."ProjectItemArtwork" ("ProjectId");
 CREATE INDEX IF NOT EXISTS "IX_ProjectItemArtwork_ItemId" ON public."ProjectItemArtwork" ("ItemId");

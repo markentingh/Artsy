@@ -141,7 +141,7 @@ namespace Artsy.API.Controllers
                 }
 
                 collection.Description = generatedDescription;
-                await _projectCollectionRepository.UpdateAsync(collection);
+                await _projectCollectionRepository.UpdateDescriptionAsync(collection.Id, collection.Description);
 
                 return Json(new ApiResponse { success = true, data = new { description = generatedDescription } });
             }

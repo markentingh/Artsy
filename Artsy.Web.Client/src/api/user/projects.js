@@ -91,6 +91,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     deactivateProductImages: (request) => api.post(`${apiPath}/deactivate-product-images`, request),
     syncProductImageSelections: (request) => api.post(`${apiPath}/sync-product-image-selections`, request),
     estimateCollectionTokens: (request) => api.post(`${apiPath}/estimate-collection-tokens`, request),
+    updateCollectionArtworkOptionalPrompt: (request) => api.post(`${apiPath}/update-collection-artwork-optional-prompt`, request),
     generateArtworkThumbnail: (request) => api.post(`${apiPath}/generate-artwork-thumbnail`, request),
     getProductImageVariants: (projectId, collectionId) => api.get(`${apiPath}/get-product-image-variants?projectId=${projectId}&collectionId=${collectionId}`),
     estimateProductImageTokens: (request) => api.post(`${apiPath}/estimate-product-image-tokens`, request),

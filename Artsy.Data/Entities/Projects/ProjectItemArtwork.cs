@@ -13,6 +13,5 @@ namespace Artsy.Data.Entities.Projects
         public string? OpacityJson { get; set; }
         public string AspectRatio { get; set; } = "1:1";
         public string Design { get; set; } = "artwork";
-        public string? OptionalPrompt { get; set; }
     }
 }

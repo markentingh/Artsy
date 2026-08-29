@@ -69,7 +69,7 @@ namespace Artsy.API.Controllers.Admin
                     existing.Title = request.Title;
                     existing.Price = request.Price;
                     existing.Tokens = request.Tokens;
-                    await _productRepository.UpdateAsync(existing);
+                    await _productRepository.UpdateDetailsAsync(existing.Id, existing.Title, existing.Price, existing.Tokens);
                     return Json(new ApiResponse { success = true, data = existing });
                 }
                 else

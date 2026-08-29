@@ -153,9 +153,13 @@ namespace Artsy.API.Controllers
                     finalPrompt += $" the background for this image must be a solid color using {hexColor} hex color so that we can apply a chroma key to the image later";
                 }
 
-                // Append optional user-provided prompt at the very bottom
-                if (!string.IsNullOrWhiteSpace(artwork.OptionalPrompt))
-                    finalPrompt += $" {artwork.OptionalPrompt.Trim()}";
+                // Append optional user-provided prompt from collection artwork at the very bottom
+                if (request.CollectionId.HasValue && request.CollectionId.Value != Guid.Empty)
+                {
+                    var collectionArtwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(request.CollectionId.Value, request.ItemId);
+                    if (collectionArtwork != null && !string.IsNullOrWhiteSpace(collectionArtwork.OptionalPrompt))
+                        finalPrompt += $" {collectionArtwork.OptionalPrompt.Trim()}";
+                }
 
                 modelRequest.Prompt = finalPrompt;
                 // Use the artwork's aspect ratio to determine preview dimensions at 1K

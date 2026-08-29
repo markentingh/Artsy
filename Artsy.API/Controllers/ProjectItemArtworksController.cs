@@ -69,17 +69,19 @@ namespace Artsy.API.Controllers
                     {
                         ItemId = request.ItemId,
                         ProjectId = item.ProjectId,
-                        Prompt = request.Prompt ?? "",
-                        OptionalPrompt = request.OptionalPrompt
+                        Prompt = request.Prompt ?? ""
                     };
                     var created = await _projectItemArtworkRepository.CreateAsync(artwork);
                     return Json(new ApiResponse { success = true, data = created });
                 }
                 else
                 {
-                    artwork.Prompt = request.Prompt ?? "";
-                    artwork.OptionalPrompt = request.OptionalPrompt;
-                    await _projectItemArtworkRepository.UpdateAsync(artwork);
+                    // Only update Prompt if explicitly provided (non-null) — protects against accidental erasure
+                    if (request.Prompt != null)
+                    {
+                        artwork.Prompt = request.Prompt;
+                        await _projectItemArtworkRepository.UpdatePromptAsync(request.ItemId, request.Prompt);
+                    }
                     return Json(new ApiResponse { success = true, data = artwork });
                 }
             }
@@ -129,7 +131,7 @@ namespace Artsy.API.Controllers
                 else
                 {
                     artwork.ImageModel = request.ImageModel;
-                    await _projectItemArtworkRepository.UpdateAsync(artwork);
+                    await _projectItemArtworkRepository.UpdateImageModelAsync(request.ItemId, request.ImageModel);
                     return Json(new ApiResponse { success = true, data = artwork });
                 }
             }
@@ -176,7 +178,7 @@ namespace Artsy.API.Controllers
                 {
                     artwork.ArtworkType = request.ArtworkType;
                     artwork.CustomImageId = request.CustomImageId;
-                    await _projectItemArtworkRepository.UpdateAsync(artwork);
+                    await _projectItemArtworkRepository.UpdateArtworkTypeAsync(request.ItemId, request.ArtworkType, request.CustomImageId);
                     return Json(new ApiResponse { success = true, data = artwork });
                 }
             }
@@ -229,7 +231,7 @@ namespace Artsy.API.Controllers
                     artwork.AspectRatio = request.AspectRatio;
                     if (!string.IsNullOrWhiteSpace(request.Design))
                         artwork.Design = request.Design;
-                    await _projectItemArtworkRepository.UpdateAsync(artwork);
+                    await _projectItemArtworkRepository.UpdateAspectRatioAsync(request.ItemId, request.AspectRatio, artwork.Design);
                     return Json(new ApiResponse { success = true, data = artwork });
                 }
             }
@@ -279,7 +281,7 @@ namespace Artsy.API.Controllers
                 else
                 {
                     artwork.IgnoredQuestions = ignoredJson;
-                    await _projectItemArtworkRepository.UpdateAsync(artwork);
+                    await _projectItemArtworkRepository.UpdateIgnoredQuestionsAsync(request.ItemId, ignoredJson);
                     return Json(new ApiResponse { success = true, data = artwork });
                 }
             }
@@ -327,7 +329,7 @@ namespace Artsy.API.Controllers
                 else
                 {
                     artwork.OpacityJson = opacityJson;
-                    await _projectItemArtworkRepository.UpdateAsync(artwork);
+                    await _projectItemArtworkRepository.UpdateOpacityJsonAsync(request.ItemId, opacityJson);
                     return Json(new ApiResponse { success = true, data = artwork });
                 }
             }

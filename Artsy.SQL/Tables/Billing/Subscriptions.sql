@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS public."Subscriptions"
     "Featured" BOOLEAN NOT NULL DEFAULT FALSE,
     "Archived" BOOLEAN NOT NULL DEFAULT FALSE,
     "Status" INT NOT NULL DEFAULT 1,
+    "FeaturesJson" TEXT NULL,
     "DateCreated" TIMESTAMP NOT NULL DEFAULT NOW()
 );
 

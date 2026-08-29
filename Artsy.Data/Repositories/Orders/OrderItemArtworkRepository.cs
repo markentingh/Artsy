@@ -66,6 +66,24 @@ namespace Artsy.Data.Repositories.Orders
             await _dbConnection.ExecuteAsync(query, artwork);
         }
 
+        public async Task UpdateActiveAsync(Guid id, bool active, DateTime updated)
+        {
+            const string query = @"UPDATE public.""OrderItemArtworks"" SET ""Active"" = @active, ""Updated"" = @updated WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, active, updated });
+        }
+
+        public async Task UpdateOpacityAsync(Guid id, bool opacity)
+        {
+            const string query = @"UPDATE public.""OrderItemArtworks"" SET ""Opacity"" = @opacity WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, opacity });
+        }
+
+        public async Task UpdateAcceptedAsync(Guid id, bool accepted, DateTime updated)
+        {
+            const string query = @"UPDATE public.""OrderItemArtworks"" SET ""Accepted"" = @accepted, ""Updated"" = @updated WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, accepted, updated });
+        }
+
         public async Task DeleteAsync(Guid id)
         {
             const string query = @"UPDATE public.""OrderItemArtworks"" SET ""Active"" = FALSE WHERE ""Id"" = @id";

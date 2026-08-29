@@ -104,7 +104,7 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
                 collection.Title = request.Title.Trim();
-                await _projectCollectionRepository.UpdateAsync(collection);
+                await _projectCollectionRepository.UpdateTitleAsync(collection.Id, collection.Title);
 
                 return Json(new ApiResponse { success = true, data = new { id = collection.Id, title = collection.Title } });
             }

@@ -257,9 +257,13 @@ namespace Artsy.API.Controllers
                 if (imgBytes == null || imgBytes.Length == 0)
                     return Json(new ApiResponse { success = false, message = "Artwork file not found." });
 
-                var cropSettings = await GetCropSettingsForArtworkAsync(collection.ProjectId, artwork.ItemId);
-                if (cropSettings != null)
-                    imgBytes = ProcessImage(imgBytes, cropSettings.Value.Width, cropSettings.Value.Height, cropSettings.Value.CropX, cropSettings.Value.CropY, artwork.Opacity);
+                // Skip cropping for pattern artworks — Printify handles pattern placement via the pattern API
+                if (!string.Equals(artwork.Design, "pattern", StringComparison.OrdinalIgnoreCase))
+                {
+                    var cropSettings = await GetCropSettingsForArtworkAsync(collection.ProjectId, artwork.ItemId);
+                    if (cropSettings != null)
+                        imgBytes = ProcessImage(imgBytes, cropSettings.Value.Width, cropSettings.Value.Height, cropSettings.Value.CropX, cropSettings.Value.CropY, artwork.Opacity);
+                }
 
                 using (var processedImage = Image.Load(imgBytes))
                 {
@@ -706,8 +710,9 @@ namespace Artsy.API.Controllers
                                             {
                                                 patternRequest = new PrintifyPatternRequest
                                                 {
-                                                    SpacingX = patternOpts.SpacingX,
-                                                    SpacingY = patternOpts.SpacingY,
+                                                    // Ensure valid values: spacing defaults to 1 (no spacing) if 0
+                                                    SpacingX = patternOpts.SpacingX > 0 ? patternOpts.SpacingX : 1,
+                                                    SpacingY = patternOpts.SpacingY > 0 ? patternOpts.SpacingY : 1,
                                                     Angle = patternOpts.Angle,
                                                     Offset = patternOpts.Offset,
                                                 };
@@ -987,7 +992,11 @@ namespace Artsy.API.Controllers
 
                 var productDetails = await _printifyService.GetProductAsync(userId, shopId, printifyProduct.PrintifyProductId);
                 if (productDetails == null)
-                    return Json(new ApiResponse { success = false, message = "Failed to get Printify product details." });
+                {
+                    // Product no longer exists on Printify — delete the stale record so the frontend can recreate it
+                    await _printifyProductRepository.DeleteAsync(printifyProduct.Id);
+                    return Json(new ApiResponse { success = false, message = "Product no longer exists on Printify. Please try creating it again.", data = new { recreate = true } });
+                }
 
                 var mockupsDownloaded = await DownloadAndSaveMockupsAsync(userId, shopId, printifyProduct.PrintifyProductId, collection.ProjectId, request.CollectionId, printifyProduct.Id, productDetails.Images);
 

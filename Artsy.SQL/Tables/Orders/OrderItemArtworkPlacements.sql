@@ -5,7 +5,9 @@ CREATE TABLE IF NOT EXISTS public."OrderItemArtworkPlacements"
     "Width" INT NOT NULL DEFAULT 0,
     "Height" INT NOT NULL DEFAULT 0,
     "Index" INT NOT NULL DEFAULT 0,
-    "ResponseId" VARCHAR(64) NOT NULL DEFAULT ''
+    "ResponseId" VARCHAR(64) NOT NULL DEFAULT '',
+    "GroupId" UUID,
+    "Position" VARCHAR(64) NOT NULL DEFAULT ''
 );
 
 -- Drop old unique index that conflicts with multi-group placements

@@ -422,7 +422,7 @@ namespace Artsy.API.Controllers
             {
                 existing.Active = false;
                 existing.Updated = DateTime.UtcNow;
-                await _orderItemArtworkRepository.UpdateAsync(existing);
+                await _orderItemArtworkRepository.UpdateActiveAsync(existing.Id, existing.Active, existing.Updated);
             }
 
             // Generate one artwork per variant task
@@ -489,7 +489,7 @@ namespace Artsy.API.Controllers
                             await _imageService.SaveOrderItemArtworkPngAsync(cp.ProjectId, cp.CollectionId, orderId, created.Id, pngBytes);
                             imageToCut = pngBytes;
                             created.Opacity = true;
-                            await _orderItemArtworkRepository.UpdateAsync(created);
+                            await _orderItemArtworkRepository.UpdateOpacityAsync(created.Id, created.Opacity);
                         }
                     }
 
@@ -547,7 +547,7 @@ namespace Artsy.API.Controllers
                             await _imageService.SaveOrderItemArtworkPlacementPngAsync(cp.ProjectId, cp.CollectionId, orderId, created.Id, i, pngBytes);
 
                             created.Opacity = true;
-                            await _orderItemArtworkRepository.UpdateAsync(created);
+                            await _orderItemArtworkRepository.UpdateOpacityAsync(created.Id, created.Opacity);
                         }
                     }
 
@@ -610,7 +610,7 @@ namespace Artsy.API.Controllers
 
             artwork.Accepted = true;
             artwork.Updated = DateTime.UtcNow;
-            await _orderItemArtworkRepository.UpdateAsync(artwork);
+            await _orderItemArtworkRepository.UpdateAcceptedAsync(artwork.Id, artwork.Accepted, artwork.Updated);
 
             return Json(new { success = true });
         }

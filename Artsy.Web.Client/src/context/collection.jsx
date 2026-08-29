@@ -140,7 +140,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const [selectedProductImageModel, setSelectedProductImageModel] = useState(null);
   const [design, setDesign] = useState('artwork');
   const [optionalPrompt, setOptionalPrompt] = useState('');
-  const [patternSettings, setPatternSettings] = useState({ spacingX: 0, spacingY: 0, angle: 0, offset: 0, scale: 0.5 });
+  const [patternSettings, setPatternSettings] = useState({ spacingX: 1, spacingY: 1, angle: 0, offset: 0, scale: 0.5 });
   const [upscaleComplete, setUpscaleComplete] = useState(false);
   const [productBlueprintImages, setProductBlueprintImages] = useState([]);
   const [printifyImageIndexByColor, setPrintifyImageIndexByColor] = useState({});
@@ -254,11 +254,9 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     setIsGenerating(true);
     setMessage(null);
     try {
-      // Save optional prompt to item artwork before generating
-      if (currentArtwork?.id) {
-        await api.updateItemPrompt({ itemId: item.id, prompt: currentArtwork.prompt || '', optionalPrompt });
-      } else {
-        await api.updateItemPrompt({ itemId: item.id, prompt: '', optionalPrompt });
+      // Save optional prompt to collection artwork before generating
+      if (colId) {
+        await api.updateCollectionArtworkOptionalPrompt({ collectionId: colId, itemId: item.id, optionalPrompt });
       }
 
       const answerList = [
@@ -272,7 +270,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       let totalGenerations = 1;
       let generations = [];
       try {
-        const estRes = await api.estimateItemTokens(item.id, selectedImageModel?.id, colId);
+        const estRes = await api.estimateItemTokens(item.id, selectedImageModel?.id, colId, design);
         if (estRes.data.success) {
           const data = estRes.data.data;
           if (typeof data === 'number') {
@@ -307,6 +305,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
           generationIndex: genIdx,
           design,
           patternJson: design === 'pattern' ? JSON.stringify(patternSettings) : null,
+          optionalPrompt,
         });
 
         if (res.data.success) {
@@ -340,7 +339,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       setPreviewGenerationIndex(0);
       setPreviewGenerationTotal(0);
     }
-  }, [aiItems, currentItemIndex, itemAnswers, showChanges, requestedChanges, projectId, api, buildProjectAnswers, selectedImageModel, refreshTokens, onSaved, currentArtwork, optionalPrompt]);
+  }, [aiItems, currentItemIndex, itemAnswers, showChanges, requestedChanges, projectId, api, buildProjectAnswers, selectedImageModel, refreshTokens, onSaved, currentArtwork, optionalPrompt, design]);
 
   const loadItemData = useCallback(async (index, forceQuestions = false) => {
     setCurrentItemIndex(index);
@@ -367,9 +366,21 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       } else {
         setDesign('artwork');
       }
-      setOptionalPrompt(art?.optionalPrompt || '');
+      // Reload collection artwork to get the latest optionalPrompt and patternJson
+      let latestCollectionArtwork = collectionArtwork;
+      if (collectionId) {
+        try {
+          const artRes2 = await api.getCollectionArtwork(collectionId);
+          if (artRes2.data.success) {
+            latestCollectionArtwork = artRes2.data.data || [];
+            setCollectionArtwork(latestCollectionArtwork);
+          }
+        } catch { /* non-critical */ }
+      }
+
       // Load pattern settings from existing collection artwork if available
-      const existingCollectionArt = collectionArtwork.find(a => String(a.itemId) === String(item.id) && a.active);
+      const existingCollectionArt = latestCollectionArtwork.find(a => String(a.itemId) === String(item.id) && a.active);
+      setOptionalPrompt(existingCollectionArt?.optionalPrompt || '');
       if (existingCollectionArt?.patternJson) {
         try {
           const parsed = JSON.parse(existingCollectionArt.patternJson);
@@ -380,9 +391,9 @@ export function CollectionProvider({ children, projectId, project, collectionId:
             offset: parsed.offset ?? 0,
             scale: parsed.scale ?? 0.5,
           });
-        } catch { setPatternSettings({ spacingX: 0, spacingY: 0, angle: 0, offset: 0, scale: 0.5 }); }
+        } catch { setPatternSettings({ spacingX: 1, spacingY: 1, angle: 0, offset: 0, scale: 0.5 }); }
       } else {
-        setPatternSettings({ spacingX: 0, spacingY: 0, angle: 0, offset: 0, scale: 0.5 });
+        setPatternSettings({ spacingX: 1, spacingY: 1, angle: 0, offset: 0, scale: 0.5 });
       }
 
       if (art && art.artworkType === 'custom') {
@@ -435,7 +446,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
               offset: parsed.offset ?? 0,
               scale: parsed.scale ?? 0.5,
             });
-          } catch { setPatternSettings({ spacingX: 0, spacingY: 0, angle: 0, offset: 0, scale: 0.5 }); }
+          } catch { setPatternSettings({ spacingX: 1, spacingY: 1, angle: 0, offset: 0, scale: 0.5 }); }
         }
         setStep(STEPS.ARTWORK_PREVIEW);
       } else if (questions.length > 0) {

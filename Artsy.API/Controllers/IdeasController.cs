@@ -310,7 +310,7 @@ namespace Artsy.API.Controllers
 
             metadata.UsedTitles = usedTitles;
             idea.MetadataJson = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            await _projectIdeaRepository.UpdateAsync(idea);
+            await _projectIdeaRepository.UpdateMetadataJsonAsync(idea.Id, idea.MetadataJson);
 
             var variationEntity = new ProjectIdeaVariation
             {

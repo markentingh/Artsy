@@ -12,5 +12,7 @@ namespace Artsy.Data.Interfaces.Projects
         Task UpdateAsync(ProjectCollectionProduct product);
         Task BulkUpdateActiveAsync(Guid collectionId, IEnumerable<ProjectCollectionProduct> products);
         Task DeleteAsync(Guid id);
+        Task UpdateNameAsync(Guid id, string name);
+        Task UpdateActiveAsync(Guid id, bool active);
     }
 }
