@@ -11,13 +11,16 @@ namespace Artsy.API.Models.Collections
         public Guid CollectionId { get; set; }
 
         [JsonPropertyName("projectBlueprintId")]
-        public Guid ProjectBlueprintId { get; set; }
+        public Guid? ProjectBlueprintId { get; set; }
 
         [JsonPropertyName("productImageId")]
         public Guid ProductImageId { get; set; }
 
+        [JsonPropertyName("id")]
+        public Guid? Id { get; set; }
+
         [JsonPropertyName("modelId")]
-        public int ModelId { get; set; }
+        public int? ModelId { get; set; }
 
         [JsonPropertyName("prompt")]
         public string Prompt { get; set; } = "";
@@ -80,7 +83,7 @@ namespace Artsy.API.Models.Collections
         public Guid CollectionId { get; set; }
 
         [JsonPropertyName("projectBlueprintId")]
-        public Guid ProjectBlueprintId { get; set; }
+        public Guid? ProjectBlueprintId { get; set; }
 
         [JsonPropertyName("productImageId")]
         public Guid ProductImageId { get; set; }
@@ -135,5 +138,47 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("name")]
         public string? Name { get; set; }
+    }
+
+    public class AddCollectionProductImageRequest
+    {
+        [JsonPropertyName("projectId")]
+        public Guid ProjectId { get; set; }
+
+        [JsonPropertyName("collectionId")]
+        public Guid CollectionId { get; set; }
+
+        [JsonPropertyName("projectBlueprintId")]
+        public Guid? ProjectBlueprintId { get; set; }
+
+        [JsonPropertyName("title")]
+        public string Title { get; set; } = "";
+    }
+
+    public class UpdateCollectionProductImageConfigRequest
+    {
+        [JsonPropertyName("id")]
+        public Guid Id { get; set; }
+
+        [JsonPropertyName("collectionId")]
+        public Guid CollectionId { get; set; }
+
+        [JsonPropertyName("variantColor")]
+        public string VariantColor { get; set; } = "";
+
+        [JsonPropertyName("imageModel")]
+        public string ImageModel { get; set; } = "";
+
+        [JsonPropertyName("prompt")]
+        public string Prompt { get; set; } = "";
+
+        [JsonPropertyName("selectedMockups")]
+        public string SelectedMockups { get; set; } = "";
+    }
+
+    public class DeleteCollectionProductImageByIdRequest
+    {
+        [JsonPropertyName("id")]
+        public Guid Id { get; set; }
     }
 }

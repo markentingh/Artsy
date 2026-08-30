@@ -43,5 +43,8 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("optionalPrompt")]
         public string? OptionalPrompt { get; set; }
+
+        [JsonPropertyName("placementOptionalPrompt")]
+        public string? PlacementOptionalPrompt { get; set; }
     }
 }

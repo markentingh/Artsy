@@ -312,11 +312,45 @@ namespace Artsy.API.Controllers
                 if (artwork == null)
                     return Json(new ApiResponse { success = false, message = "Artwork not found." });
 
+                // If a specific placement is targeted, archive only that placement's image
+                if (request.PlacementIndex.HasValue || request.GroupId.HasValue)
+                {
+                    var placementVariants = await _artworkPlacementRepository.GetByArtworkIdAsync(artwork.Id);
+                    ProjectCollectionArtworkPlacement? target = null;
+
+                    if (request.GroupId.HasValue && !string.IsNullOrWhiteSpace(request.GroupPosition))
+                    {
+                        target = placementVariants.FirstOrDefault(p =>
+                            p.GroupId == request.GroupId.Value &&
+                            string.Equals(p.Position, request.GroupPosition, StringComparison.OrdinalIgnoreCase));
+                    }
+                    else if (request.PlacementIndex.HasValue)
+                    {
+                        target = placementVariants.FirstOrDefault(p =>
+                            !p.GroupId.HasValue && p.Index == request.PlacementIndex.Value);
+                    }
+
+                    if (target == null)
+                        return Json(new ApiResponse { success = false, message = "Placement not found." });
+
+                    if (string.IsNullOrWhiteSpace(target.PrintifyImageId))
+                        return Json(new ApiResponse { success = false, message = "Placement image is not uploaded to Printify." });
+
+                    var archived = await _printifyService.ArchiveImageAsync(userId, target.PrintifyImageId);
+                    if (!archived)
+                        return Json(new ApiResponse { success = false, message = "Failed to archive image on Printify." });
+
+                    await _artworkPlacementRepository.SetPrintifyImageIdAsync(target.Id, "");
+
+                    return Json(new ApiResponse { success = true });
+                }
+
+                // Otherwise, archive the base artwork image
                 if (string.IsNullOrWhiteSpace(artwork.PrintifyImageId))
                     return Json(new ApiResponse { success = false, message = "Artwork is not uploaded to Printify." });
 
-                var archived = await _printifyService.ArchiveImageAsync(userId, artwork.PrintifyImageId);
-                if (!archived)
+                var baseArchived = await _printifyService.ArchiveImageAsync(userId, artwork.PrintifyImageId);
+                if (!baseArchived)
                     return Json(new ApiResponse { success = false, message = "Failed to archive image on Printify." });
 
                 await _artworkRepository.SetPrintifyImageIdAsync(artwork.Id, "");
@@ -671,6 +705,23 @@ namespace Artsy.API.Controllers
                         var placements = JsonSerializer.Deserialize<List<PlacementDto>>(bp.PlacementJson);
                         if (placements != null)
                         {
+                            // Pre-compute the largest placement width for pattern scale normalization.
+                            // This ensures pattern tiles are the same physical pixel size across all placements,
+                            // regardless of individual print area dimensions.
+                            int? patternRefWidth = null;
+                            foreach (var p in placements)
+                            {
+                                if (string.IsNullOrWhiteSpace(p.Source)) continue;
+                                var pItemId = p.GetItemId();
+                                if (pItemId == Guid.Empty) continue;
+                                var pArt = collectionArtwork.FirstOrDefault(a => a.ItemId == pItemId);
+                                if (pArt == null) continue;
+                                if (!string.Equals(pArt.Design, "pattern", StringComparison.OrdinalIgnoreCase)) continue;
+                                var (pW, pH) = p.GetDimensions();
+                                if (pW > 0 && (patternRefWidth == null || pW > patternRefWidth))
+                                    patternRefWidth = pW;
+                            }
+
                             // Build a single print area with all variant_ids and one placeholder per position
                             var placeholders = new List<PrintifyPlaceholderRequest>();
 
@@ -717,6 +768,15 @@ namespace Artsy.API.Controllers
                                                     Offset = patternOpts.Offset,
                                                 };
                                                 patternScale = patternOpts.Scale > 0 ? patternOpts.Scale : 1;
+
+                                                // Normalize scale so pattern tiles are the same physical pixel size
+                                                // across all placements. The smallest placement uses the base scale;
+                                                // larger placements get a proportionally smaller scale.
+                                                var (patW, patH) = placement.GetDimensions();
+                                                if (patternRefWidth.HasValue && patW > 0 && patW != patternRefWidth.Value)
+                                                {
+                                                    patternScale = patternScale * patternRefWidth.Value / (double)patW;
+                                                }
                                             }
                                         }
                                         catch { }
@@ -1169,60 +1229,7 @@ namespace Artsy.API.Controllers
                 }
                 catch { /* mockup cleanup is best-effort */ }
 
-                // Archive uploaded Printify images for artworks used by this blueprint and clear PrintifyImageId
-                try
-                {
-                    var collection = await _projectCollectionRepository.GetByIdAsync(request.CollectionId);
-                    if (collection != null)
-                    {
-                        var product = await _productRepository.GetByIdAsync(record.ProductId);
-                    var blueprint = product != null ? await _blueprintRepository.GetByIdAsync(product.ProjectBlueprintId) : null;
-                        if (blueprint != null && !string.IsNullOrWhiteSpace(blueprint.PlacementJson))
-                        {
-                            var placements = JsonSerializer.Deserialize<List<PlacementDto>>(blueprint.PlacementJson);
-                            if (placements != null)
-                            {
-                                // Collect all item IDs used by this blueprint's placements
-                                var itemIds = placements
-                                    .Select(p => p.GetItemId())
-                                    .Where(id => id != Guid.Empty)
-                                    .Distinct()
-                                    .ToHashSet();
-
-                                var collectionArtwork = (await _artworkRepository.GetByCollectionIdAsync(request.CollectionId))
-                                    .Where(a => a.Accepted && a.Active && itemIds.Contains(a.ItemId))
-                                    .ToList();
-
-                                foreach (var artwork in collectionArtwork)
-                                {
-                                    // Archive placement-level images
-                                    if (artwork.TotalPlacements > 0)
-                                    {
-                                        var placementVariants = await _artworkPlacementRepository.GetByArtworkIdAsync(artwork.Id);
-                                        foreach (var pv in placementVariants)
-                                        {
-                                            if (!string.IsNullOrWhiteSpace(pv.PrintifyImageId))
-                                            {
-                                                try { await _printifyService.ArchiveImageAsync(userId, pv.PrintifyImageId); } catch { }
-                                                await _artworkPlacementRepository.SetPrintifyImageIdAsync(pv.Id, "");
-                                            }
-                                        }
-                                    }
-
-                                    // Archive the base artwork image
-                                    if (!string.IsNullOrWhiteSpace(artwork.PrintifyImageId))
-                                    {
-                                        try { await _printifyService.ArchiveImageAsync(userId, artwork.PrintifyImageId); } catch { }
-                                        await _artworkRepository.SetPrintifyImageIdAsync(artwork.Id, "");
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                catch { /* archiving is best-effort; don't fail the delete */ }
-
-                return Json(new ApiResponse { success = true });
+                                return Json(new ApiResponse { success = true });
             }
             catch (Exception ex)
             {

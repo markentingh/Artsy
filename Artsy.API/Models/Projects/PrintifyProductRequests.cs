@@ -62,5 +62,8 @@ namespace Artsy.API.Models.Projects
     {
         public Guid CollectionId { get; set; }
         public Guid ArtworkId { get; set; }
+        public int? PlacementIndex { get; set; }
+        public Guid? GroupId { get; set; }
+        public string? GroupPosition { get; set; }
     }
 }

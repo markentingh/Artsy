@@ -5,7 +5,7 @@ namespace Artsy.Data.Entities.Projects
         public Guid Id { get; set; }
         public Guid ProjectId { get; set; }
         public Guid CollectionId { get; set; }
-        public Guid ProjectBlueprintId { get; set; }
+        public Guid? ProjectBlueprintId { get; set; }
         public Guid ProductImageId { get; set; }
         public string ImageModel { get; set; } = "";
         public string Prompt { get; set; } = "";
@@ -15,5 +15,7 @@ namespace Artsy.Data.Entities.Projects
         public string ResponseId { get; set; } = "";
         public string VariantColor { get; set; } = "";
         public bool Active { get; set; } = true;
+        public string SelectedMockups { get; set; } = "";
+        public bool Generated { get; set; } = false;
     }
 }

@@ -30,7 +30,7 @@ export default function ArtworkQuestions() {
     currentArtwork,
     imageModels, selectedImageModel, setSelectedImageModel, loadImageModels,
     design, setDesign, patternSettings, setPatternSettings,
-    optionalPrompt, setOptionalPrompt,
+    optionalPrompt, setOptionalPrompt, cancelAll,
   } = useCollection();
 
   const [previews, setPreviews] = useState([]);
@@ -559,7 +559,7 @@ export default function ArtworkQuestions() {
 
       <div className="buttons flex justify-end gap-2 mt-4 mt-auto">
         <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
-        <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+        <ButtonOutline color="gray" className="cancel" onClick={() => { cancelAll(); onClose(); }}>Cancel</ButtonOutline>
         <ButtonOutline onClick={() => setShowImageSelector(true)}>+ Image Reference</ButtonOutline>
         <ButtonOutline
           onClick={handleGeneratePreview}

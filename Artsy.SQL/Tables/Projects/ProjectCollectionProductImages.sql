@@ -3,9 +3,9 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionProductImages"
     "Id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     "ProjectId" UUID NOT NULL REFERENCES public."Projects"("Id"),
     "CollectionId" UUID NOT NULL REFERENCES public."ProjectCollections"("Id"),
-    "ProjectBlueprintId" UUID NOT NULL REFERENCES public."ProjectBlueprints"("Id"),
+    "ProjectBlueprintId" UUID REFERENCES public."ProjectBlueprints"("Id"),
     "PrintifyImageId" VARCHAR(32) NOT NULL DEFAULT '',
-    "ProductImageId" UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
+    "ProductImageId" UUID,
     "VariantColor" VARCHAR(64) NOT NULL DEFAULT '',
     "ImageModel" VARCHAR(16) NOT NULL DEFAULT '',
     "Prompt" TEXT NOT NULL DEFAULT '',
@@ -17,8 +17,11 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionProductImages"
 );
 ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "Active" BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "PrintifyImageId" VARCHAR(32) NOT NULL DEFAULT '';
-ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "ProductImageId" UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';
+ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "ProductImageId" UUID;
 ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "VariantColor" VARCHAR(64) NOT NULL DEFAULT '';
+ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "SelectedMockups" TEXT NOT NULL DEFAULT '';
+ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "Generated" BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public."ProjectCollectionProductImages" ALTER COLUMN "ProjectBlueprintId" DROP NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_ProjectCollectionProductImages_CollectionId_BlueprintId_ProductImageId"
     ON public."ProjectCollectionProductImages" ("CollectionId", "ProjectBlueprintId", "ProductImageId");

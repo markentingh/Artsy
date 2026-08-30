@@ -39,8 +39,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             if (placement.Id == Guid.Empty) placement.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectCollectionArtworkPlacements"" (""Id"", ""CollectionArtworkId"", ""Width"", ""Height"", ""Index"", ""FullSize"", ""PrintifyImageId"", ""ResponseId"", ""GroupId"", ""Position"")
-                VALUES (@Id, @CollectionArtworkId, @Width, @Height, @Index, @FullSize, @PrintifyImageId, @ResponseId, @GroupId, @Position)
+                INSERT INTO public.""ProjectCollectionArtworkPlacements"" (""Id"", ""CollectionArtworkId"", ""Width"", ""Height"", ""Index"", ""FullSize"", ""PrintifyImageId"", ""ResponseId"", ""GroupId"", ""Position"", ""OptionalPrompt"")
+                VALUES (@Id, @CollectionArtworkId, @Width, @Height, @Index, @FullSize, @PrintifyImageId, @ResponseId, @GroupId, @Position, @OptionalPrompt)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectCollectionArtworkPlacement>(query, placement);
         }
@@ -49,7 +49,7 @@ namespace Artsy.Data.Repositories.Projects
         {
             const string query = @"
                 UPDATE public.""ProjectCollectionArtworkPlacements""
-                SET ""Width"" = @Width, ""Height"" = @Height, ""Index"" = @Index, ""FullSize"" = @FullSize, ""PrintifyImageId"" = @PrintifyImageId, ""ResponseId"" = @ResponseId, ""GroupId"" = @GroupId, ""Position"" = @Position
+                SET ""Width"" = @Width, ""Height"" = @Height, ""Index"" = @Index, ""FullSize"" = @FullSize, ""PrintifyImageId"" = @PrintifyImageId, ""ResponseId"" = @ResponseId, ""GroupId"" = @GroupId, ""Position"" = @Position, ""OptionalPrompt"" = @OptionalPrompt
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, placement);
         }
@@ -73,6 +73,20 @@ namespace Artsy.Data.Repositories.Projects
             const string query = @"UPDATE public.""ProjectCollectionArtworkPlacements""
                 SET ""FullSize"" = @fullSize WHERE ""Id"" = @placementId";
             await _dbConnection.ExecuteAsync(query, new { placementId, fullSize });
+        }
+
+        public async Task SetOptionalPromptAsync(Guid placementId, string optionalPrompt)
+        {
+            const string query = @"UPDATE public.""ProjectCollectionArtworkPlacements""
+                SET ""OptionalPrompt"" = @optionalPrompt WHERE ""Id"" = @placementId";
+            await _dbConnection.ExecuteAsync(query, new { placementId, optionalPrompt });
+        }
+
+        public async Task SetOptionalPromptByGroupAsync(Guid collectionArtworkId, Guid groupId, string optionalPrompt)
+        {
+            const string query = @"UPDATE public.""ProjectCollectionArtworkPlacements""
+                SET ""OptionalPrompt"" = @optionalPrompt WHERE ""CollectionArtworkId"" = @collectionArtworkId AND ""GroupId"" = @groupId";
+            await _dbConnection.ExecuteAsync(query, new { collectionArtworkId, groupId, optionalPrompt });
         }
     }
 }

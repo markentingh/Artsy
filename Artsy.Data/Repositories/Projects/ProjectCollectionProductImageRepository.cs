@@ -42,7 +42,7 @@ namespace Artsy.Data.Repositories.Projects
 
         public async Task<IEnumerable<ProjectCollectionProductImage>> GetByCollectionIdAsync(Guid collectionId)
         {
-            const string query = @"SELECT p.* FROM public.""ProjectCollectionProductImages"" p INNER JOIN public.""ProjectBlueprintProductImages"" b ON b.""Id"" = p.""ProductImageId"" WHERE p.""CollectionId"" = @collectionId AND p.""Active"" = TRUE ORDER BY p.""ProjectBlueprintId"", p.""ProductImageId""";
+            const string query = @"SELECT p.* FROM public.""ProjectCollectionProductImages"" p LEFT JOIN public.""ProjectBlueprintProductImages"" b ON b.""Id"" = p.""ProductImageId"" WHERE p.""CollectionId"" = @collectionId AND p.""Active"" = TRUE ORDER BY p.""ProjectBlueprintId"", p.""ProductImageId""";
             return await _dbConnection.QueryAsync<ProjectCollectionProductImage>(query, new { collectionId });
         }
 
@@ -74,8 +74,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             image.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectCollectionProductImages"" (""Id"", ""ProjectId"", ""CollectionId"", ""ProjectBlueprintId"", ""ProductImageId"", ""ImageModel"", ""Prompt"", ""Width"", ""Height"", ""Accepted"", ""ResponseId"", ""VariantColor"", ""Active"")
-                VALUES (@Id, @ProjectId, @CollectionId, @ProjectBlueprintId, @ProductImageId, @ImageModel, @Prompt, @Width, @Height, @Accepted, @ResponseId, @VariantColor, @Active)
+                INSERT INTO public.""ProjectCollectionProductImages"" (""Id"", ""ProjectId"", ""CollectionId"", ""ProjectBlueprintId"", ""ProductImageId"", ""ImageModel"", ""Prompt"", ""Width"", ""Height"", ""Accepted"", ""ResponseId"", ""VariantColor"", ""Active"", ""SelectedMockups"", ""Generated"")
+                VALUES (@Id, @ProjectId, @CollectionId, @ProjectBlueprintId, @ProductImageId, @ImageModel, @Prompt, @Width, @Height, @Accepted, @ResponseId, @VariantColor, @Active, @SelectedMockups, @Generated)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectCollectionProductImage>(query, image);
         }
@@ -85,7 +85,8 @@ namespace Artsy.Data.Repositories.Projects
             const string query = @"
                 UPDATE public.""ProjectCollectionProductImages""
                 SET ""ImageModel"" = @ImageModel, ""Prompt"" = @Prompt, ""Width"" = @Width, ""Height"" = @Height,
-                    ""Accepted"" = @Accepted, ""ResponseId"" = @ResponseId, ""VariantColor"" = @VariantColor, ""Active"" = @Active
+                    ""Accepted"" = @Accepted, ""ResponseId"" = @ResponseId, ""VariantColor"" = @VariantColor, ""Active"" = @Active,
+                    ""SelectedMockups"" = @SelectedMockups, ""Generated"" = @Generated
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, image);
         }
@@ -124,6 +125,24 @@ namespace Artsy.Data.Repositories.Projects
         SET ""Accepted"" = @accepted
         WHERE ""Id"" = @id";
             await _dbConnection.ExecuteAsync(query, new { id, accepted });
+        }
+
+        public async Task UpdateConfigAsync(Guid id, string variantColor, string imageModel, string prompt, string selectedMockups)
+        {
+            const string query = @"
+        UPDATE public.""ProjectCollectionProductImages""
+        SET ""VariantColor"" = @variantColor, ""ImageModel"" = @imageModel, ""Prompt"" = @prompt, ""SelectedMockups"" = @selectedMockups
+        WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, variantColor, imageModel, prompt, selectedMockups });
+        }
+
+        public async Task SetGeneratedAsync(Guid id, bool generated)
+        {
+            const string query = @"
+        UPDATE public.""ProjectCollectionProductImages""
+        SET ""Generated"" = @generated
+        WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, generated });
         }
     }
 }

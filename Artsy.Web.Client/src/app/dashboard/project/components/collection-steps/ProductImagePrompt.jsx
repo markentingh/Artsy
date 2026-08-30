@@ -117,6 +117,7 @@ export default function ProductImagePrompt() {
   const artworkImages = useMemo(() => {
     if (!collectionId || !placementItemId) return [];
     const result = [];
+    const matchedPlacementKeys = new Set();
     for (const a of collectionArtwork.filter(a => a.active && String(a.itemId) === placementItemId)) {
       const artworkPlacements = a.placements || [];
       if (artworkPlacements.length > 0) {
@@ -125,13 +126,18 @@ export default function ProductImagePrompt() {
           const [pw, ph] = (bpPlacement.dimensions || '').split('x').map(n => parseInt(n) || 0);
           const position = bpPlacement.position || '';
 
-          // Match by position (for group placements, only if groupId belongs to this blueprint), then by aspect ratio
-          let matched = artworkPlacements.find(p =>
-            p.groupId && p.position && position &&
-            blueprintGroupIds.has(p.groupId) &&
-            String(p.position).toLowerCase() === String(position).toLowerCase()
-          );
+          // Match by position first (works for group placements which have Position set)
+          let matched = null;
+          if (position) {
+            matched = artworkPlacements.find(p => {
+              if (!p.position) return false;
+              if (String(p.position).toLowerCase() !== String(position).toLowerCase()) return false;
+              if (p.groupId) return blueprintGroupIds.has(p.groupId);
+              return true;
+            });
+          }
 
+          // Fall back to aspect ratio matching for non-group placements (which don't have Position set)
           if (!matched && pw > 0 && ph > 0) {
             const placementRatio = pw / ph;
             matched = artworkPlacements.find(p => {
@@ -143,6 +149,9 @@ export default function ProductImagePrompt() {
           }
 
           if (matched) {
+            const key = `${a.id}_${matched.index}`;
+            if (matchedPlacementKeys.has(key)) continue;
+            matchedPlacementKeys.add(key);
             result.push({
               itemId: a.itemId,
               artworkId: a.id,

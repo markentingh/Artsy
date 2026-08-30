@@ -14,6 +14,7 @@ namespace Artsy.API.Controllers
         readonly IProjectCollectionArtworkRepository _artworkRepository;
         readonly IProjectBlueprintsRepository _projectBlueprintsRepository;
         readonly IProjectCollectionArtworkPlacementRepository _artworkPlacementRepository;
+        readonly IProjectCollectionProductRepository _collectionProductRepository;
         readonly IImageService _imageService;
 
         public PrintifyImagesController(
@@ -21,12 +22,14 @@ namespace Artsy.API.Controllers
             IProjectCollectionArtworkRepository artworkRepository,
             IProjectBlueprintsRepository projectBlueprintsRepository,
             IProjectCollectionArtworkPlacementRepository artworkPlacementRepository,
+            IProjectCollectionProductRepository collectionProductRepository,
             IImageService imageService)
         {
             _productImageRepository = productImageRepository;
             _artworkRepository = artworkRepository;
             _projectBlueprintsRepository = projectBlueprintsRepository;
             _artworkPlacementRepository = artworkPlacementRepository;
+            _collectionProductRepository = collectionProductRepository;
             _imageService = imageService;
         }
 
@@ -35,7 +38,7 @@ namespace Artsy.API.Controllers
         {
             try
             {
-                var productImages = await _productImageRepository.GetByCollectionIdAsync(collectionId);
+                var productImages = (await _productImageRepository.GetByCollectionIdAsync(collectionId)).ToList();
                 var artworks = await _artworkRepository.GetByCollectionIdAsync(collectionId);
 
                 var projectId = productImages.FirstOrDefault()?.ProjectId ?? artworks.FirstOrDefault()?.ProjectId ?? Guid.Empty;
@@ -63,13 +66,56 @@ namespace Artsy.API.Controllers
                 using var ms = new MemoryStream();
                 using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, true))
                 {
+                    // Build product name maps
+                    var collectionProducts = await _collectionProductRepository.GetByCollectionIdAsync(collectionId);
+                    var collectionProductNameMap = collectionProducts.ToDictionary(p => p.ProjectBlueprintId, p => p.Name ?? "");
+                    var blueprintNameMap = new Dictionary<Guid, string>();
+                    if (projectId != Guid.Empty)
+                    {
+                        var blueprints = await _projectBlueprintsRepository.GetByProjectIdAsync(projectId);
+                        foreach (var bp in blueprints)
+                        {
+                            blueprintNameMap[bp.Id] = bp.Name ?? "Product";
+                        }
+                    }
+
+                    var usedNames = new HashSet<string>();
                     foreach (var img in productImages)
                     {
-                        if (!img.Accepted || !img.Active) continue;
+                        if (!img.Generated || !img.Active) continue;
                         var imgBytes = await _imageService.GetProjectCollectionProductImageAsync(
                             img.ProjectId, img.CollectionId, img.Id);
                         if (imgBytes == null || imgBytes.Length == 0) continue;
-                        var entry = archive.CreateEntry($"product-images/{img.Id}.jpg");
+
+                        // Build a descriptive file name:
+                        // 1. ProjectCollectionProducts.Name
+                        // 2. ProjectBlueprints.Name
+                        // 3. VariantColor
+                        string productName;
+                        if (img.ProjectBlueprintId.HasValue && collectionProductNameMap.TryGetValue(img.ProjectBlueprintId.Value, out var cpn) && !string.IsNullOrWhiteSpace(cpn))
+                            productName = cpn;
+                        else if (img.ProjectBlueprintId.HasValue && blueprintNameMap.TryGetValue(img.ProjectBlueprintId.Value, out var bpn) && !string.IsNullOrWhiteSpace(bpn))
+                            productName = bpn;
+                        else if (!string.IsNullOrWhiteSpace(img.VariantColor))
+                            productName = img.VariantColor;
+                        else
+                            productName = "Product";
+
+                        var variant = !string.IsNullOrWhiteSpace(img.VariantColor) ? img.VariantColor : "";
+                        var baseName = string.IsNullOrWhiteSpace(variant) || productName == variant
+                            ? productName.Replace(" ", "_").Replace("/", "-")
+                            : $"{productName}_{variant}".Replace(" ", "_").Replace("/", "-");
+                        // Ensure unique name
+                        var fileName = $"{baseName}.jpg";
+                        var counter = 1;
+                        while (usedNames.Contains(fileName))
+                        {
+                            fileName = $"{baseName}_{counter}.jpg";
+                            counter++;
+                        }
+                        usedNames.Add(fileName);
+
+                        var entry = archive.CreateEntry($"product-images/{fileName}");
                         using var entryStream = entry.Open();
                         await entryStream.WriteAsync(imgBytes, 0, imgBytes.Length);
                     }
@@ -78,6 +124,11 @@ namespace Artsy.API.Controllers
                     {
                         if (!art.Accepted || !art.Active) continue;
                         if (!usedItemIds.Contains(art.ItemId)) continue;
+
+                        // Skip if we already processed this artwork (dedup by artwork ID)
+                        var artKey = art.Id;
+                        if (usedNames.Contains($"art_{artKey}")) continue;
+                        usedNames.Add($"art_{artKey}");
 
                         // Include the base artwork image (combined seamless image for groups, or main image)
                         byte[]? artBytes;
@@ -105,8 +156,9 @@ namespace Artsy.API.Controllers
                             fileName = $"artworks/{art.Id}.jpg";
                         }
 
-                        if (artBytes != null && artBytes.Length > 0)
+                        if (artBytes != null && artBytes.Length > 0 && !usedNames.Contains(fileName))
                         {
+                            usedNames.Add(fileName);
                             var entry = archive.CreateEntry(fileName);
                             using var entryStream = entry.Open();
                             await entryStream.WriteAsync(artBytes, 0, artBytes.Length);
@@ -116,8 +168,12 @@ namespace Artsy.API.Controllers
                         if (art.TotalPlacements > 0)
                         {
                             var placements = await _artworkPlacementRepository.GetByArtworkIdAsync(art.Id);
+                            var seenPlacementIndices = new HashSet<int>();
                             foreach (var placement in placements)
                             {
+                                if (seenPlacementIndices.Contains(placement.Index)) continue;
+                                seenPlacementIndices.Add(placement.Index);
+
                                 byte[]? placementBytes;
                                 string placementFileName;
 
@@ -145,6 +201,8 @@ namespace Artsy.API.Controllers
                                 }
 
                                 if (placementBytes == null || placementBytes.Length == 0) continue;
+                                if (usedNames.Contains(placementFileName)) continue;
+                                usedNames.Add(placementFileName);
                                 var pEntry = archive.CreateEntry(placementFileName);
                                 using var pEntryStream = pEntry.Open();
                                 await pEntryStream.WriteAsync(placementBytes, 0, placementBytes.Length);

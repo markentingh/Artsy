@@ -55,6 +55,7 @@ export default function CollectionSetupList() {
     [STEPS.CREATE_PRODUCTS]: hasPQ ? 4 : 3,
     [STEPS.PRODUCT_IMAGE_PROMPT]: hasPQ ? 5 : 4,
     [STEPS.PRODUCT_IMAGE_PREVIEW]: hasPQ ? 5 : 4,
+    [STEPS.GENERATE_PRODUCT_IMAGES]: hasPQ ? 5 : 4,
     [STEPS.PUBLISH_PRODUCTS]: hasPQ ? 6 : 5,
   };
 
@@ -127,7 +128,7 @@ export default function CollectionSetupList() {
   };
 
   const handleReviewProductImage = (combo) => {
-    reviewStep(STEPS.PRODUCT_IMAGE_PROMPT, combo);
+    reviewStep(STEPS.GENERATE_PRODUCT_IMAGES, combo);
   };
 
   const firstUnacceptedIdx = aiBlueprintItems.findIndex((item) => {
@@ -190,7 +191,7 @@ export default function CollectionSetupList() {
         const cp = collectionProducts.find(p => p.projectBlueprintId === combo.projectBlueprintId);
         const displayName = cp?.name || combo.blueprintName;
         const currentCombo = selectedProductCombos[currentProductComboIndex];
-        const isCurrentItem = (step === STEPS.PRODUCT_IMAGE_PROMPT || step === STEPS.PRODUCT_IMAGE_PREVIEW) &&
+        const isCurrentItem = (step === STEPS.PRODUCT_IMAGE_PROMPT || step === STEPS.PRODUCT_IMAGE_PREVIEW || step === STEPS.GENERATE_PRODUCT_IMAGES) &&
           currentCombo &&
           currentCombo.projectBlueprintId === combo.projectBlueprintId &&
           currentCombo.productImageId === combo.productImageId;
@@ -230,7 +231,7 @@ export default function CollectionSetupList() {
     </List>
   ) : null;
 
-  const productImageComplete = !needsRegeneration && acceptedProductImages > 0 && (totalProductImages === 0 ? isComplete(STEPS.PRODUCT_IMAGE_PREVIEW) : acceptedProductImages === totalProductImages);
+  const productImageComplete = !needsRegeneration && acceptedProductImages > 0 && (totalProductImages === 0 ? isComplete(STEPS.GENERATE_PRODUCT_IMAGES) : acceptedProductImages === totalProductImages);
 
   const accordionItems = [
     {
@@ -274,7 +275,7 @@ export default function CollectionSetupList() {
       ) : null,
     },
     {
-      title: renderTitle('Generate Product Images', productImageComplete, totalProductImages > 0 ? `${acceptedProductImages}/${totalProductImages}` : (acceptedProductImages > 0 ? `${acceptedProductImages}/${acceptedProductImages}` : null), isCurrent(STEPS.PRODUCT_IMAGE_PROMPT)),
+      title: renderTitle('Generate Product Images', productImageComplete, totalProductImages > 0 ? `${acceptedProductImages}/${totalProductImages}` : (acceptedProductImages > 0 ? `${acceptedProductImages}/${acceptedProductImages}` : null), isCurrent(STEPS.GENERATE_PRODUCT_IMAGES)),
       content: productImageContent,
       action: null,
     },

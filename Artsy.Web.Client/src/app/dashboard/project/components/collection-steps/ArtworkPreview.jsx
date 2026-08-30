@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCollection } from '@/context/collection';
 import { useDashboard } from '@/context/dashboard';
 import { artworkImageUrl, artworkJpgWithBgUrl } from '@/utils/artworkUrls';
@@ -8,7 +8,9 @@ import ButtonOutline from '@/components/ui/button-outline';
 import Button from '@/components/ui/button';
 import Spinner from '@/components/ui/spinner';
 import Tooltip from '@/components/ui/tooltip';
+import Icon from '@/components/ui/icon';
 import PatternPreview from './PatternPreview';
+import RegenerateArtworkModal from './RegenerateArtworkModal';
 
 export default function ArtworkPreview() {
   const {
@@ -18,20 +20,29 @@ export default function ArtworkPreview() {
     requestedChanges, setRequestedChanges,
     collectionId, ensureCollection, projectId,
     doGeneratePreview, advanceToNextItem,
-    setCollectionArtwork,
+    setCollectionArtwork, collectionArtwork,
     api, onClose, onSaved, setArtworkPreview, setStep, STEPS, goBack,
     previewGenerationIndex, previewGenerationTotal, generatingMessage,
     previewGenerationThumbs,
-    itemAnswers, buildProjectAnswers, selectedImageModel,
-    design, patternSettings,
+    itemAnswers, buildProjectAnswers, selectedImageModel, imageModels, loadImageModels,
+    design, patternSettings, cancelAll,
   } = useCollection();
 
   const { refreshTokens } = useDashboard();
 
   const [changeMode, setChangeMode] = useState('regenerate');
   const [isFixing, setIsFixing] = useState(false);
-  const [regeneratingIndex, setRegeneratingIndex] = useState(null);
+  const [regeneratingIndices, setRegeneratingIndices] = useState(new Set());
   const [regeneratedCacheBust, setRegeneratedCacheBust] = useState({});
+  const [regenerateModalState, setRegenerateModalState] = useState(null); // { img, imageUrl, label, existingPrompt, hasPlacementRecords }
+  const [applyingEditsIndex, setApplyingEditsIndex] = useState(null);
+
+  const MAX_CONCURRENT_REGENS = 4;
+
+  // Ensure image models are loaded (needed for regeneration, especially on resume)
+  useEffect(() => {
+    if (imageModels.length === 0) loadImageModels();
+  }, [imageModels.length, loadImageModels]);
 
   const stripThumb = (url) => (url || '').replace('thumb=true&', '').replace('&thumb=true', '').replace('?thumb=true', '?').replace(/\?$/, '');
 
@@ -121,7 +132,7 @@ export default function ArtworkPreview() {
     const images = [];
     const cacheBust = rnd();
 
-    // For group artworks, show the base combined image (not individual segments)
+    // For group artworks, show the combined artwork image from the artworkId folder (jpg/png)
     if (currentArtwork.hasGroups) {
       images.push({
         index: 0,
@@ -152,12 +163,100 @@ export default function ArtworkPreview() {
     return images;
   }, [currentArtwork, collectionId, currentItem, previewImageData]);
 
-  const handleRegeneratePlacement = useCallback(async (placementIndex) => {
-    if (!currentItem || regeneratingIndex !== null) return;
-    setRegeneratingIndex(placementIndex);
+  // Open the regenerate modal for a specific placement image
+  const handleOpenRegenerateModal = useCallback((img) => {
+    if (!currentItem || !currentArtwork) return;
+
+    // Determine what this image represents: a group, a non-group placement, or a single artwork
+    // Group artworks show the combined image at index 0
+    // Non-group placements show individual placement images at their index
+    const isGroupImage = currentArtwork.hasGroups && img.index === 0;
+    const nonGroupPlacement = !isGroupImage
+      ? (currentArtwork.placements || []).find(p => p.index === img.index && !p.groupId)
+      : null;
+
+    let existingPrompt = '';
+    let label = '';
+    let groupId = null;
+    let placementIndex = null;
+    let hasPlacementRecords = false;
+
+    if (isGroupImage) {
+      // Group artwork — index 0 is the combined image
+      groupId = currentArtwork.groupPlacements?.[0]?.groupId || null;
+      const firstGroup = currentArtwork.groupPlacements?.[0];
+      if (firstGroup) {
+        existingPrompt = firstGroup.placements?.[0]?.optionalPrompt || '';
+        label = `Placement Group`;
+        hasPlacementRecords = true;
+      }
+    } else if (nonGroupPlacement) {
+      // Non-group placement
+      placementIndex = img.index;
+      existingPrompt = nonGroupPlacement.optionalPrompt || '';
+      label = `Placement ${img.index + 1}`;
+      hasPlacementRecords = true;
+    } else {
+      // Pattern or single artwork with no placement records — load from ProjectCollectionArtwork
+      const colArt = collectionArtwork.find(a => String(a.itemId) === String(currentItem.id));
+      existingPrompt = colArt?.optionalPrompt || '';
+      label = 'Artwork';
+    }
+
+    setRegenerateModalState({
+      img,
+      imageUrl: img.thumb,
+      label,
+      existingPrompt,
+      hasPlacementRecords,
+      groupId,
+      placementIndex,
+    });
+  }, [currentItem, currentArtwork, collectionArtwork]);
+
+  const handleRegeneratePlacement = useCallback(async (placementIndex, placementOptionalPrompt, hasPlacementRecords) => {
+    if (!currentItem) return;
+    // Don't allow regenerating an index that's already in progress, or exceeding the concurrent limit
+    if (regeneratingIndices.has(placementIndex) || regeneratingIndices.size >= MAX_CONCURRENT_REGENS) return;
+    setRegeneratingIndices(prev => { const n = new Set(prev); n.add(placementIndex); return n; });
+
     try {
       const colId = collectionId || await ensureCollection();
-      if (!colId) { setRegeneratingIndex(null); return; }
+      if (!colId) { setRegeneratingIndices(prev => { const n = new Set(prev); n.delete(placementIndex); return n; }); return; }
+
+      // Save the placement-level optional prompt before generating (only if there are placement records)
+      if (hasPlacementRecords) {
+        const colArt = collectionArtwork.find(a => String(a.itemId) === String(currentItem.id));
+        if (colArt) {
+          let groupId = null;
+          if (currentArtwork?.hasGroups) {
+            // For group artworks, use the first group's ID
+            groupId = currentArtwork.groupPlacements?.[0]?.groupId || null;
+          }
+          try {
+            await api.updatePlacementOptionalPrompt({
+              collectionId: colId,
+              itemId: currentItem.id,
+              placementIndex,
+              groupId,
+              optionalPrompt: placementOptionalPrompt || '',
+            });
+          } catch (err) {
+            console.error('Failed to save placement optional prompt:', err?.response?.data || err);
+          }
+        }
+      }
+
+      // Resolve the image model ID: prefer the currently selected model,
+      // otherwise look it up from the stored artwork's imageModel string.
+      let modelId = selectedImageModel?.id;
+      if (!modelId) {
+        const imageModelStr = colArt?.imageModel || currentArtwork?.imageModel;
+        if (imageModelStr) {
+          const matched = imageModels.find(m => m.model === imageModelStr);
+          modelId = matched?.id;
+        }
+      }
 
       const answerList = [
         ...buildProjectAnswers(),
@@ -174,22 +273,77 @@ export default function ArtworkPreview() {
         height: 2048,
         answers: answerList,
         requestedChanges: null,
-        modelId: selectedImageModel?.id,
+        modelId,
         generationIndex: placementIndex,
+        design: currentArtwork?.design || 'artwork',
+        placementOptionalPrompt: placementOptionalPrompt || null,
       });
 
       if (res.data.success) {
         // The API returns the artwork entity without the placements array,
         // so we only update the cache bust for this specific placement to refresh its image
         setRegeneratedCacheBust(prev => ({ ...prev, [placementIndex]: Math.floor(Math.random() * 1000000) }));
+        // Refresh collection artwork to get updated placement optionalPrompt values
+        try {
+          const artRes = await api.getCollectionArtwork(colId);
+          if (artRes.data.success) {
+            setCollectionArtwork(artRes.data.data || []);
+          }
+        } catch { /* non-critical */ }
         refreshTokens();
       }
     } catch (error) {
       console.error('Regenerate placement error:', error?.response?.data || error);
     } finally {
-      setRegeneratingIndex(null);
+      setRegeneratingIndices(prev => { const n = new Set(prev); n.delete(placementIndex); return n; });
     }
-  }, [currentItem, regeneratingIndex, collectionId, ensureCollection, buildProjectAnswers, itemAnswers, api, projectId, selectedImageModel, refreshTokens]);
+  }, [currentItem, regeneratingIndices, collectionId, ensureCollection, buildProjectAnswers, itemAnswers, api, projectId, selectedImageModel, imageModels, currentArtwork, collectionArtwork, refreshTokens, setCollectionArtwork]);
+
+  // Called when the user clicks "Generate Artwork" in the regenerate modal
+  const handleModalGenerate = useCallback((optionalPrompt) => {
+    if (!regenerateModalState) return;
+    const { img, hasPlacementRecords } = regenerateModalState;
+    setRegenerateModalState(null);
+    handleRegeneratePlacement(img.index, optionalPrompt, hasPlacementRecords);
+  }, [regenerateModalState, handleRegeneratePlacement]);
+
+  const handleApplyEdits = useCallback(async (edits) => {
+    if (!regenerateModalState || !currentItem) return;
+    const { img, groupId, placementIndex } = regenerateModalState;
+    setRegenerateModalState(null);
+    setApplyingEditsIndex(img.index);
+
+    try {
+      const colId = collectionId || await ensureCollection();
+      if (!colId) { setApplyingEditsIndex(null); return; }
+
+      await api.editArtwork({
+        projectId,
+        collectionId: colId,
+        itemId: currentItem.id,
+        placementIndex,
+        groupId,
+        rotate180: edits.rotate180,
+        flipHorizontal: edits.flipHorizontal,
+        flipVertical: edits.flipVertical,
+      });
+
+      // Refresh the image with cache bust
+      setRegeneratedCacheBust(prev => ({ ...prev, [img.index]: Math.floor(Math.random() * 1000000) }));
+
+      // Refresh collection artwork to get updated data
+      try {
+        const artRes = await api.getCollectionArtwork(colId);
+        if (artRes.data.success) {
+          setCollectionArtwork(artRes.data.data || []);
+        }
+      } catch { /* non-critical */ }
+    } catch (error) {
+      console.error('Apply edits error:', error?.response?.data || error);
+    } finally {
+      setApplyingEditsIndex(null);
+    }
+  }, [regenerateModalState, currentItem, collectionId, ensureCollection, api, projectId, setCollectionArtwork]);
 
   const handleTryAgain = useCallback(() => {
     setStep(STEPS.ARTWORK_QUESTIONS);
@@ -301,7 +455,8 @@ export default function ArtworkPreview() {
           ) : placementGridImages.length > 0 ? (
             <div className="flex flex-wrap justify-center gap-3 max-w-[500px]">
               {placementGridImages.map((img) => {
-                const isRegenerating = regeneratingIndex === img.index;
+                const isRegenerating = regeneratingIndices.has(img.index);
+                const isApplyingEdits = applyingEditsIndex === img.index;
                 const r = regeneratedCacheBust[img.index];
                 const thumbSrc = r
                   ? `${img.thumb}${img.thumb.includes('?') ? '&' : '?'}r=${r}`
@@ -312,7 +467,7 @@ export default function ArtworkPreview() {
                     className="group relative w-[150px] h-[150px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 cursor-pointer bg-gray-100 dark:bg-gray-700"
                     onClick={() => setArtworkPreview({ images: placementGridImages.map(p => p.full), src: img.full, alt: 'Artwork Preview' })}
                   >
-                    {isRegenerating ? (
+                    {isRegenerating || isApplyingEdits ? (
                       <div className="w-full h-full flex items-center justify-center">
                         <Spinner className="text-2xl" />
                       </div>
@@ -323,17 +478,18 @@ export default function ArtworkPreview() {
                           alt={`Placement ${img.index + 1}`}
                           className="w-full h-full object-contain"
                         />
-                        <div className="absolute inset-x-0 bottom-0 p-1 opacity-0 group-hover:opacity-100 transition">
+                        <div className="absolute inset-x-0 bottom-0 p-1 flex justify-center opacity-0 group-hover:opacity-100 transition">
                           <Button
                             color="green"
                             size="small"
-                            className="!w-full !text-xs"
+                            className="!text-xs"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleRegeneratePlacement(img.index);
+                              handleOpenRegenerateModal(img);
                             }}
                           >
-                            Regenerate
+                            <Icon name="edit" className="text-sm mr-1" />
+                            Edit Image
                           </Button>
                         </div>
                       </>
@@ -414,8 +570,20 @@ export default function ArtworkPreview() {
           </ButtonOutline>
         )}
         <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
-        <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+        <ButtonOutline color="gray" className="cancel" onClick={() => { cancelAll(); onClose(); }}>Cancel</ButtonOutline>
       </div>
+
+      <RegenerateArtworkModal
+        show={!!regenerateModalState}
+        imageUrl={regenerateModalState?.imageUrl}
+        placementLabel={regenerateModalState?.label}
+        existingOptionalPrompt={regenerateModalState?.existingPrompt}
+        isGenerating={regenerateModalState && regeneratingIndices.has(regenerateModalState.img.index)}
+        isApplyingEdits={regenerateModalState && applyingEditsIndex === regenerateModalState.img.index}
+        onGenerate={handleModalGenerate}
+        onApplyEdits={handleApplyEdits}
+        onClose={() => setRegenerateModalState(null)}
+      />
     </div>
   );
 }

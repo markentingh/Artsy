@@ -17,6 +17,7 @@ export const STEPS = {
   READY_TO_GENERATE: 'ready_to_generate',
   PRODUCT_IMAGE_PROMPT: 'product_image_prompt',
   PRODUCT_IMAGE_PREVIEW: 'product_image_preview',
+  GENERATE_PRODUCT_IMAGES: 'generate_product_images',
   CREATE_PRODUCTS: 'create_products',
   PUBLISH_PRODUCTS: 'publish_products',
 };
@@ -38,8 +39,7 @@ const STEP_ORDER = [
   STEPS.ARTWORK_PREVIEW,
   STEPS.READY_TO_GENERATE,
   STEPS.CREATE_PRODUCTS,
-  STEPS.PRODUCT_IMAGE_PROMPT,
-  STEPS.PRODUCT_IMAGE_PREVIEW,
+  STEPS.GENERATE_PRODUCT_IMAGES,
   STEPS.PUBLISH_PRODUCTS,
 ];
 
@@ -79,8 +79,7 @@ export function buildStepIndex(hasProjectQuestions) {
     artwork_preview: 2 + offset,
     ready_to_generate: 3 + offset,
     create_products: 4 + offset,
-    product_image_prompt: 5 + offset,
-    product_image_preview: 5 + offset,
+    generate_product_images: 5 + offset,
     publish_products: 6 + offset,
   };
 }
@@ -253,6 +252,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
     setIsGenerating(true);
     setMessage(null);
+    cancelRef.current = false;
     try {
       // Save optional prompt to collection artwork before generating
       if (colId) {
@@ -288,6 +288,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
       let lastArtwork = null;
       for (let genIdx = 0; genIdx < totalGenerations; genIdx++) {
+        if (cancelRef.current) break;
         setPreviewGenerationIndex(genIdx);
         const dims = generations[genIdx];
         const dimStr = dims ? ` (${dims.width}x${dims.height})` : '';
@@ -598,11 +599,11 @@ export function CollectionProvider({ children, projectId, project, collectionId:
                 setSelectedProductCombos(combos);
                 setCurrentProductComboIndex(0);
                 setProductImagePrompt(combos[0]?.prompt || '');
-                setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+                setStep(STEPS.GENERATE_PRODUCT_IMAGES);
                 return;
               }
             } catch (e) {  }
-            setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+            setStep(STEPS.GENERATE_PRODUCT_IMAGES);
           } else {
             setStep(STEPS.READY_TO_GENERATE);
           }
@@ -721,6 +722,19 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     }
     refreshTokens();
   }, [aiItems, projectId, api, buildProjectAnswers, collectionArtwork, refreshTokens, onSaved]);
+
+  const cancelAll = useCallback(() => {
+    cancelRef.current = true;
+    setIsGenerating(false);
+    setIsGeneratingAll(false);
+    setPreviewGenerationIndex(0);
+    setPreviewGenerationTotal(0);
+    setPreviewGenerationThumbs([]);
+    setGeneratingProgress(0);
+    setCurrentGeneratingIndex(-1);
+    setCurrentGeneratingItemId(null);
+    setGeneratingMessage('');
+  }, []);
 
   const reset = useCallback(() => {
     setStep(STEPS.SELECT_PRODUCTS);
@@ -928,6 +942,11 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       return;
     }
 
+    if (targetStep === STEPS.GENERATE_PRODUCT_IMAGES) {
+      setStep(STEPS.GENERATE_PRODUCT_IMAGES);
+      return;
+    }
+
     if (targetStep === STEPS.PRODUCT_IMAGE_PROMPT && productBlueprintImages.length > 0) {
       let combo;
       if (substep) {
@@ -985,9 +1004,13 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       return;
     }
 
+    if (step === STEPS.GENERATE_PRODUCT_IMAGES) {
+      setStep(STEPS.CREATE_PRODUCTS);
+      return;
+    }
+
     if (step === STEPS.PRODUCT_IMAGE_PROMPT && selectedProductCombos.length > 0) {
       if (currentProductComboIndex > 0) {
-        // Back from prompt (combo N) → preview of combo N-1 (no auto-generation)
         const prevIndex = currentProductComboIndex - 1;
         const prevCombo = selectedProductCombos[prevIndex];
         setCurrentProductComboIndex(prevIndex);
@@ -999,14 +1022,12 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         setProductImageGenerateTrigger(0);
         setStep(STEPS.PRODUCT_IMAGE_PREVIEW);
       } else {
-        // Back from prompt (combo 0) → create products
         setStep(STEPS.CREATE_PRODUCTS);
       }
       return;
     }
 
     if (step === STEPS.PRODUCT_IMAGE_PREVIEW && selectedProductCombos.length > 0) {
-      // Back from preview → prompt of same combo
       const currCombo = selectedProductCombos[currentProductComboIndex];
       const existing = allProductImages.find(img =>
         img.projectBlueprintId === currCombo.projectBlueprintId &&
@@ -1025,19 +1046,6 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     if (prevStep === STEPS.ARTWORK_PREVIEW && aiItems.length > 0) {
       const lastItem = aiItems[aiItems.length - 1];
       reviewStep(STEPS.ARTWORK_PREVIEW, lastItem.id);
-      return;
-    }
-
-    if (prevStep === STEPS.PRODUCT_IMAGE_PREVIEW && selectedProductCombos.length > 0) {
-      const lastIndex = selectedProductCombos.length - 1;
-      const lastCombo = selectedProductCombos[lastIndex];
-      setCurrentProductComboIndex(lastIndex);
-      const existing = allProductImages.find(img =>
-        img.projectBlueprintId === lastCombo.projectBlueprintId &&
-        img.productImageId === lastCombo.productImageId
-      );
-      setProductImagePrompt(existing?.prompt || lastCombo.prompt || '');
-      setStep(STEPS.PRODUCT_IMAGE_PREVIEW);
       return;
     }
 
@@ -1075,6 +1083,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
     message, setMessage,
     resumeStep, setResumeStep,
     cancelRef,
+    cancelAll,
     // helpers
     ensureCollection, buildProjectAnswers, buildAllAnswers, saveAnswers,
     refreshCollectionArtwork, doGeneratePreview, loadItemData, advanceToNextItem,

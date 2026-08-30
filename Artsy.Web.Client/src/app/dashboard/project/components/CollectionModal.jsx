@@ -14,6 +14,7 @@ const ArtworkPreview = lazy(() => import('./collection-steps/ArtworkPreview'));
 const ReadyToGenerate = lazy(() => import('./collection-steps/ReadyToGenerate'));
 const CreateProducts = lazy(() => import('./collection-steps/CreateProducts'));
 const PublishProductsStep = lazy(() => import('./collection-steps/PublishProductsStep'));
+const GenerateProductImages = lazy(() => import('./collection-steps/GenerateProductImages'));
 const ProductImagePrompt = lazy(() => import('./collection-steps/ProductImagePrompt'));
 const ProductImagePreview = lazy(() => import('./collection-steps/ProductImagePreview'));
 
@@ -27,6 +28,7 @@ const stepTitle = (step, title) => {
     case STEPS.READY_TO_GENERATE: return `${prefix} - Ready to Upscale`;
     case STEPS.PRODUCT_IMAGE_PROMPT: return `${prefix} - Product Image Prompt`;
     case STEPS.PRODUCT_IMAGE_PREVIEW: return `${prefix} - Product Images`;
+    case STEPS.GENERATE_PRODUCT_IMAGES: return `${prefix} - Product Images`;
     case STEPS.CREATE_PRODUCTS: return `${prefix} - Create Products`;
     case STEPS.PUBLISH_PRODUCTS: return `${prefix} - Publish Products`;
     default: return prefix;
@@ -52,8 +54,7 @@ function CollectionWizard() {
       STEPS.ARTWORK_PREVIEW,
       STEPS.READY_TO_GENERATE,
       STEPS.CREATE_PRODUCTS,
-      STEPS.PRODUCT_IMAGE_PROMPT,
-      STEPS.PRODUCT_IMAGE_PREVIEW,
+      STEPS.GENERATE_PRODUCT_IMAGES,
       STEPS.PUBLISH_PRODUCTS,
     ];
     for (const s of order) {
@@ -77,7 +78,7 @@ function CollectionWizard() {
       title={stepTitle(step, collectionTitle)}
       onClose={onClose}
       top
-      className="min-w-[40em] max-w-full"
+      className="min-w-[40em] max-w-[95vw] w-[1200px]"
     >
       {message && (
         <Message type={message.type} onClose={() => setMessage(null)}>
@@ -120,6 +121,7 @@ function CollectionWizard() {
                 {step === STEPS.ARTWORK_QUESTIONS && <ArtworkQuestions />}
                 {step === STEPS.ARTWORK_PREVIEW && <ArtworkPreview />}
                 {step === STEPS.READY_TO_GENERATE && <ReadyToGenerate />}
+                {step === STEPS.GENERATE_PRODUCT_IMAGES && <GenerateProductImages />}
                 {step === STEPS.PRODUCT_IMAGE_PROMPT && <ProductImagePrompt />}
                 {step === STEPS.PRODUCT_IMAGE_PREVIEW && <ProductImagePreview />}
                 {step === STEPS.CREATE_PRODUCTS && <CreateProducts />}
@@ -403,7 +405,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
                     setSelectedProductCombos(combos);
                     setCurrentProductComboIndex(0);
                     setProductImagePrompt(combos[0]?.prompt || '');
-                    setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+                    setStep(STEPS.GENERATE_PRODUCT_IMAGES);
                     setInitialLoading(false);
                     return;
                   }
@@ -416,7 +418,7 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
                   if (!allProductsCreated) {
                     setStep(STEPS.CREATE_PRODUCTS);
                   } else {
-                    setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+                    setStep(STEPS.GENERATE_PRODUCT_IMAGES);
                   }
                 }
                 setInitialLoading(false);

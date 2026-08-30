@@ -18,5 +18,7 @@ namespace Artsy.Data.Interfaces.Projects
         Task DeleteAsync(Guid id);
         Task UpdateActiveAsync(Guid id, bool active);
         Task UpdateAcceptedAsync(Guid id, bool accepted);
+        Task UpdateConfigAsync(Guid id, string variantColor, string imageModel, string prompt, string selectedMockups);
+        Task SetGeneratedAsync(Guid id, bool generated);
     }
 }

@@ -12,5 +12,6 @@ namespace Artsy.Data.Entities.Projects
         public string ResponseId { get; set; } = "";
         public Guid? GroupId { get; set; }
         public string Position { get; set; } = "";
+        public string OptionalPrompt { get; set; } = "";
     }
 }

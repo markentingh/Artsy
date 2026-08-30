@@ -16,7 +16,7 @@ export default function ReadyToGenerate() {
     generatedArtworks, currentGeneratingIndex, currentGeneratingItemId,
     doGenerateAll,
     setArtworkPreview, onClose, onSaved, api,
-    projectId, cancelRef, STEPS,
+    projectId, cancelRef, cancelAll, STEPS,
     upscaleComplete, setUpscaleComplete,
     setStep, loadImageModels,
     ensureCollection, goBack,
@@ -139,9 +139,9 @@ export default function ReadyToGenerate() {
   }, [collectionId, projectId, api, setCollectionId, doGenerateAll, setGenerationError]);
 
   const handleCancelGeneration = useCallback(() => {
-    cancelRef.current = true;
+    cancelAll();
     onClose();
-  }, [cancelRef, onClose]);
+  }, [cancelAll, onClose]);
 
   const [upscalingAgain, setUpscalingAgain] = useState({});
   const [hoveredIdx, setHoveredIdx] = useState(null);

@@ -12,5 +12,7 @@ namespace Artsy.Data.Interfaces.Projects
         Task DeleteByArtworkIdAsync(Guid collectionArtworkId);
         Task SetPrintifyImageIdAsync(Guid placementId, string printifyImageId);
         Task SetFullSizeAsync(Guid placementId, bool fullSize);
+        Task SetOptionalPromptAsync(Guid placementId, string optionalPrompt);
+        Task SetOptionalPromptByGroupAsync(Guid collectionArtworkId, Guid groupId, string optionalPrompt);
     }
 }

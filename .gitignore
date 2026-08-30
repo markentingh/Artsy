@@ -14,6 +14,7 @@ RECOVER_*
 *.jfm
 Artsy.Web.Server/Content/
 *.pb
+.next/
 
 
 # Build results

@@ -23,6 +23,7 @@ export default function CreateProducts() {
     setProductBlueprintImages, setProductImagePrompt, loadImageModels,
     ensureCollection, loadMockups,
     collectionProducts, setCollectionProducts, mockups,
+    cancelRef, cancelAll,
   } = useCollection();
 
   const printifyProductsApi = PrintifyProducts(session);
@@ -35,6 +36,7 @@ export default function CreateProducts() {
   const [productToDelete, setProductToDelete] = useState(null);
   const [archivingUpload, setArchivingUpload] = useState({});
   const [editProductBp, setEditProductBp] = useState(null);
+  const [createCheckMap, setCreateCheckMap] = useState({});
 
   const createdBlueprints = useMemo(() => {
     const map = {};
@@ -55,6 +57,17 @@ export default function CreateProducts() {
       activeBlueprintIds.has(bp.id)
     );
   }, [blueprints, collectionProducts]);
+
+  // Initialize create checkboxes: checked by default for all blueprintsWithImages
+  useEffect(() => {
+    setCreateCheckMap(prev => {
+      const next = {};
+      for (const bp of blueprintsWithImages) {
+        next[bp.id] = prev[bp.id] !== false; // default true, preserve user toggles
+      }
+      return next;
+    });
+  }, [blueprintsWithImages]);
 
   const variantCountByBlueprint = useMemo(() => {
     const map = {};
@@ -90,7 +103,10 @@ export default function CreateProducts() {
     );
   }, [blueprintsWithImages, imagesByBlueprint]);
 
-  const activeBlueprints = blueprintsWithImages;
+  const activeBlueprints = useMemo(() =>
+    blueprintsWithImages.filter(bp => createCheckMap[bp.id] !== false),
+    [blueprintsWithImages, createCheckMap]
+  );
 
   const activeItemIds = useMemo(() => {
     const ids = new Set();
@@ -258,8 +274,10 @@ export default function CreateProducts() {
 
     setUploading(true);
     setMessage(null);
+    cancelRef.current = false;
 
     for (const art of activeArtworkImages) {
+      if (cancelRef.current) break;
       const artKey = art.id;
       const artwork = acceptedArtwork.find(a => a.id === art.artworkId);
 
@@ -287,7 +305,27 @@ export default function CreateProducts() {
             position: art.groupPosition,
           });
           if (response.data.success) {
+            const newId = response.data.data?.printifyImageId;
             setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'done' } }));
+            if (newId) {
+              setCollectionArtwork(prev => prev.map(a => {
+                if (a.id !== art.artworkId) return a;
+                return {
+                  ...a,
+                  groupPlacements: (a.groupPlacements || []).map(grp => {
+                    if (grp.groupId !== art.groupId) return grp;
+                    return {
+                      ...grp,
+                      placements: (grp.placements || []).map(gp =>
+                        gp.position === art.groupPosition
+                          ? { ...gp, printifyImageId: newId }
+                          : gp
+                      ),
+                    };
+                  }),
+                };
+              }));
+            }
           } else {
             setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'error' } }));
             setMessage({ type: 'error', text: response.data.message || 'Failed to upload group placement' });
@@ -300,7 +338,21 @@ export default function CreateProducts() {
             placementIndex: art.placementIndex,
           });
           if (response.data.success) {
+            const newId = response.data.data?.printifyImageId;
             setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'done' } }));
+            if (newId) {
+              setCollectionArtwork(prev => prev.map(a => {
+                if (a.id !== art.artworkId) return a;
+                return {
+                  ...a,
+                  placements: (a.placements || []).map(p =>
+                    p.index === art.placementIndex && !p.groupId
+                      ? { ...p, printifyImageId: newId }
+                      : p
+                  ),
+                };
+              }));
+            }
           } else {
             setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'error' } }));
             setMessage({ type: 'error', text: response.data.message || 'Failed to upload placement' });
@@ -312,7 +364,13 @@ export default function CreateProducts() {
             artworkId: art.artworkId || art.id,
           });
           if (response.data.success) {
+            const newId = response.data.data?.printifyImageId;
             setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'done' } }));
+            if (newId) {
+              setCollectionArtwork(prev => prev.map(a =>
+                a.id === (art.artworkId || art.id) ? { ...a, printifyImageId: newId } : a
+              ));
+            }
           } else {
             setArtworkUploadState(prev => ({ ...prev, [artKey]: { status: 'error' } }));
             setMessage({ type: 'error', text: response.data.message || 'Failed to upload artwork' });
@@ -325,7 +383,7 @@ export default function CreateProducts() {
     }
 
     setUploading(false);
-  }, [collectionId, project, activeArtworkImages, artworkUploadState, printifyProductsApi, setMessage]);
+  }, [collectionId, project, activeArtworkImages, artworkUploadState, printifyProductsApi, setMessage, cancelRef, setCollectionArtwork]);
 
   const allImagesUploaded = useMemo(() => {
     if (activeArtworkImages.length === 0) return true;
@@ -355,11 +413,14 @@ export default function CreateProducts() {
 
     setCreating(true);
     setMessage(null);
+    cancelRef.current = false;
 
     let successCount = 0;
     let processedCount = 0;
 
     for (const bp of activeBlueprints) {
+      if (cancelRef.current) break;
+      if (createCheckMap[bp.id] === false) continue;
       const variantCount = variantCountByBlueprint[bp.id] || 0;
       if (variantCount === 0) continue;
 
@@ -429,7 +490,7 @@ export default function CreateProducts() {
     } catch { /* ignore */ }
 
     setCreating(false);
-  }, [collectionId, project, activeBlueprints, variantCountByBlueprint, printifyProducts, printifyProductsApi, setMessage, setPrintifyProducts, loadMockups]);
+  }, [collectionId, project, activeBlueprints, variantCountByBlueprint, printifyProducts, printifyProductsApi, setMessage, setPrintifyProducts, loadMockups, createCheckMap, cancelRef]);
 
   const handleNext = useCallback(async () => {
     const colId = collectionId || await ensureCollection();
@@ -486,12 +547,12 @@ export default function CreateProducts() {
         setSelectedProductCombos(combos);
         setCurrentProductComboIndex(0);
         setProductImagePrompt(combos[0]?.prompt || '');
-        setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+        setStep(STEPS.GENERATE_PRODUCT_IMAGES);
         return;
       }
     } catch (e) { }
 
-    setStep(STEPS.PRODUCT_IMAGE_PROMPT);
+    setStep(STEPS.GENERATE_PRODUCT_IMAGES);
   }, [collectionId, ensureCollection, printifyProducts, activeBlueprints, api, setProductBlueprintImages, setAllProductImages, setSelectedProductCombos, setCurrentProductComboIndex, setProductImagePrompt, setStep, STEPS, setMessage]);
 
   const handleStart = useCallback(async () => {
@@ -501,9 +562,10 @@ export default function CreateProducts() {
       await handleCreateProducts();
     } else {
       await handleUploadImages();
+      if (cancelRef.current) return;
       await handleCreateProducts();
     }
-  }, [collectionId, allImagesUploaded, handleUploadImages, handleCreateProducts]);
+  }, [collectionId, allImagesUploaded, handleUploadImages, handleCreateProducts, cancelRef]);
 
   const handleDeleteProduct = useCallback(async (pp) => {
     if (!pp?.productId || !collectionId) return;
@@ -513,13 +575,6 @@ export default function CreateProducts() {
       const response = await printifyProductsApi.delete({ collectionId, productId: pp.productId });
       if (response.data.success) {
         setPrintifyProducts(prev => prev.filter(p => p.id !== pp.id));
-        // Refresh artwork data since PrintifyImageId values were cleared on the backend
-        try {
-          const artRes = await api.getCollectionArtwork(collectionId);
-          if (artRes.data.success) {
-            setCollectionArtwork(artRes.data.data || []);
-          }
-        } catch { /* ignore */ }
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to delete product' });
       }
@@ -528,37 +583,66 @@ export default function CreateProducts() {
     } finally {
       setDeletingProduct(prev => ({ ...prev, [pp.id]: false }));
     }
-  }, [collectionId, printifyProductsApi, api, setCollectionArtwork, setMessage, setPrintifyProducts]);
+  }, [collectionId, printifyProductsApi, setMessage, setPrintifyProducts]);
 
   const handleArchiveUpload = useCallback(async (art) => {
-    if (!collectionId || !art?.id || archivingUpload[art.id]) return;
+    if (!collectionId || !art?.artworkId || archivingUpload[art.id]) return;
     setArchivingUpload(prev => ({ ...prev, [art.id]: true }));
     try {
       const response = await printifyProductsApi.archiveUpload({
         collectionId,
-        artworkId: art.id,
+        artworkId: art.artworkId,
+        placementIndex: art.placementIndex,
+        groupId: art.groupId,
+        groupPosition: art.groupPosition,
       });
       if (response.data.success) {
-        setCollectionArtwork(prev => prev.map(a =>
-          a.id === art.id ? { ...a, printifyImageId: '' } : a
-        ));
+        // Update local state for the specific image that was archived
+        const stateKey = art.id;
         setArtworkUploadState(prev => {
           const next = { ...prev };
-          delete next[art.id];
+          delete next[stateKey];
           return next;
         });
 
-        const itemId = String(art.itemId);
-        const relatedBlueprints = blueprintsWithImages.filter(bp => {
-          if (!bp.placementJson) return false;
-          try {
-            const placements = typeof bp.placementJson === 'string' ? JSON.parse(bp.placementJson) : bp.placementJson;
-            return (placements || []).some(p => p.source === 'item' && String(p.itemId) === itemId);
-          } catch { return false; }
-        });
-        for (const bp of relatedBlueprints) {
-          const pp = printifyProducts.find(p => p.projectBlueprintId === bp.id);
-          if (pp) await handleDeleteProduct(pp);
+        // Update collectionArtwork to reflect the cleared printifyImageId
+        if (art.placementIndex != null) {
+          // Non-group placement
+          setCollectionArtwork(prev => prev.map(a => {
+            if (a.id !== art.artworkId) return a;
+            return {
+              ...a,
+              placements: (a.placements || []).map(p =>
+                p.index === art.placementIndex && !p.groupId
+                  ? { ...p, printifyImageId: '' }
+                  : p
+              ),
+            };
+          }));
+        } else if (art.groupId) {
+          // Group placement
+          setCollectionArtwork(prev => prev.map(a => {
+            if (a.id !== art.artworkId) return a;
+            return {
+              ...a,
+              groupPlacements: (a.groupPlacements || []).map(grp => {
+                if (grp.groupId !== art.groupId) return grp;
+                return {
+                  ...grp,
+                  placements: (grp.placements || []).map(gp =>
+                    gp.index === art.groupIndex
+                      ? { ...gp, printifyImageId: '' }
+                      : gp
+                  ),
+                };
+              }),
+            };
+          }));
+        } else {
+          // Base artwork
+          setCollectionArtwork(prev => prev.map(a =>
+            a.id === art.artworkId ? { ...a, printifyImageId: '' } : a
+          ));
         }
       } else {
         setMessage({ type: 'error', text: response.data.message || 'Failed to archive image' });
@@ -568,7 +652,7 @@ export default function CreateProducts() {
     } finally {
       setArchivingUpload(prev => ({ ...prev, [art.id]: false }));
     }
-  }, [collectionId, printifyProductsApi, setMessage, setCollectionArtwork, archivingUpload, blueprintsWithImages, printifyProducts, handleDeleteProduct]);
+  }, [collectionId, printifyProductsApi, setMessage, setCollectionArtwork, archivingUpload]);
 
   const allPreviewImages = useMemo(() => {
     return [
@@ -675,6 +759,13 @@ export default function CreateProducts() {
             return (
               <Item key={bp.id}>
                 <div className="flex items-center w-full">
+                  <input
+                    type="checkbox"
+                    checked={createCheckMap[bp.id] !== false}
+                    onChange={() => setCreateCheckMap(prev => ({ ...prev, [bp.id]: prev[bp.id] === false }))}
+                    disabled={isCreated}
+                    className="w-4 h-4 accent-blue-600 cursor-pointer flex-shrink-0 mr-3"
+                  />
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                     {displayName}
                   </span>
@@ -720,7 +811,7 @@ export default function CreateProducts() {
           <Tooltip text="This will upload the selected images to Printify, then create new products for your store on Printify. This will not publish products to your connected store on Printify." className="pr-8" />
         )}
         <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>
-        <ButtonOutline color="gray" className="cancel" onClick={onClose}>Cancel</ButtonOutline>
+        <ButtonOutline color="gray" className="cancel" onClick={() => { cancelAll(); onClose(); }}>Cancel</ButtonOutline>
         <ButtonOutline
           onClick={allCreated ? handleNext : handleStart}
           disabled={uploading || creating || !project?.printifyStoreId || activeBlueprints.length === 0}
