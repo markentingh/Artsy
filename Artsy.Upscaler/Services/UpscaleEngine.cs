@@ -8,6 +8,7 @@ public class UpscaleEngine : IDisposable
 {
     readonly ILogger _logger;
     readonly string _modelsDir;
+    readonly object _lock = new();
     DnnSuperResImpl? _superResX2;
     DnnSuperResImpl? _superResX4;
     bool _disposed;
@@ -73,28 +74,31 @@ public class UpscaleEngine : IDisposable
 
     public byte[] Upscale(byte[] inputBytes, int scale = 2)
     {
-        var model = scale == 4 ? _superResX4 : _superResX2;
-        if (model == null)
-            throw new InvalidOperationException("Model not loaded. Call LoadModel() first.");
+        lock (_lock)
+        {
+            var model = scale == 4 ? _superResX4 : _superResX2;
+            if (model == null)
+                throw new InvalidOperationException("Model not loaded. Call LoadModel() first.");
 
-        using var inputMat = Cv2.ImDecode(inputBytes, ImreadModes.Color);
-        if (inputMat.Empty())
-            throw new ArgumentException("Failed to decode input image.");
+            using var inputMat = Cv2.ImDecode(inputBytes, ImreadModes.Color);
+            if (inputMat.Empty())
+                throw new ArgumentException("Failed to decode input image.");
 
-        _logger.LogInformation("Decoded input image: {Width}x{Height} (scale={Scale})", inputMat.Width, inputMat.Height, scale);
+            _logger.LogInformation("Decoded input image: {Width}x{Height} (scale={Scale})", inputMat.Width, inputMat.Height, scale);
 
-        using var outputMat = new Mat();
-        model.Upsample(inputMat, outputMat);
+            using var outputMat = new Mat();
+            model.Upsample(inputMat, outputMat);
 
-        if (outputMat.Empty())
-            throw new InvalidOperationException("Upscaling produced an empty image.");
+            if (outputMat.Empty())
+                throw new InvalidOperationException("Upscaling produced an empty image.");
 
-        _logger.LogInformation("Upscaled to {Width}x{Height}", outputMat.Width, outputMat.Height);
+            _logger.LogInformation("Upscaled to {Width}x{Height}", outputMat.Width, outputMat.Height);
 
-        Cv2.ImEncode(".png", outputMat, out var resultBytes);
-        _logger.LogInformation("Encoded output to PNG: {Bytes} bytes", resultBytes.Length);
+            Cv2.ImEncode(".png", outputMat, out var resultBytes);
+            _logger.LogInformation("Encoded output to PNG: {Bytes} bytes", resultBytes.Length);
 
-        return resultBytes;
+            return resultBytes;
+        }
     }
 
     public void Dispose()

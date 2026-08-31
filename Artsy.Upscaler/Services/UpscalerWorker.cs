@@ -12,6 +12,7 @@ public class UpscalerWorker : BackgroundService
     readonly ILogger<UpscalerWorker> _logger;
     readonly UpscalerOptions _options;
     readonly UpscaleEngine _engine;
+    readonly SemaphoreSlim _upscaleLock = new(1, 1);
     HttpListener? _listener;
 
     public UpscalerWorker(ILogger<UpscalerWorker> logger, IOptions<UpscalerOptions> options)
@@ -106,7 +107,16 @@ public class UpscalerWorker : BackgroundService
 
                 _logger.LogInformation("Received upscale request: {Bytes} bytes (scale={Scale})", inputBytes.Length, scale);
 
-                var result = _engine.Upscale(inputBytes, scale);
+                await _upscaleLock.WaitAsync(ct);
+                byte[] result;
+                try
+                {
+                    result = _engine.Upscale(inputBytes, scale);
+                }
+                finally
+                {
+                    _upscaleLock.Release();
+                }
 
                 ctx.Response.StatusCode = 200;
                 ctx.Response.ContentType = "application/octet-stream";
@@ -139,6 +149,7 @@ public class UpscalerWorker : BackgroundService
     {
         _engine.Dispose();
         _listener?.Close();
+        _upscaleLock.Dispose();
         base.Dispose();
         GC.SuppressFinalize(this);
     }

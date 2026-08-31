@@ -5,11 +5,13 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollections"
     "Title" VARCHAR(64) NOT NULL,
     "Created" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "Status" INT NOT NULL DEFAULT 1,
-    "Description" TEXT
+    "Description" TEXT,
+    "MultiProductJson" TEXT
 );
 
 ALTER TABLE public."ProjectCollections" ADD COLUMN IF NOT EXISTS "ProjectId" UUID NOT NULL REFERENCES public."Projects"("Id");
 ALTER TABLE public."ProjectCollections" ADD COLUMN IF NOT EXISTS "Status" INT NOT NULL DEFAULT 1;
 ALTER TABLE public."ProjectCollections" ADD COLUMN IF NOT EXISTS "Description" TEXT;
+ALTER TABLE public."ProjectCollections" ADD COLUMN IF NOT EXISTS "MultiProductJson" TEXT;
 
 CREATE INDEX IF NOT EXISTS "IX_ProjectCollections_ProjectId_Status" ON public."ProjectCollections" ("ProjectId", "Status");

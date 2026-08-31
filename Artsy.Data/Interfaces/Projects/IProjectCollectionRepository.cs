@@ -10,6 +10,7 @@ namespace Artsy.Data.Interfaces.Projects
         Task UpdateAsync(ProjectCollection collection);
         Task UpdateTitleAsync(Guid id, string title);
         Task UpdateDescriptionAsync(Guid id, string? description);
+        Task UpdateMultiProductJsonAsync(Guid id, string? multiProductJson);
         Task DeleteAsync(Guid id);
     }
 }

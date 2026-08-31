@@ -766,15 +766,16 @@ export default function CreateProducts() {
                     disabled={isCreated}
                     className="w-4 h-4 accent-blue-600 cursor-pointer flex-shrink-0 mr-3"
                   />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate pr-2" title={displayName}>
                     {displayName}
                   </span>
-                  <div className="ml-auto flex items-center gap-3">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                  <div className="ml-auto flex items-center gap-3 flex-nowrap">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
                       {variantCount} {variantCount === 1 ? 'variant' : 'variants'}
                     </span>
                     <ButtonOutline
                       size="small"
+                      className="whitespace-nowrap"
                       onClick={() => setEditProductBp(bp)}
                     >
                       Edit Details
@@ -783,6 +784,7 @@ export default function CreateProducts() {
                       <>
                         <ButtonOutline
                           size="small"
+                          className="whitespace-nowrap"
                           onClick={() => window.open(`https://printify.com/app/product-details/${pp.printifyProductId}`, '_blank', 'noopener noreferrer')}
                         >
                           View on Printify
@@ -790,6 +792,7 @@ export default function CreateProducts() {
                         <ButtonOutline
                           size="small"
                           color="red"
+                          className="whitespace-nowrap"
                           onClick={() => setProductToDelete(pp)}
                           disabled={deletingProduct[pp.id]}
                         >

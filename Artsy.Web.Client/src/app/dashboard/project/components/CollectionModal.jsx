@@ -336,6 +336,27 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
                       ? blueprints.filter(bp => activeBpIds.has(bp.id))
                       : blueprints;
 
+                    // If all product images have been generated, skip to publish
+                    if (allImages.length > 0 && allImages.every(img => img.generated)) {
+                      try {
+                        await api.ensurePrintifyProducts({ collectionId: colId });
+                      } catch (e) { /* non-critical */ }
+
+                      const createdBpIds = new Set(
+                        printifyProducts.filter(pp => pp.printifyProductId && pp.projectBlueprintId && pp.mockupsDownloaded)
+                          .map(pp => pp.projectBlueprintId)
+                      );
+                      const allProductsCreated = activeBpsForCheck.length > 0 && activeBpsForCheck.every(bp => createdBpIds.has(bp.id));
+
+                      if (allProductsCreated) {
+                        setStep(STEPS.PUBLISH_PRODUCTS);
+                      } else {
+                        setStep(STEPS.CREATE_PRODUCTS);
+                      }
+                      setInitialLoading(false);
+                      return;
+                    }
+
                     if (allPbImages.length === 0) {
                       const createdBpIds = new Set(
                         printifyProducts.filter(pp => pp.printifyProductId && pp.projectBlueprintId && pp.mockupsDownloaded)

@@ -14,6 +14,9 @@ const PrintifyProducts = (args) => Api({ ...args }).endpoints(({ api }) => {
     getByCollection: (collectionId) => api.get(`${apiPath}/get-by-collection?collectionId=${collectionId}`),
     getMockups: (collectionId) => api.get(`${apiPath}/get-mockups?collectionId=${collectionId}`),
     getMockupImageUrl: (projectId, collectionId, mockupId) => `${apiPath}/mockup-image?projectId=${projectId}&collectionId=${collectionId}&mockupId=${mockupId}`,
+    replaceMockupImage: (formData) => api.post(`${apiPath}/replace-mockup-image`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
     ensureProducts: (request) => api.post(`${apiPath}/ensure-products`, request),
     getProducts: (collectionId) => api.get(`${apiPath}/get-products?collectionId=${collectionId}`),
   };

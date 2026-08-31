@@ -74,8 +74,8 @@ namespace Artsy.Data.Repositories.Projects
         {
             image.Id = Guid.NewGuid();
             const string query = @"
-                INSERT INTO public.""ProjectCollectionProductImages"" (""Id"", ""ProjectId"", ""CollectionId"", ""ProjectBlueprintId"", ""ProductImageId"", ""ImageModel"", ""Prompt"", ""Width"", ""Height"", ""Accepted"", ""ResponseId"", ""VariantColor"", ""Active"", ""SelectedMockups"", ""Generated"")
-                VALUES (@Id, @ProjectId, @CollectionId, @ProjectBlueprintId, @ProductImageId, @ImageModel, @Prompt, @Width, @Height, @Accepted, @ResponseId, @VariantColor, @Active, @SelectedMockups, @Generated)
+                INSERT INTO public.""ProjectCollectionProductImages"" (""Id"", ""ProjectId"", ""CollectionId"", ""ProjectBlueprintId"", ""ProductImageId"", ""ImageModel"", ""Prompt"", ""Width"", ""Height"", ""Accepted"", ""ResponseId"", ""VariantColor"", ""Active"", ""SelectedMockups"", ""Generated"", ""IncludeArtworkRef"")
+                VALUES (@Id, @ProjectId, @CollectionId, @ProjectBlueprintId, @ProductImageId, @ImageModel, @Prompt, @Width, @Height, @Accepted, @ResponseId, @VariantColor, @Active, @SelectedMockups, @Generated, @IncludeArtworkRef)
                 RETURNING *";
             return await _dbConnection.QueryFirstAsync<ProjectCollectionProductImage>(query, image);
         }
@@ -86,7 +86,7 @@ namespace Artsy.Data.Repositories.Projects
                 UPDATE public.""ProjectCollectionProductImages""
                 SET ""ImageModel"" = @ImageModel, ""Prompt"" = @Prompt, ""Width"" = @Width, ""Height"" = @Height,
                     ""Accepted"" = @Accepted, ""ResponseId"" = @ResponseId, ""VariantColor"" = @VariantColor, ""Active"" = @Active,
-                    ""SelectedMockups"" = @SelectedMockups, ""Generated"" = @Generated
+                    ""SelectedMockups"" = @SelectedMockups, ""Generated"" = @Generated, ""IncludeArtworkRef"" = @IncludeArtworkRef
                 WHERE ""Id"" = @Id";
             await _dbConnection.ExecuteAsync(query, image);
         }
@@ -127,13 +127,13 @@ namespace Artsy.Data.Repositories.Projects
             await _dbConnection.ExecuteAsync(query, new { id, accepted });
         }
 
-        public async Task UpdateConfigAsync(Guid id, string variantColor, string imageModel, string prompt, string selectedMockups)
+        public async Task UpdateConfigAsync(Guid id, string variantColor, string imageModel, string prompt, string selectedMockups, bool includeArtworkRef)
         {
             const string query = @"
         UPDATE public.""ProjectCollectionProductImages""
-        SET ""VariantColor"" = @variantColor, ""ImageModel"" = @imageModel, ""Prompt"" = @prompt, ""SelectedMockups"" = @selectedMockups
+        SET ""VariantColor"" = @variantColor, ""ImageModel"" = @imageModel, ""Prompt"" = @prompt, ""SelectedMockups"" = @selectedMockups, ""IncludeArtworkRef"" = @includeArtworkRef
         WHERE ""Id"" = @id";
-            await _dbConnection.ExecuteAsync(query, new { id, variantColor, imageModel, prompt, selectedMockups });
+            await _dbConnection.ExecuteAsync(query, new { id, variantColor, imageModel, prompt, selectedMockups, includeArtworkRef });
         }
 
         public async Task SetGeneratedAsync(Guid id, bool generated)

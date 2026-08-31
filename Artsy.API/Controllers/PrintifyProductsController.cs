@@ -1358,6 +1358,71 @@ namespace Artsy.API.Controllers
             }
         }
 
+        [HttpPost("replace-mockup-image")]
+        public async Task<IActionResult> ReplaceMockupImage([FromForm] ReplaceMockupImageRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.ProjectId == Guid.Empty || request.CollectionId == Guid.Empty || request.MockupId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "projectId, collectionId, and mockupId are required." });
+
+            if (request.File == null || request.File.Length == 0)
+                return Json(new ApiResponse { success = false, message = "File is required." });
+
+            var allowedTypes = new[] { "image/jpeg", "image/png", "image/jpg" };
+            if (!allowedTypes.Contains(request.File.ContentType))
+                return Json(new ApiResponse { success = false, message = "Only JPG and PNG files are allowed." });
+
+            try
+            {
+                // Verify the mockup exists
+                var mockups = await _mockupRepository.GetByCollectionIdAsync(request.CollectionId);
+                var mockup = mockups.FirstOrDefault(m => m.Id == request.MockupId);
+                if (mockup == null)
+                    return Json(new ApiResponse { success = false, message = "Mockup not found." });
+
+                // Read the uploaded file
+                using var fileStream = request.File.OpenReadStream();
+                using var ms = new MemoryStream();
+                await fileStream.CopyToAsync(ms);
+                var imgBytes = ms.ToArray();
+
+                if (imgBytes.Length == 0)
+                    return Json(new ApiResponse { success = false, message = "File is empty." });
+
+                // Convert to JPEG if it's a PNG
+                if (request.File.ContentType == "image/png")
+                {
+                    using var image = await SixLabors.ImageSharp.Image.LoadAsync(new MemoryStream(imgBytes));
+                    using var jpegMs = new MemoryStream();
+                    await image.SaveAsync(jpegMs, new JpegEncoder());
+                    imgBytes = jpegMs.ToArray();
+                }
+
+                // Save the new mockup image (overwrites existing)
+                await _imageService.SaveProjectCollectionMockupAsync(request.ProjectId, request.CollectionId, request.MockupId, imgBytes);
+
+                // Regenerate the thumbnail
+                await _imageService.GenerateProjectCollectionMockupThumbAsync(request.ProjectId, request.CollectionId, request.MockupId);
+
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = new
+                    {
+                        mockupId = request.MockupId,
+                        imageUrl = $"/api/printify-products/mockup-image?projectId={request.ProjectId}&collectionId={request.CollectionId}&mockupId={request.MockupId}&thumb=true"
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
         [HttpGet("get-products")]
         public async Task<IActionResult> GetProducts([FromQuery] Guid collectionId)
         {

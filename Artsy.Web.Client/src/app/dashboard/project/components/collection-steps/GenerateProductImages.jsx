@@ -162,11 +162,12 @@ export default function GenerateProductImages() {
           projectBlueprintId: updatedImg.projectBlueprintId,
           productImageId: updatedImg.productImageId || '00000000-0000-0000-0000-000000000000',
           id: updatedImg.id,
-          modelId: updatedImg.imageModel ? parseInt(updatedImg.imageModel) : (selectedProductImageModel?.id || 0),
+          modelId: String(img.modelId),
           prompt: updatedImg.prompt || '',
           variantColor: updatedImg.variantColor || '',
           productName: cp?.name || undefined,
           mockupImageIds,
+          includeArtworkRef: img.includeArtworkRef !== false,
         });
 
         if (res.data.success) {
@@ -201,53 +202,80 @@ export default function GenerateProductImages() {
     setIsGenerating(true);
     setMessage(null);
 
-    for (const img of toGenerate) {
-      setGeneratingIds(prev => new Set([...prev, img.id]));
-      try {
-        const cp = collectionProducts.find(p => p.projectBlueprintId === img.projectBlueprintId);
-        const mockupImageIds = (img.selectedMockups || '')
-          .split(',')
-          .map(s => s.trim())
-          .filter(Boolean);
+    const queue = [...toGenerate];
+    const MAX_CONCURRENT = 4;
+    let activeCount = 0;
+    let completedCount = 0;
+    let hasError = false;
 
-        const res = await api.generateProductImage({
-          projectId,
-          collectionId,
-          projectBlueprintId: img.projectBlueprintId,
-          productImageId: img.productImageId || '00000000-0000-0000-0000-000000000000',
-          id: img.id,
-          modelId: img.imageModel ? parseInt(img.imageModel) : (selectedProductImageModel?.id || 0),
-          prompt: img.prompt || '',
-          variantColor: img.variantColor || '',
-          productName: cp?.name || undefined,
-          mockupImageIds,
-        });
+    const generateOne = (img) => new Promise((resolve) => {
+      (async () => {
+        setGeneratingIds(prev => new Set([...prev, img.id]));
+        try {
+          const cp = collectionProducts.find(p => p.projectBlueprintId === img.projectBlueprintId);
+          const mockupImageIds = (img.selectedMockups || '')
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean);
 
-        if (res.data.success) {
-          // Update the image in the list
-          const cacheBust = Math.floor(Math.random() * 1000000);
-          setProductImageList(prev => prev.map(p =>
-            p.id === img.id
-              ? { ...p, generated: true, imageUrl: `${res.data.data.imageUrl}&r=${cacheBust}`, accepted: res.data.data.accepted }
-              : p
-          ));
-          refreshTokens();
-        } else {
-          setMessage({ type: 'error', text: res.data.message || `Failed to generate: ${img.variantColor}` });
+          const res = await api.generateProductImage({
+            projectId,
+            collectionId,
+            projectBlueprintId: img.projectBlueprintId,
+            productImageId: img.productImageId || '00000000-0000-0000-0000-000000000000',
+            id: img.id,
+            modelId: String(img.imageModel ? parseInt(img.imageModel) : (selectedProductImageModel?.id || 0)),
+            prompt: img.prompt || '',
+            variantColor: img.variantColor || '',
+            productName: cp?.name || undefined,
+            mockupImageIds,
+            includeArtworkRef: img.includeArtworkRef !== false,
+          });
+
+          if (res.data.success) {
+            const cacheBust = Math.floor(Math.random() * 1000000);
+            setProductImageList(prev => prev.map(p =>
+              p.id === img.id
+                ? { ...p, generated: true, imageUrl: `${res.data.data.imageUrl}&r=${cacheBust}`, accepted: res.data.data.accepted }
+                : p
+            ));
+            refreshTokens();
+          } else {
+            hasError = true;
+            setMessage({ type: 'error', text: res.data.message || `Failed to generate: ${img.variantColor}` });
+          }
+        } catch (err) {
+          hasError = true;
+          setMessage({ type: 'error', text: err?.response?.data?.message || `Failed to generate: ${img.variantColor}` });
+        } finally {
+          setGeneratingIds(prev => {
+            const next = new Set(prev);
+            next.delete(img.id);
+            return next;
+          });
+          completedCount++;
+          resolve();
         }
-      } catch (err) {
-        setMessage({ type: 'error', text: err?.response?.data?.message || `Failed to generate: ${img.variantColor}` });
-      } finally {
-        setGeneratingIds(prev => {
-          const next = new Set(prev);
-          next.delete(img.id);
-          return next;
+      })();
+    });
+
+    const runNext = () => {
+      while (activeCount < MAX_CONCURRENT && queue.length > 0) {
+        const img = queue.shift();
+        activeCount++;
+        generateOne(img).then(() => {
+          activeCount--;
+          if (queue.length > 0) {
+            runNext();
+          } else if (completedCount >= toGenerate.length) {
+            setIsGenerating(false);
+            loadProductImages();
+          }
         });
       }
-    }
+    };
 
-    setIsGenerating(false);
-    await loadProductImages();
+    runNext();
   }, [collectionId, projectId, productImageList, api, collectionProducts, selectedProductImageModel, setMessage, refreshTokens, loadProductImages]);
 
   const handleNext = useCallback(() => {

@@ -66,6 +66,15 @@ namespace Artsy.Data.Repositories.Projects
             await _dbConnection.ExecuteAsync(query, new { id, description });
         }
 
+        public async Task UpdateMultiProductJsonAsync(Guid id, string? multiProductJson)
+        {
+            const string query = @"
+        UPDATE public.""ProjectCollections""
+        SET ""MultiProductJson"" = @multiProductJson
+        WHERE ""Id"" = @id";
+            await _dbConnection.ExecuteAsync(query, new { id, multiProductJson });
+        }
+
         public async Task DeleteAsync(Guid id)
         {
             const string query = @"UPDATE public.""ProjectCollections"" SET ""Status"" = 0 WHERE ""Id"" = @id";

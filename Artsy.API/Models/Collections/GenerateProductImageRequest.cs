@@ -36,6 +36,9 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("mockupImageIds")]
         public List<Guid> MockupImageIds { get; set; } = new List<Guid>();
+
+        [JsonPropertyName("includeArtworkRef")]
+        public bool? IncludeArtworkRef { get; set; }
     }
 
     public class AcceptProductImageRequest
@@ -174,6 +177,9 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("selectedMockups")]
         public string SelectedMockups { get; set; } = "";
+
+        [JsonPropertyName("includeArtworkRef")]
+        public bool IncludeArtworkRef { get; set; } = true;
     }
 
     public class DeleteCollectionProductImageByIdRequest

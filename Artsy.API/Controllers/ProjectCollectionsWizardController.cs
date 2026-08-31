@@ -3069,20 +3069,6 @@ namespace Artsy.API.Controllers
                     }
                 }
 
-                // Add artwork images after mockup images, then describe placements
-                var artworkStartIndex = inputImages.Count + 1;
-                if (placementArtworks.Count > 0)
-                {
-                    promptBuilder.AppendLine();
-                    promptBuilder.AppendLine($"The next {placementArtworks.Count} image(s) are the artwork designs to be placed on the product:");
-                }
-                for (var i = 0; i < placementArtworks.Count; i++)
-                {
-                    inputImages.Add(placementArtworks[i].ImageBytes);
-                    inputImageRefs.Add(new { type = "artwork", id = placementArtworks[i].ArtworkId.ToString() });
-                    promptBuilder.AppendLine($"- Image {artworkStartIndex + i}: Artwork design for the {placementArtworks[i].PlacementName} of the product.");
-                }
-
                 if (!string.IsNullOrWhiteSpace(printifyBlueprint?.ImagePrompt))
                 {
                     promptBuilder.AppendLine();
@@ -3124,6 +3110,26 @@ namespace Artsy.API.Controllers
                 {
                     existing = await _projectCollectionProductImageRepository.GetByCollectionBlueprintProductImageIdAsync(
                         request.CollectionId, request.ProjectBlueprintId ?? Guid.Empty, request.ProductImageId, activeOnly: false);
+                }
+
+                // Determine whether to include artwork reference images
+                var includeArtworkRef = request.IncludeArtworkRef ?? existing?.IncludeArtworkRef ?? true;
+
+                // Add artwork images after mockup images, then describe placements
+                var artworkStartIndex = inputImages.Count + 1;
+                if (includeArtworkRef && placementArtworks.Count > 0)
+                {
+                    promptBuilder.AppendLine();
+                    promptBuilder.AppendLine($"The next {placementArtworks.Count} image(s) are the artwork designs to be placed on the product:");
+                }
+                if (includeArtworkRef)
+                {
+                    for (var i = 0; i < placementArtworks.Count; i++)
+                    {
+                        inputImages.Add(placementArtworks[i].ImageBytes);
+                        inputImageRefs.Add(new { type = "artwork", id = placementArtworks[i].ArtworkId.ToString() });
+                        promptBuilder.AppendLine($"- Image {artworkStartIndex + i}: Artwork design for the {placementArtworks[i].PlacementName} of the product.");
+                    }
                 }
 
                 string? previousResponseId = null;
@@ -3196,7 +3202,8 @@ namespace Artsy.API.Controllers
                     Accepted = false,
                     ResponseId = genResult.ResponseId ?? "",
                     VariantColor = request.VariantColor ?? "",
-                    Generated = true
+                    Generated = true,
+                    IncludeArtworkRef = includeArtworkRef
                 };
 
                 if (existing != null)
@@ -3205,6 +3212,7 @@ namespace Artsy.API.Controllers
                     productImage.ResponseId = genResult.ResponseId ?? existing.ResponseId;
                     productImage.SelectedMockups = existing.SelectedMockups;
                     productImage.Active = existing.Active;
+                    productImage.IncludeArtworkRef = includeArtworkRef;
                     await _projectCollectionProductImageRepository.UpdateAsync(productImage);
                 }
                 else
@@ -3364,6 +3372,7 @@ namespace Artsy.API.Controllers
                         subtitle = img.ProductImageId != Guid.Empty && bpTitleMap.TryGetValue(img.ProductImageId, out var t) ? t : (img.VariantColor ?? ""),
                         selectedMockups = img.SelectedMockups,
                         generated = img.Generated,
+                        includeArtworkRef = img.IncludeArtworkRef,
                         imageUrl = img.Generated ? $"/api/projects/collection/{collectionId}/product-image/{img.Id}?thumb=true" : null
                     })
                 });
@@ -3440,7 +3449,7 @@ namespace Artsy.API.Controllers
                 if (project == null)
                     return Json(new ApiResponse { success = false, message = "Project not found." });
 
-                await _projectCollectionProductImageRepository.UpdateConfigAsync(request.Id, request.VariantColor, request.ImageModel, request.Prompt, request.SelectedMockups);
+                await _projectCollectionProductImageRepository.UpdateConfigAsync(request.Id, request.VariantColor, request.ImageModel, request.Prompt, request.SelectedMockups, request.IncludeArtworkRef);
 
                 return Json(new ApiResponse { success = true });
             }
@@ -4224,6 +4233,166 @@ namespace Artsy.API.Controllers
                 {
                     success = true,
                     data = new { title = genTitle, description = genDescription }
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("get-multi-product-json")]
+        public async Task<IActionResult> GetMultiProductJson([FromQuery] Guid collectionId)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (collectionId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Collection ID is required." });
+
+            try
+            {
+                var collection = await _projectCollectionRepository.GetByIdAsync(collectionId);
+                if (collection == null)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var project = await _projectRepository.GetByIdAsync(collection.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = new { multiProductJson = collection.MultiProductJson ?? "" }
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("save-multi-product-json")]
+        public async Task<IActionResult> SaveMultiProductJson([FromBody] SaveMultiProductJsonRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.CollectionId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Collection ID is required." });
+
+            try
+            {
+                var collection = await _projectCollectionRepository.GetByIdAsync(request.CollectionId);
+                if (collection == null)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var project = await _projectRepository.GetByIdAsync(collection.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                await _projectCollectionRepository.UpdateMultiProductJsonAsync(request.CollectionId, request.MultiProductJson);
+
+                return Json(new ApiResponse { success = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("generate-multi-product-info")]
+        public async Task<IActionResult> GenerateMultiProductInfo([FromBody] GenerateMultiProductInfoRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (request.CollectionId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Collection ID is required." });
+
+            try
+            {
+                var collection = await _projectCollectionRepository.GetByIdAsync(request.CollectionId);
+                if (collection == null)
+                    return Json(new ApiResponse { success = false, message = "Collection not found." });
+
+                var project = await _projectRepository.GetByIdAsync(collection.ProjectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                var products = await _productRepository.GetByCollectionIdAsync(request.CollectionId);
+                var activeProducts = products.Where(p => p.Active).ToList();
+                if (activeProducts.Count == 0)
+                    return Json(new ApiResponse { success = false, message = "No active products found in collection." });
+
+                var productsText = new StringBuilder();
+                for (var i = 0; i < activeProducts.Count; i++)
+                {
+                    productsText.AppendLine($"Product {i + 1}:");
+                    productsText.AppendLine($"  Name: {activeProducts[i].Name}");
+                    productsText.AppendLine($"  Description: {activeProducts[i].Description}");
+                    productsText.AppendLine();
+                }
+
+                var systemPrompt = "You are a product copywriter for a print-on-demand e-commerce store. " +
+                    "Given information about multiple products that will be combined into a single multi-product listing, " +
+                    "generate a compelling listing title, description, and tags. " +
+                    "The title should be concise (max 80 characters) and suitable for an e-commerce multi-product listing. " +
+                    "The description should be 2-4 short paragraphs, written in plain text (no HTML), highlighting the combined appeal of all products. " +
+                    "At the end of the description, add a section titled \"The Collection\" (on its own line), followed by one line per product " +
+                    "in the format: \"Product Name — a single sentence describing the product\". Each product line should be concise and highlight the product's key feature. " +
+                    "The tags should be comma-delimited, practical search terms that customers would actually type into a search bar to find these products. " +
+                    "Return ONLY a JSON object with no markdown formatting, in the following structure:\n" +
+                    "{\"title\":\"\",\"description\":\"\",\"tags\":\"\"}";
+
+                var userPrompt = $"We are generating a title, description, and tags for a multi-product listing that combines all the following products into one listing.\n\n" +
+                    $"Project Name: {project.Title}\n" +
+                    $"Collection Title: {collection.Title}\n\n" +
+                    $"Products to combine:\n{productsText}\n\n" +
+                    $"Generate a product title, description, and comma-delimited tags that would appeal to buyers of this multi-product print-on-demand listing.";
+
+                string llmOutput;
+                try
+                {
+                    llmOutput = await OpenAI.Prompt(systemPrompt, "", userPrompt, seed: (long)Random.Shared.Next(1, int.MaxValue));
+                }
+                catch (Exception ex)
+                {
+                    return Json(new ApiResponse { success = false, message = $"LLM generation failed: {ex.Message}" });
+                }
+
+                var rawJson = ExtractFirstJsonObject(llmOutput) ?? llmOutput.Trim();
+                string genTitle = "";
+                string genDescription = "";
+                string genTags = "";
+                try
+                {
+                    using var doc = JsonDocument.Parse(rawJson);
+                    if (doc.RootElement.TryGetProperty("title", out var tEl))
+                        genTitle = tEl.GetString() ?? "";
+                    if (doc.RootElement.TryGetProperty("description", out var dEl))
+                        genDescription = dEl.GetString() ?? "";
+                    if (doc.RootElement.TryGetProperty("tags", out var tagEl))
+                        genTags = tagEl.GetString() ?? "";
+                }
+                catch
+                {
+                    return Json(new ApiResponse { success = false, message = "Failed to parse LLM response." });
+                }
+
+                var disclaimer = "Disclaimer: The artworks printed on this product were generated using AI. The products and any humans and environments within the mockup images were also generated using AI. The real-world product may appear slightly different from these mockup images as a result.";
+                if (!string.IsNullOrWhiteSpace(genDescription) && !genDescription.Contains("Disclaimer: The artworks printed on this product were generated using AI"))
+                {
+                    genDescription += "\n\n" + disclaimer;
+                }
+
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = new { title = genTitle, description = genDescription, tags = genTags }
                 });
             }
             catch (Exception ex)

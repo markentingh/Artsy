@@ -13,15 +13,11 @@ CREATE TABLE IF NOT EXISTS public."ProjectCollectionProductImages"
     "Height" INT NOT NULL DEFAULT 0,
     "Accepted" BOOLEAN NOT NULL DEFAULT FALSE,
     "ResponseId" VARCHAR(64) NOT NULL DEFAULT '',
-    "Active" BOOLEAN NOT NULL DEFAULT TRUE
+    "SelectedMockups" TEXT NOT NULL DEFAULT '',
+    "Generated" BOOLEAN NOT NULL DEFAULT FALSE,
+    "Active" BOOLEAN NOT NULL DEFAULT TRUE,
+    "IncludeArtworkRef" BOOLEAN NOT NULL DEFAULT TRUE
 );
-ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "Active" BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "PrintifyImageId" VARCHAR(32) NOT NULL DEFAULT '';
-ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "ProductImageId" UUID;
-ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "VariantColor" VARCHAR(64) NOT NULL DEFAULT '';
-ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "SelectedMockups" TEXT NOT NULL DEFAULT '';
-ALTER TABLE public."ProjectCollectionProductImages" ADD COLUMN IF NOT EXISTS "Generated" BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE public."ProjectCollectionProductImages" ALTER COLUMN "ProjectBlueprintId" DROP NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_ProjectCollectionProductImages_CollectionId_BlueprintId_ProductImageId"
     ON public."ProjectCollectionProductImages" ("CollectionId", "ProjectBlueprintId", "ProductImageId");

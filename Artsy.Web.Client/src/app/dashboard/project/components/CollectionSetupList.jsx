@@ -276,8 +276,12 @@ export default function CollectionSetupList() {
     },
     {
       title: renderTitle('Generate Product Images', productImageComplete, totalProductImages > 0 ? `${acceptedProductImages}/${totalProductImages}` : (acceptedProductImages > 0 ? `${acceptedProductImages}/${acceptedProductImages}` : null), isCurrent(STEPS.GENERATE_PRODUCT_IMAGES)),
-      content: productImageContent,
-      action: null,
+      content: null,
+      action: isComplete(STEPS.CREATE_PRODUCTS) && !isCurrent(STEPS.GENERATE_PRODUCT_IMAGES) ? (
+        <ButtonOutline size="small" color="blue" onClick={() => setStep(STEPS.GENERATE_PRODUCT_IMAGES)}>
+          Review
+        </ButtonOutline>
+      ) : null,
     },
     {
       title: renderTitle(`Publish Products on ${platforms.join(', ') || 'Platform'}`, isComplete(STEPS.PUBLISH_PRODUCTS), null, isCurrent(STEPS.PUBLISH_PRODUCTS)),

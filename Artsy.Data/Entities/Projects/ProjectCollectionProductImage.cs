@@ -17,5 +17,6 @@ namespace Artsy.Data.Entities.Projects
         public bool Active { get; set; } = true;
         public string SelectedMockups { get; set; } = "";
         public bool Generated { get; set; } = false;
+        public bool IncludeArtworkRef { get; set; } = true;
     }
 }

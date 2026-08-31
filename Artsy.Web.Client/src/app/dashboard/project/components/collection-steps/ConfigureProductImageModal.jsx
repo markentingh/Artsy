@@ -3,6 +3,7 @@ import { useCollection } from '@/context/collection';
 import { artworkImageUrl, artworkThumbUrl } from '@/utils/artworkUrls';
 import Modal from '@/components/ui/modal';
 import TextArea from '@/components/forms/textarea';
+const ReplaceMockupModal = lazy(() => import('./ReplaceMockupModal'));
 import Input from '@/components/forms/input';
 import Select from '@/components/forms/select';
 import ButtonOutline from '@/components/ui/button-outline';
@@ -24,6 +25,7 @@ export default function ConfigureProductImageModal({ show, onClose, onGenerate, 
   const [prompt, setPrompt] = useState('');
   const [selectedModelId, setSelectedModelId] = useState('');
   const [selectedMockupIds, setSelectedMockupIds] = useState([]);
+  const [includeArtworkRef, setIncludeArtworkRef] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [tokenEstimate, setTokenEstimate] = useState(null);
@@ -31,6 +33,9 @@ export default function ConfigureProductImageModal({ show, onClose, onGenerate, 
   const [estimatingTokens, setEstimatingTokens] = useState(false);
   const [showCostBreakdown, setShowCostBreakdown] = useState(false);
   const estimateTimerRef = useRef(null);
+  const [replaceMockup, setReplaceMockup] = useState(null);
+  const [replacingMockupIds, setReplacingMockupIds] = useState(new Set());
+  const [mockupImageOverrides, setMockupImageOverrides] = useState({});
 
   // Initialize state when productImage changes
   useEffect(() => {
@@ -38,14 +43,24 @@ export default function ConfigureProductImageModal({ show, onClose, onGenerate, 
       setTitle(productImage.variantColor || '');
       setPrompt(productImage.prompt || '');
       // imageModel stores the model name; find the matching ID from imageModels
-      const modelByName = imageModels.find(m => m.name === productImage.imageModel);
-      setSelectedModelId(modelByName ? String(modelByName.id) : (selectedProductImageModel ? String(selectedProductImageModel.id) : ''));
+      // Wait until imageModels are loaded before setting the model ID
+      if (imageModels.length > 0) {
+        const modelByName = imageModels.find(m => m.name === productImage.imageModel);
+        if (modelByName) {
+          setSelectedModelId(modelByName.id);
+        } else if (selectedProductImageModel) {
+          setSelectedModelId(selectedProductImageModel.id);
+        } else {
+          setSelectedModelId(imageModels[0].id);
+        }
+      }
       setSelectedMockupIds(
         (productImage.selectedMockups || '')
           .split(',')
           .map(s => s.trim())
           .filter(Boolean)
       );
+      setIncludeArtworkRef(productImage.includeArtworkRef !== false);
     }
   }, [productImage, imageModels, selectedProductImageModel]);
 
@@ -159,11 +174,12 @@ export default function ConfigureProductImageModal({ show, onClose, onGenerate, 
     return result;
   }, [collectionId, collectionArtwork, placementItemId, blueprintPlacements, blueprintGroupIds]);
 
+  const generatedCacheBust = useMemo(() => Math.floor(Math.random() * 1000000), [productImage?.id]);
   const generatedImageUrl = productImage?.generated && productImage?.id
-    ? `/api/projects/collection/${collectionId}/product-image/${productImage.id}?thumb=true`
+    ? `/api/projects/collection/${collectionId}/product-image/${productImage.id}?thumb=true&r=${generatedCacheBust}`
     : null;
   const generatedFullUrl = productImage?.generated && productImage?.id
-    ? `/api/projects/collection/${collectionId}/product-image/${productImage.id}`
+    ? `/api/projects/collection/${collectionId}/product-image/${productImage.id}?r=${generatedCacheBust}`
     : null;
 
   const displayImages = useMemo(() => {
@@ -178,6 +194,23 @@ export default function ConfigureProductImageModal({ show, onClose, onGenerate, 
   }, [artworkImages, generatedFullUrl]);
 
   const modelOptions = useMemo(() => imageModels.map(m => ({ value: m.id, label: m.name })), [imageModels]);
+
+  const handleMockupReplaced = useCallback((mockupId, newImageUrl) => {
+    setReplacingMockupIds(prev => {
+      const next = new Set(prev);
+      next.add(mockupId);
+      return next;
+    });
+    // Simulate upload delay then show new image
+    setTimeout(() => {
+      setMockupImageOverrides(prev => ({ ...prev, [mockupId]: newImageUrl }));
+      setReplacingMockupIds(prev => {
+        const next = new Set(prev);
+        next.delete(mockupId);
+        return next;
+      });
+    }, 500);
+  }, []);
 
   const toggleMockup = useCallback((mockupId) => {
     setSelectedMockupIds(prev => {
@@ -232,9 +265,10 @@ export default function ConfigureProductImageModal({ show, onClose, onGenerate, 
         id: productImage.id,
         collectionId,
         variantColor: title.trim(),
-        imageModel: selectedModelId,
+        imageModel: String(selectedModelId),
         prompt: prompt.trim(),
         selectedMockups: selectedMockupIds.join(','),
+        includeArtworkRef,
       });
       if (res.data.success) {
         onClose();
@@ -246,24 +280,24 @@ export default function ConfigureProductImageModal({ show, onClose, onGenerate, 
     } finally {
       setSaving(false);
     }
-  }, [productImage, collectionId, title, selectedModelId, prompt, selectedMockupIds, api, onClose]);
+  }, [productImage, collectionId, title, selectedModelId, prompt, selectedMockupIds, includeArtworkRef, api, onClose]);
 
   const handleGenerate = useCallback(async () => {
     if (!productImage) return;
     setSaving(true);
     setError(null);
     try {
-      // Save config first, then trigger generate in parent
       const res = await api.updateCollectionProductImageConfig({
         id: productImage.id,
         collectionId,
         variantColor: title.trim(),
-        imageModel: selectedModelId,
+        imageModel: String(selectedModelId),
         prompt: prompt.trim(),
         selectedMockups: selectedMockupIds.join(','),
+        includeArtworkRef,
       });
       if (res.data.success) {
-        if (onGenerate) onGenerate(productImage);
+        if (onGenerate) onGenerate({ ...productImage, modelId: parseInt(selectedModelId), includeArtworkRef });
       } else {
         setError(res.data.message || 'Failed to save');
       }
@@ -272,7 +306,7 @@ export default function ConfigureProductImageModal({ show, onClose, onGenerate, 
     } finally {
       setSaving(false);
     }
-  }, [productImage, collectionId, title, selectedModelId, prompt, selectedMockupIds, api, onGenerate]);
+  }, [productImage, collectionId, title, selectedModelId, prompt, selectedMockupIds, includeArtworkRef, api, onGenerate]);
 
   const handleClose = () => {
     setError(null);
@@ -328,18 +362,36 @@ export default function ConfigureProductImageModal({ show, onClose, onGenerate, 
             <div className="grid grid-cols-[repeat(auto-fill,120px)] gap-3 overflow-y-auto" style={{ maxHeight: '420px' }}>
               {comboMockups.map((m) => {
                 const checked = selectedMockupIds.includes(String(m.id));
+                const isReplacing = replacingMockupIds.has(m.id);
+                const overrideUrl = mockupImageOverrides[m.id];
+                const imgUrl = overrideUrl || m.imageUrl;
                 return (
                   <div
                     key={m.id}
-                    className="relative w-[120px] h-[120px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600"
+                    className="group relative w-[120px] h-[120px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600"
                   >
-                    <img src={m.imageUrl} alt="Mockup" className="w-full h-full object-cover" />
+                    {isReplacing ? (
+                      <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-700">
+                        <Spinner className="text-sm" />
+                      </div>
+                    ) : (
+                      <img src={imgUrl} alt="Mockup" className="w-full h-full object-cover" />
+                    )}
                     <input
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggleMockup(m.id)}
                       className="absolute top-2 left-2 z-10 w-5 h-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                     />
+                    {!isReplacing && (
+                      <button
+                        type="button"
+                        onClick={() => setReplaceMockup(m)}
+                        className="absolute bottom-2 right-2 z-10 px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded opacity-0 group-hover:opacity-100 transition"
+                      >
+                        Replace
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -348,7 +400,7 @@ export default function ConfigureProductImageModal({ show, onClose, onGenerate, 
         )}
 
         <div className="flex items-end gap-4">
-          <div className="flex-1">
+          <div>
             <Select
               label="AI Image Model"
               name="productImageModel"
@@ -358,13 +410,22 @@ export default function ConfigureProductImageModal({ show, onClose, onGenerate, 
               fitContent
             />
           </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 pb-6 whitespace-nowrap cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeArtworkRef}
+              onChange={(e) => setIncludeArtworkRef(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            Include Artwork Reference
+          </label>
           {estimatingTokens ? (
-            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 pb-2">
+            <div className="flex gap-2 text-sm text-gray-500 dark:text-gray-400 pb-3 ml-auto">
               <Spinner className="text-sm" />
               <span>Estimating...</span>
             </div>
           ) : tokenEstimate != null ? (
-            <div className="flex flex-col items-end gap-1 pb-2">
+            <div className="flex flex-col items-end gap-1 pb-2 ml-auto">
               <span className="text-sm text-gray-500 dark:text-gray-400">
                 Token Cost: <span className="text-white font-bold">{tokenEstimate.toLocaleString()}</span>
               </span>
@@ -402,6 +463,19 @@ export default function ConfigureProductImageModal({ show, onClose, onGenerate, 
           <TokenCostBreakdownModal
             generations={estimateGenerations}
             onClose={() => setShowCostBreakdown(false)}
+          />
+        </Suspense>
+      )}
+
+      {replaceMockup && (
+        <Suspense fallback={null}>
+          <ReplaceMockupModal
+            show={!!replaceMockup}
+            mockup={replaceMockup}
+            projectId={projectId}
+            collectionId={collectionId}
+            onClose={() => setReplaceMockup(null)}
+            onReplaced={handleMockupReplaced}
           />
         </Suspense>
       )}

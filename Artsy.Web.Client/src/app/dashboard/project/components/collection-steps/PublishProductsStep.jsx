@@ -1,9 +1,10 @@
-import React, { useMemo, useCallback, useState } from 'react';
+import React, { useMemo, useCallback, useState, lazy, Suspense } from 'react';
 import { useCollection } from '@/context/collection';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 import CarouselElements from '@/components/ui/carousel-elements';
 import EditCollectionProductDetails from './EditCollectionProductDetails';
+const ConfigureMultiProductModal = lazy(() => import('./ConfigureMultiProductModal'));
 
 export default function PublishProductsStep() {
   const {
@@ -14,6 +15,7 @@ export default function PublishProductsStep() {
   } = useCollection();
 
   const [editProductBp, setEditProductBp] = useState(null);
+  const [showMultiProductModal, setShowMultiProductModal] = useState(false);
 
   // Only show active products
   const activeBlueprints = useMemo(() => {
@@ -57,9 +59,10 @@ export default function PublishProductsStep() {
   const productImagesByBlueprint = useMemo(() => {
     const map = {};
     for (const img of (allProductImages || [])) {
-      if (img.accepted && img.active) {
-        if (!map[img.projectBlueprintId]) map[img.projectBlueprintId] = [];
-        map[img.projectBlueprintId].push(img);
+      if (img.generated && img.active) {
+        const key = img.projectBlueprintId || 'custom';
+        if (!map[key]) map[key] = [];
+        map[key].push(img);
       }
     }
     return map;
@@ -204,12 +207,21 @@ export default function PublishProductsStep() {
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
             You can add your products to a new multi-product listing in the My Products section of your Printify dashboard. This will convert all your products within this collection into a single listing within your e-commerce store and can save you potential listing fees in the long term.
           </p>
-          <ButtonOutline
-            size="small"
-            onClick={() => window.open('https://printify.com/app/store/products/?tab=multiProductListings', '_blank', 'noopener noreferrer')}
-          >
-            Multi-Product Listings
-          </ButtonOutline>
+          <div className="flex gap-2">
+            <ButtonOutline
+              size="small"
+              onClick={() => window.open('https://printify.com/app/store/products/?tab=multiProductListings', '_blank', 'noopener noreferrer')}
+            >
+              Multi-Product Listings
+            </ButtonOutline>
+            <ButtonOutline
+              size="small"
+              color="green"
+              onClick={() => setShowMultiProductModal(true)}
+            >
+              Configure Listing
+            </ButtonOutline>
+          </div>
         </div>
         <div>
           <h4 className="font-medium mb-2">Manual Personalization</h4>
@@ -252,6 +264,17 @@ export default function PublishProductsStep() {
           }
         }}
       />
+
+      {showMultiProductModal && (
+        <Suspense fallback={null}>
+          <ConfigureMultiProductModal
+            show={showMultiProductModal}
+            collectionId={collectionId}
+            api={api}
+            onClose={() => setShowMultiProductModal(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
