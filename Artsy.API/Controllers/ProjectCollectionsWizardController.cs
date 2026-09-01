@@ -4337,50 +4337,110 @@ namespace Artsy.API.Controllers
                     productsText.AppendLine();
                 }
 
-                var systemPrompt = "You are a product copywriter for a print-on-demand e-commerce store. " +
-                    "Given information about multiple products that will be combined into a single multi-product listing, " +
-                    "generate a compelling listing title, description, and tags. " +
-                    "The title should be concise (max 80 characters) and suitable for an e-commerce multi-product listing. " +
-                    "The description should be 2-4 short paragraphs, written in plain text (no HTML), highlighting the combined appeal of all products. " +
-                    "At the end of the description, add a section titled \"The Collection\" (on its own line), followed by one line per product " +
-                    "in the format: \"Product Name — a single sentence describing the product\". Each product line should be concise and highlight the product's key feature. " +
-                    "The tags should be comma-delimited, practical search terms that customers would actually type into a search bar to find these products. " +
-                    "Return ONLY a JSON object with no markdown formatting, in the following structure:\n" +
-                    "{\"title\":\"\",\"description\":\"\",\"tags\":\"\"}";
+                // --- Prompt 1: Title & Description (skip if tagsOnly) ---
+                string genTitle = request.TagsOnly ? (request.Title ?? "") : "";
+                string genDescription = "";
+                if (!request.TagsOnly)
+                {
+                    var titleDescSystemPrompt = "You are a product copywriter for a print-on-demand e-commerce store. " +
+                        "Given information about multiple products that will be combined into a single multi-product listing, " +
+                        "generate a compelling listing title and description. " +
+                        "The title should be concise (max 80 characters) and suitable for an e-commerce multi-product listing. " +
+                        "The description should be 2-4 short paragraphs, written in plain text (no HTML), highlighting the combined appeal of all products. " +
+                        "At the end of the description, add a section titled \"The Collection\" (on its own line), followed by one line per product " +
+                        "in the format: \"Product Name — a single sentence describing the product\". Each product line should be concise and highlight the product's key feature. " +
+                        "Return ONLY a JSON object with no markdown formatting, in the following structure:\n" +
+                        "{\"title\":\"\",\"description\":\"\"}";
 
-                var userPrompt = $"We are generating a title, description, and tags for a multi-product listing that combines all the following products into one listing.\n\n" +
+                    var titleDescUserPrompt = $"We are generating a title and description for a multi-product listing that combines all the following products into one listing.\n\n" +
+                        $"Project Name: {project.Title}\n" +
+                        $"Collection Title: {collection.Title}\n\n" +
+                        $"Products to combine:\n{productsText}\n\n" +
+                        $"Generate a product title and description that would appeal to buyers of this multi-product print-on-demand listing.";
+
+                    string titleDescLlmOutput;
+                    try
+                    {
+                        titleDescLlmOutput = await OpenAI.Prompt(titleDescSystemPrompt, "", titleDescUserPrompt, seed: (long)Random.Shared.Next(1, int.MaxValue));
+                    }
+                    catch (Exception ex)
+                    {
+                        return Json(new ApiResponse { success = false, message = $"LLM generation failed: {ex.Message}" });
+                    }
+
+                    var titleDescRawJson = ExtractFirstJsonObject(titleDescLlmOutput) ?? titleDescLlmOutput.Trim();
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(titleDescRawJson);
+                        if (doc.RootElement.TryGetProperty("title", out var tEl))
+                            genTitle = tEl.GetString() ?? "";
+                        if (doc.RootElement.TryGetProperty("description", out var dEl))
+                            genDescription = dEl.GetString() ?? "";
+                    }
+                    catch
+                    {
+                        return Json(new ApiResponse { success = false, message = "Failed to parse LLM response for title & description." });
+                    }
+                }
+
+                // --- Prompt 2: Tags ---
+                var tagsSystemPrompt = "You are an expert product tagging specialist. Your role is to generate exactly 50 unique, high-performing tags for product listings based on proven tagging best practices.\n\n" +
+                    "CORE TAGGING PRINCIPLES\n\n" +
+                    "1. Use all 50 tags. Each tag is an opportunity to match with a shopper's search. No fewer than 50.\n" +
+                    "2. Use multi-word phrases. Tags should be 2-3 word phrases, up to 20 characters. Prioritize phrases over single words.\n" +
+                    "3. Ensure complete uniqueness. No tag should repeat or overlap with another. Each of the 50 tags must be distinct and non-redundant.\n" +
+                    "4. Target long-tail keywords. Avoid generic, high-competition searches. Instead, prioritize specific, descriptive phrases that narrow down to what's truly unique about the product.\n" +
+                    "5. Consider regional variants. If the product appeals to international shoppers, include regional spellings or phrases they might search for.\n" +
+                    "6. Don't repeat categories. If the product's category already includes a phrase, don't tag it again.\n\n" +
+                    "TAG CATEGORIES TO EXPLORE\n\n" +
+                    "Generate tags across these categories to ensure diversity:\n\n" +
+                    "Descriptive: Multi-word descriptions of what the product is. Aim for 5-7 tags.\n\n" +
+                    "Materials and Techniques: How it's made, special construction, materials used, custom or personalized elements. Aim for 5-7 tags.\n\n" +
+                    "Who It's For: Target customer, gift recipients, lifestyle, demographics. Aim for 5-7 tags.\n\n" +
+                    "Shopping Occasions: When or why someone might buy it. Think holidays, life events, seasonal uses. Aim for 5-7 tags.\n\n" +
+                    "Solution-Oriented: What problem does it solve? What need does it fulfill? Aim for 5-7 tags.\n\n" +
+                    "Aesthetic and Style: Design style, color palette, mood, time period, vibe. Aim for 5-7 tags.\n\n" +
+                    "Size and Format: Scale, dimensions, portability if relevant. Aim for 3-5 tags.\n\n" +
+                    "Use Cases: Specific activities or situations where the product excels. Aim for 3-5 tags.\n\n" +
+                    "TAGGING DON'TS\n\n" +
+                    "Do not include misspellings intentionally.\n" +
+                    "Do not add tags in multiple languages.\n" +
+                    "Do not worry about plural versus singular forms.\n" +
+                    "Do not repeat the exact same word or phrase twice.\n" +
+                    "Do not use single-word tags when a phrase would be stronger.\n\n" +
+                    "OUTPUT FORMAT\n\n" +
+                    "Return exactly 50 tags as a comma-delimited list. Each tag should be clearly distinct, strategically diverse across categories, and optimized for search relevance and specificity.\n\n" +
+                    "Return ONLY a JSON object with no markdown formatting, in the following structure:\n" +
+                    "{\"tags\":\"\"}";
+
+                var tagsUserPrompt = $"We are generating tags for a multi-product listing that combines all the following products into one listing.\n\n" +
+                    $"Listing Title: {genTitle}\n" +
                     $"Project Name: {project.Title}\n" +
                     $"Collection Title: {collection.Title}\n\n" +
                     $"Products to combine:\n{productsText}\n\n" +
-                    $"Generate a product title, description, and comma-delimited tags that would appeal to buyers of this multi-product print-on-demand listing.";
+                    "Generate exactly 50 comma-delimited tags for this multi-product listing.";
 
-                string llmOutput;
+                string tagsLlmOutput;
                 try
                 {
-                    llmOutput = await OpenAI.Prompt(systemPrompt, "", userPrompt, seed: (long)Random.Shared.Next(1, int.MaxValue));
+                    tagsLlmOutput = await OpenAI.Prompt(tagsSystemPrompt, "", tagsUserPrompt, seed: (long)Random.Shared.Next(1, int.MaxValue));
                 }
                 catch (Exception ex)
                 {
-                    return Json(new ApiResponse { success = false, message = $"LLM generation failed: {ex.Message}" });
+                    return Json(new ApiResponse { success = false, message = $"LLM tag generation failed: {ex.Message}" });
                 }
 
-                var rawJson = ExtractFirstJsonObject(llmOutput) ?? llmOutput.Trim();
-                string genTitle = "";
-                string genDescription = "";
+                var tagsRawJson = ExtractFirstJsonObject(tagsLlmOutput) ?? tagsLlmOutput.Trim();
                 string genTags = "";
                 try
                 {
-                    using var doc = JsonDocument.Parse(rawJson);
-                    if (doc.RootElement.TryGetProperty("title", out var tEl))
-                        genTitle = tEl.GetString() ?? "";
-                    if (doc.RootElement.TryGetProperty("description", out var dEl))
-                        genDescription = dEl.GetString() ?? "";
+                    using var doc = JsonDocument.Parse(tagsRawJson);
                     if (doc.RootElement.TryGetProperty("tags", out var tagEl))
                         genTags = tagEl.GetString() ?? "";
                 }
                 catch
                 {
-                    return Json(new ApiResponse { success = false, message = "Failed to parse LLM response." });
+                    return Json(new ApiResponse { success = false, message = "Failed to parse LLM response for tags." });
                 }
 
                 var disclaimer = "Disclaimer: The artworks printed on this product were generated using AI. The products and any humans and environments within the mockup images were also generated using AI. The real-world product may appear slightly different from these mockup images as a result.";
@@ -4392,7 +4452,9 @@ namespace Artsy.API.Controllers
                 return Json(new ApiResponse
                 {
                     success = true,
-                    data = new { title = genTitle, description = genDescription, tags = genTags }
+                    data = request.TagsOnly
+                        ? new { tags = genTags }
+                        : new { title = genTitle, description = genDescription, tags = genTags }
                 });
             }
             catch (Exception ex)

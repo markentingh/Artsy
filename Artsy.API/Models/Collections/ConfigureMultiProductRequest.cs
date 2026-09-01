@@ -21,5 +21,11 @@ namespace Artsy.API.Models.Collections
     {
         [JsonPropertyName("collectionId")]
         public Guid CollectionId { get; set; }
+
+        [JsonPropertyName("tagsOnly")]
+        public bool TagsOnly { get; set; } = false;
+
+        [JsonPropertyName("title")]
+        public string Title { get; set; } = "";
     }
 }

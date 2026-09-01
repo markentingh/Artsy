@@ -12,7 +12,9 @@ export default function ConfigureMultiProductModal({ show, collectionId, api, on
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [generatingTags, setGeneratingTags] = useState(false);
   const [error, setError] = useState(null);
+  const [savedAt, setSavedAt] = useState(null);
 
   useEffect(() => {
     if (!show || !collectionId) return;
@@ -48,6 +50,12 @@ export default function ConfigureMultiProductModal({ show, collectionId, api, on
     return () => { cancelled = true; };
   }, [show, collectionId, api]);
 
+  useEffect(() => {
+    if (!savedAt) return;
+    const timer = setTimeout(() => setSavedAt(null), 3000);
+    return () => clearTimeout(timer);
+  }, [savedAt]);
+
   const handleGenerateInfo = useCallback(async () => {
     if (!collectionId) return;
     setGenerating(true);
@@ -68,6 +76,24 @@ export default function ConfigureMultiProductModal({ show, collectionId, api, on
     }
   }, [collectionId, api]);
 
+  const handleGenerateTags = useCallback(async () => {
+    if (!collectionId) return;
+    setGeneratingTags(true);
+    setError(null);
+    try {
+      const res = await api.generateMultiProductInfo({ collectionId, tagsOnly: true, title: title.trim() });
+      if (res.data.success) {
+        setTags(res.data.data.tags || '');
+      } else {
+        setError(res.data.message || 'Failed to generate tags.');
+      }
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Failed to generate tags.');
+    } finally {
+      setGeneratingTags(false);
+    }
+  }, [collectionId, api, title]);
+
   const handleSave = useCallback(async () => {
     if (!collectionId) return;
     setSaving(true);
@@ -76,7 +102,7 @@ export default function ConfigureMultiProductModal({ show, collectionId, api, on
       const json = JSON.stringify({ title: title.trim(), description: description.trim(), tags: tags.trim() });
       const res = await api.saveMultiProductJson({ collectionId, multiProductJson: json });
       if (res.data.success) {
-        onClose();
+        setSavedAt(Date.now());
       } else {
         setError(res.data.message || 'Failed to save.');
       }
@@ -85,7 +111,7 @@ export default function ConfigureMultiProductModal({ show, collectionId, api, on
     } finally {
       setSaving(false);
     }
-  }, [collectionId, title, description, tags, api, onClose]);
+  }, [collectionId, title, description, tags, api]);
 
   return (
     <Modal show={show} onClose={onClose} title="Configure Multi-Product Listing" className="w-[700px] max-w-[95vw]">
@@ -123,17 +149,30 @@ export default function ConfigureMultiProductModal({ show, collectionId, api, on
             rows={6}
           />
 
-          <Input
-            label="Tags"
-            name="multiProductTags"
-            value={tags}
-            onChange={(e) => setTags(e.target.value)}
-            placeholder="Comma-delimited tags"
-          />
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tags</label>
+              <ButtonOutline size="small" color="green" onClick={handleGenerateTags} disabled={generatingTags}>
+                {generatingTags ? <Spinner className="text-sm" /> : 'Generate Tags'}
+              </ButtonOutline>
+            </div>
+            <TextArea
+              name="multiProductTags"
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              placeholder="Comma-delimited tags"
+              rows={10}
+            />
+          </div>
 
           {error && <div className="text-sm text-red-500">{error}</div>}
 
-          <div className="flex justify-end gap-2 mt-2">
+          <div className="flex justify-end items-center gap-2 mt-2">
+            {savedAt && (
+              <span className="text-xs font-bold text-green-600 dark:text-green-400 mr-auto">
+                Saved!
+              </span>
+            )}
             <ButtonOutline color="gray" onClick={onClose} disabled={saving}>Cancel</ButtonOutline>
             <ButtonOutline onClick={handleSave} disabled={saving}>
               {saving ? <Spinner className="text-sm" /> : 'Save Changes'}
