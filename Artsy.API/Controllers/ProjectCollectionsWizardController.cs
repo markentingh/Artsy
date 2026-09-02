@@ -49,6 +49,386 @@ namespace Artsy.API.Controllers
             }
         }
 
+        [HttpGet("load-collection-wizard")]
+        public async Task<IActionResult> LoadCollectionWizard([FromQuery] Guid projectId, [FromQuery] Guid? collectionId = null)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Could not find user" });
+
+            if (projectId == Guid.Empty)
+                return Json(new ApiResponse { success = false, message = "Project ID is required." });
+
+            try
+            {
+                var project = await _projectRepository.GetByIdAsync(projectId, userId);
+                if (project == null)
+                    return Json(new ApiResponse { success = false, message = "Project not found." });
+
+                // Single SQL query with multiple result sets
+                var data = await _collectionWizardRepository.LoadAsync(projectId, collectionId);
+
+                // ── Items (same format as get-items, with thumbnail URLs) ──
+                var artworkByItem = data.ItemArtwork.ToDictionary(a => a.ItemId, a => a);
+                var refThumbsByItem = data.RefThumbnails.GroupBy(r => r.ItemId).ToDictionary(g => g.Key, g => g.ToList());
+                var previewThumbsByItem = data.PreviewThumbnails.GroupBy(p => p.ItemId).ToDictionary(g => g.Key, g => g.ToList());
+
+                var itemsResult = data.Items.Select(i =>
+                {
+                    var thumbnails = new List<string>();
+                    if (artworkByItem.TryGetValue(i.Id, out var art) && art.ArtworkType == "custom" && art.CustomImageId.HasValue)
+                    {
+                        thumbnails.Add($"/api/custom-images/custom-image/{art.CustomImageId.Value}?thumb=true");
+                    }
+                    else
+                    {
+                        if (previewThumbsByItem.TryGetValue(i.Id, out var previews))
+                            foreach (var p in previews)
+                                thumbnails.Add($"/api/projects/item/{i.Id}/preview/{p.Id}?thumb=true");
+                        if (refThumbsByItem.TryGetValue(i.Id, out var refs))
+                            foreach (var r in refs)
+                                thumbnails.Add($"/api/projects/item/{i.Id}/reference/{r.Id}?thumb=true");
+                    }
+                    return new ProjectItemListItem
+                    {
+                        Id = i.Id,
+                        ProjectId = i.ProjectId,
+                        Index = i.Index,
+                        Title = i.Title,
+                        SocialMedia = i.SocialMedia,
+                        ProductCount = i.ProductCount,
+                        QuestionCount = i.QuestionCount,
+                        ArtworkType = artworkByItem.TryGetValue(i.Id, out var artwork) ? artwork.ArtworkType : "ai",
+                        OpacityJson = artworkByItem.TryGetValue(i.Id, out var aw) ? aw.OpacityJson : null,
+                        Thumbnails = thumbnails
+                    };
+                }).ToList();
+
+                // ── Blueprints (same format as get-blueprints) ──
+                var bpProductImages = data.BlueprintProductImages;
+                var imagesByBlueprint = bpProductImages.GroupBy(img => img.ProjectBlueprintId).ToDictionary(g => g.Key, g => g.ToList());
+                var printifyImagesByBlueprint = data.PrintifyImages.GroupBy(img => img.BlueprintId).ToDictionary(g => g.Key, g => g.ToList());
+                var printifyImageVariantsByImageId = data.PrintifyImageVariants.GroupBy(v => v.BlueprintImageId).ToDictionary(g => g.Key, g => g.Select(v => v.VariantColor).ToList());
+
+                foreach (var b in data.Blueprints)
+                {
+                    var bpImages = imagesByBlueprint.TryGetValue(b.Id, out var imgs) ? imgs : null;
+                    b.Configured = IsBlueprintConfigured(b.Name, b.Description, b.BlueprintJson, b.PlacementJson, b.PricingJson, bpImages);
+                }
+
+                var blueprintsResult = data.Blueprints.Select(b => new
+                {
+                    b.Id,
+                    b.BlueprintId,
+                    b.Name,
+                    b.BlueprintJson,
+                    b.PlacementJson,
+                    b.Prompt,
+                    b.Description,
+                    b.SafetyInfo,
+                    b.PricingJson,
+                    b.PrintProviderId,
+                    b.Configured,
+                    b.ImageCount,
+                    minPrice = GetMinPriceFromPricingJson(b.PricingJson),
+                    printifyImages = printifyImagesByBlueprint.TryGetValue(b.BlueprintId, out var pImgs)
+                        ? pImgs.Select(img => new { variantColors = printifyImageVariantsByImageId.TryGetValue(img.Id, out var colors) ? colors : new List<string>(), img.ImageIndex }).Cast<object>()
+                        : Enumerable.Empty<object>()
+                }).ToList();
+
+                // Printify image index by color map
+                var printifyImageIndexColorMap = new Dictionary<Guid, Dictionary<string, int>>();
+                foreach (var b in data.Blueprints)
+                {
+                    var idxMap = new Dictionary<string, int>();
+                    if (printifyImagesByBlueprint.TryGetValue(b.BlueprintId, out var pImgs))
+                    {
+                        foreach (var img in pImgs)
+                        {
+                            if (printifyImageVariantsByImageId.TryGetValue(img.Id, out var colors))
+                            {
+                                foreach (var color in colors)
+                                {
+                                    idxMap[color] = img.ImageIndex;
+                                }
+                            }
+                        }
+                    }
+                    printifyImageIndexColorMap[b.Id] = idxMap;
+                }
+
+                // ── Item references ──
+                var itemRefsResult = data.ItemReferences.Select(r => new
+                {
+                    id = r.Id,
+                    itemId = r.ItemId,
+                    artworkId = r.ArtworkId
+                }).ToList();
+
+                // Questions (returned as raw entities, same as get-questions)
+                var questionsResult = data.Questions;
+
+                // ── Collection-specific data ──
+                object answersResult = null;
+                object artworkResult = null;
+                object printifyProductsResult = null;
+                object mockupsResult = null;
+                bool instagramPosted = false;
+                object instagramPost = null;
+                object collectionProductsResult = null;
+                object productBlueprintImagesResult = null;
+                object productImagesResult = null;
+
+                if (collectionId.HasValue && collectionId.Value != Guid.Empty && data.Answers != null)
+                {
+                    var colId = collectionId.Value;
+
+                    // Answers
+                    answersResult = data.Answers.Select(a => new
+                    {
+                        id = a.Id,
+                        questionId = a.QuestionId,
+                        itemId = a.ItemId,
+                        answer = a.Answer
+                    }).ToList();
+
+                    // Artwork (same format as get-collection-artwork, with needsRegeneration check)
+                    var artworkObjects = new List<object>();
+                    var placementsByArtwork = data.ArtworkPlacements.GroupBy(p => p.CollectionArtworkId).ToDictionary(g => g.Key, g => g.ToList());
+                    foreach (var a in data.Artwork)
+                    {
+                        var placements = placementsByArtwork.TryGetValue(a.Id, out var ap) ? ap : new List<ProjectCollectionArtworkPlacement>();
+
+                        bool needsRegeneration = false;
+                        try
+                        {
+                            var plan = await _artworkGenerationPlanService.BuildPlanAsync(projectId, colId, a.ItemId, resolutionTier: 2, design: a.Design ?? "artwork");
+                            needsRegeneration = a.TotalPlacements != plan.TotalPlacements;
+                        }
+                        catch { }
+
+                        var groupPlacements = placements
+                            .Where(p => p.GroupId.HasValue)
+                            .GroupBy(p => p.GroupId!.Value)
+                            .Select(g => (object)new
+                            {
+                                groupId = g.Key,
+                                placements = g.OrderBy(p => p.Index).Select(p => new
+                                {
+                                    position = p.Position,
+                                    index = p.Index,
+                                    width = p.Width,
+                                    height = p.Height,
+                                    fullSize = p.FullSize,
+                                    printifyImageId = p.PrintifyImageId,
+                                    optionalPrompt = p.OptionalPrompt
+                                }).ToList()
+                            }).ToList();
+
+                        artworkObjects.Add(new
+                        {
+                            id = a.Id,
+                            itemId = a.ItemId,
+                            active = a.Active,
+                            accepted = a.Accepted,
+                            fullSize = a.FullSize,
+                            imageModel = a.ImageModel,
+                            width = a.Width,
+                            height = a.Height,
+                            index = a.Index,
+                            printifyImageId = a.PrintifyImageId,
+                            opacity = a.Opacity,
+                            totalPlacements = a.TotalPlacements,
+                            design = a.Design,
+                            patternJson = a.PatternJson,
+                            optionalPrompt = a.OptionalPrompt,
+                            needsRegeneration,
+                            hasGroups = groupPlacements.Count > 0,
+                            groupPlacements,
+                            placements = placements.Select(p => new
+                            {
+                                id = p.Id,
+                                width = p.Width,
+                                height = p.Height,
+                                index = p.Index,
+                                fullSize = p.FullSize,
+                                printifyImageId = p.PrintifyImageId,
+                                groupId = p.GroupId,
+                                position = p.Position,
+                                optionalPrompt = p.OptionalPrompt
+                            })
+                        });
+                    }
+                    artworkResult = artworkObjects;
+
+                    // Printify products (same format as get-by-collection)
+                    var products = data.CollectionProducts;
+                    var mockupsByPpId = data.Mockups.GroupBy(m => m.PrintifyProductId).ToDictionary(g => g.Key, g => g.Count());
+                    var productMap = products.ToDictionary(p => p.Id);
+                    printifyProductsResult = data.PrintifyProducts.Select(pp => new
+                    {
+                        pp.Id,
+                        pp.ProjectId,
+                        pp.CollectionId,
+                        pp.ProductId,
+                        pp.PrintifyProductId,
+                        pp.PrintifyShopId,
+                        pp.PrintifyUserId,
+                        pp.ProviderId,
+                        pp.Published,
+                        pp.Status,
+                        pp.Created,
+                        ProjectBlueprintId = productMap.TryGetValue(pp.ProductId, out var p) ? p.ProjectBlueprintId : Guid.Empty,
+                        BlueprintName = productMap.TryGetValue(pp.ProductId, out p) ? p.Name : "",
+                        MockupsDownloaded = mockupsByPpId.TryGetValue(pp.Id, out var mockupCount) && mockupCount > 0,
+                    }).ToList();
+
+                    // Mockups (same format as get-mockups, with URL instead of image data)
+                    mockupsResult = data.Mockups.Select(m => new
+                    {
+                        m.Id,
+                        m.ProjectId,
+                        m.CollectionId,
+                        m.PrintifyProductId,
+                        m.VariantIds,
+                        m.Position,
+                        m.IsDefault,
+                        m.Status,
+                        ImageUrl = $"/api/printify-products/mockup-image?projectId={m.ProjectId}&collectionId={m.CollectionId}&mockupId={m.Id}&thumb=true",
+                    }).ToList();
+
+                    // Instagram
+                    instagramPosted = data.InstagramPosts.Any();
+                    var igPost = data.InstagramPosts.FirstOrDefault();
+                    if (igPost != null)
+                    {
+                        instagramPost = new
+                        {
+                            id = igPost.Id,
+                            description = igPost.Description,
+                            permalink = igPost.Permalink,
+                            created = igPost.Created
+                        };
+                    }
+
+                    // Collection products (same format as get-collection-products)
+                    collectionProductsResult = products.Select(p => new
+                    {
+                        id = p.Id,
+                        projectId = p.ProjectId,
+                        collectionId = p.CollectionId,
+                        projectBlueprintId = p.ProjectBlueprintId,
+                        blueprintId = p.BlueprintId,
+                        name = p.Name,
+                        active = p.Active
+                    }).ToList();
+
+                    // Product blueprint images (same format as get-all-product-blueprint-images)
+                    var pbImages = bpProductImages.Where(bpi => bpi.Status == 1).ToList();
+                    var variantsByBp = data.PrintifyVariants.GroupBy(v => v.BlueprintId).ToDictionary(g => g.Key, g => g.ToList());
+                    var blueprintMap = data.Blueprints.ToDictionary(b => b.Id);
+                    var blueprintNameMap = data.Blueprints.ToDictionary(b => b.Id, b => b.Name);
+                    productBlueprintImagesResult = pbImages.Select(img =>
+                    {
+                        var bp = blueprintMap.TryGetValue(img.ProjectBlueprintId, out var b) ? b : null;
+                        var bpId = bp?.BlueprintId ?? 0;
+                        var variants = variantsByBp.TryGetValue(bpId, out var vs) ? vs : new List<PrintifyBlueprintVariant>();
+                        var variantIds = variants
+                            .Where(v => string.Equals(v.Color, img.VariantColor, StringComparison.OrdinalIgnoreCase))
+                            .Select(v => v.VariantId)
+                            .ToList();
+                        return new
+                        {
+                            id = img.Id,
+                            projectBlueprintId = img.ProjectBlueprintId,
+                            blueprintName = blueprintNameMap.TryGetValue(img.ProjectBlueprintId, out var name) ? name : "",
+                            title = img.Title,
+                            variantColor = img.VariantColor,
+                            variantIds,
+                            status = img.Status,
+                            prompt = img.Prompt,
+                            imageId = img.ImageId
+                        };
+                    }).ToList();
+
+                    // Product images (same format as collection/{collectionId}/product-images)
+                    var prodImages = data.ProductImages;
+                    var existingBpImageIds = new HashSet<Guid>(
+                        prodImages.Where(img => img.ProductImageId != Guid.Empty).Select(img => img.ProductImageId)
+                    );
+                    var newImages = new List<ProjectCollectionProductImage>();
+                    foreach (var bpi in pbImages)
+                    {
+                        if (existingBpImageIds.Contains(bpi.Id)) continue;
+                        var newImg = await _projectCollectionProductImageRepository.CreateAsync(new ProjectCollectionProductImage
+                        {
+                            ProjectId = projectId,
+                            CollectionId = colId,
+                            ProjectBlueprintId = bpi.ProjectBlueprintId,
+                            ProductImageId = bpi.Id,
+                            ImageModel = "",
+                            Prompt = bpi.Prompt ?? "",
+                            Width = 0,
+                            Height = 0,
+                            Accepted = false,
+                            ResponseId = "",
+                            VariantColor = bpi.VariantColor ?? "",
+                            Active = true,
+                            SelectedMockups = "",
+                            Generated = false
+                        });
+                        newImages.Add(newImg);
+                    }
+                    var allProdImages = prodImages.Concat(newImages).ToList();
+                    var bpTitleMap = pbImages.ToDictionary(bpi => bpi.Id, bpi => bpi.Title ?? "");
+                    var productNameMap = products.ToDictionary(p => p.ProjectBlueprintId, p => p.Name ?? "");
+                    productImagesResult = allProdImages.Select(img => new
+                    {
+                        id = img.Id,
+                        projectBlueprintId = img.ProjectBlueprintId,
+                        productImageId = img.ProductImageId,
+                        accepted = img.Accepted,
+                        active = img.Active,
+                        prompt = img.Prompt,
+                        imageModel = img.ImageModel,
+                        variantColor = img.VariantColor,
+                        title = img.ProjectBlueprintId.HasValue && productNameMap.TryGetValue(img.ProjectBlueprintId.Value, out var pname) ? pname : "",
+                        subtitle = img.ProductImageId != Guid.Empty && bpTitleMap.TryGetValue(img.ProductImageId, out var t) ? t : (img.VariantColor ?? ""),
+                        selectedMockups = img.SelectedMockups,
+                        generated = img.Generated,
+                        includeArtworkRef = img.IncludeArtworkRef,
+                        imageUrl = img.Generated ? $"/api/projects/collection/{colId}/product-image/{img.Id}?thumb=true" : null
+                    }).ToList();
+                }
+
+                return Json(new ApiResponse
+                {
+                    success = true,
+                    data = new
+                    {
+                        questions = questionsResult,
+                        items = itemsResult,
+                        blueprints = blueprintsResult,
+                        itemReferences = itemRefsResult,
+                        printifyImageIndexByColor = printifyImageIndexColorMap,
+                        answers = answersResult,
+                        artwork = artworkResult,
+                        printifyProducts = printifyProductsResult,
+                        mockups = mockupsResult,
+                        instagramPosted,
+                        instagramPost,
+                        collectionProducts = collectionProductsResult,
+                        productBlueprintImages = productBlueprintImagesResult,
+                        productImages = productImagesResult
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new ApiResponse { success = false, message = ex.Message });
+            }
+        }
+
         [HttpGet("get-collection-answers")]
         public async Task<IActionResult> GetCollectionAnswers([FromQuery] Guid collectionId)
         {
@@ -257,17 +637,15 @@ namespace Artsy.API.Controllers
                     return Json(new ApiResponse { success = false, message = "Image model not found in database." });
 
                 // Build the generation plan (placements, variants, references, prompt, mask requirements)
+                // Pass the placement optional prompt so the plan can use it instead of the artwork-level prompt
                 var plan = await _artworkGenerationPlanService.BuildPlanAsync(
                     request.ProjectId, request.CollectionId, request.ItemId,
                     request.RequestedChanges, request.Answers, resolutionTier: 2,
-                    design: request.Design ?? "artwork");
+                    design: request.Design ?? "artwork",
+                    placementOptionalPrompt: request.PlacementOptionalPrompt);
 
                 if (string.IsNullOrWhiteSpace(plan.FinalPrompt))
                     return Json(new ApiResponse { success = false, message = "Prompt is required to generate artwork." });
-
-                // Append placement-level optional prompt (combined with artwork-level optional prompt already in plan)
-                if (!string.IsNullOrWhiteSpace(request.PlacementOptionalPrompt))
-                    plan.FinalPrompt += $" {request.PlacementOptionalPrompt.Trim()}";
 
                 // For pattern design mode, append seamless repeating pattern instructions to the prompt
                 var isPattern = string.Equals(request.Design, "pattern", StringComparison.OrdinalIgnoreCase);
@@ -317,7 +695,9 @@ namespace Artsy.API.Controllers
                     Accepted = !isFirstGeneration && existingArtwork != null ? existingArtwork.Accepted : false,
                     Design = string.IsNullOrWhiteSpace(request.Design) ? "artwork" : request.Design,
                     PatternJson = request.PatternJson ?? "",
-                    OptionalPrompt = request.OptionalPrompt,
+                    // Only overwrite the artwork-level optional prompt on first generation;
+                    // when regenerating a placement, preserve the existing artwork-level prompt
+                    OptionalPrompt = isFirstGeneration ? request.OptionalPrompt : (existingArtwork?.OptionalPrompt ?? ""),
                 };
                 var created = await _projectCollectionArtworkRepository.UpsertAsync(collectionArtwork);
 
@@ -1146,27 +1526,44 @@ namespace Artsy.API.Controllers
                 var placements = await _projectCollectionArtworkPlacementRepository.GetByArtworkIdAsync(artwork.Id);
                 var placementList = placements.ToList();
 
-                // When forcing re-upscale, reset all placement full-size flags and Printify image IDs
+                // When targeting a specific placement or group, filter to only that one
+                var isTargeted = request.PlacementIndex.HasValue || request.GroupId.HasValue;
+
+                // When forcing re-upscale, reset full-size flags and Printify image IDs for the targeted placements
                 if (request.Force)
                 {
-                    foreach (var p in placementList)
+                    var placementsToReset = isTargeted
+                        ? placementList.Where(p =>
+                            (request.GroupId.HasValue && p.GroupId == request.GroupId) ||
+                            (request.PlacementIndex.HasValue && !p.GroupId.HasValue && p.Index == request.PlacementIndex.Value))
+                        : placementList;
+                    foreach (var p in placementsToReset)
                     {
                         await _projectCollectionArtworkPlacementRepository.SetFullSizeAsync(p.Id, false);
                         await _projectCollectionArtworkPlacementRepository.SetPrintifyImageIdAsync(p.Id, "");
                     }
-                    artwork.FullSize = false;
-                    await _projectCollectionArtworkRepository.SetPrintifyImageIdAsync(artwork.Id, "");
+                    if (!isTargeted || placementList.Count == 0)
+                    {
+                        artwork.FullSize = false;
+                        await _projectCollectionArtworkRepository.SetPrintifyImageIdAsync(artwork.Id, "");
+                    }
                 }
 
                 // Determine which placements need upscaling (FullSize == false)
                 // For group artworks or single artworks with no placements, use artwork-level FullSize
                 var pendingPlacements = placementList.Where(p => !p.FullSize).ToList();
-                var needsArtworkUpscale = artwork.FullSize == false && placementList.Count == 0;
+                if (isTargeted)
+                {
+                    pendingPlacements = pendingPlacements.Where(p =>
+                        (request.GroupId.HasValue && p.GroupId == request.GroupId) ||
+                        (request.PlacementIndex.HasValue && !p.GroupId.HasValue && p.Index == request.PlacementIndex.Value)).ToList();
+                }
+                var needsArtworkUpscale = !isTargeted && artwork.FullSize == false && placementList.Count == 0;
                 if (pendingPlacements.Count == 0 && !needsArtworkUpscale && !request.Force)
                     return Json(new ApiResponse { success = true, data = artwork });
 
                 // Determine token cost: 2 tokens per pending variant (or 2 for single artwork)
-                var variantCount = Math.Max(1, request.Force ? placementList.Count : (pendingPlacements.Count > 0 ? pendingPlacements.Count : 1));
+                var variantCount = Math.Max(1, request.Force ? (isTargeted ? pendingPlacements.Count : placementList.Count) : (pendingPlacements.Count > 0 ? pendingPlacements.Count : 1));
                 if (!await _aiTokenService.UseTokensAsync(userId, 2 * variantCount))
                     return Json(new ApiResponse { success = false, message = "Not enough tokens to generate the artwork. Please purchase more tokens before continuing." });
 
@@ -1183,8 +1580,12 @@ namespace Artsy.API.Controllers
                 {
                     // Separate group placements from standard placements
                     var groupPlacements = placementList.Where(p => p.GroupId.HasValue).ToList();
+                    if (request.GroupId.HasValue)
+                        groupPlacements = groupPlacements.Where(p => p.GroupId == request.GroupId.Value).ToList();
                     // Only upscale standard placements that haven't been upscaled yet (unless Force)
                     var standardPlacements = placementList.Where(p => !p.GroupId.HasValue && (request.Force || !p.FullSize)).ToList();
+                    if (request.PlacementIndex.HasValue)
+                        standardPlacements = standardPlacements.Where(p => p.Index == request.PlacementIndex.Value).ToList();
 
                     // Build a lookup of flip flags from the blueprint placement group images
                     var flipLookup = new Dictionary<(Guid GroupId, string Position), (bool FlipX, bool FlipY)>();
@@ -1926,7 +2327,7 @@ namespace Artsy.API.Controllers
         }
 
         [HttpGet("collection/{collectionId}/item/{itemId}/artwork/{artworkId}/group/{groupId}/{position}")]
-        public async Task<IActionResult> GetCollectionArtworkGroupImage(Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position, [FromQuery] bool fullSize = false, [FromQuery] bool png = false)
+        public async Task<IActionResult> GetCollectionArtworkGroupImage(Guid collectionId, Guid itemId, Guid artworkId, Guid groupId, string position, [FromQuery] bool fullSize = false, [FromQuery] bool png = false, [FromQuery] bool thumb = false)
         {
             var userId = GetUserId();
             if (userId == Guid.Empty)
@@ -1974,6 +2375,9 @@ namespace Artsy.API.Controllers
 
                 if (bytes == null || bytes.Length == 0)
                     return NotFound();
+
+                if (thumb)
+                    bytes = await _imageService.GenerateThumbnailAsync(bytes);
 
                 return File(bytes, contentType);
             }

@@ -15,6 +15,7 @@ namespace Artsy.API.Controllers
         readonly IProjectBlueprintsRepository _projectBlueprintsRepository;
         readonly IProjectCollectionArtworkPlacementRepository _artworkPlacementRepository;
         readonly IProjectCollectionProductRepository _collectionProductRepository;
+        readonly IProjectCollectionRepository _collectionRepository;
         readonly IImageService _imageService;
 
         public PrintifyImagesController(
@@ -23,6 +24,7 @@ namespace Artsy.API.Controllers
             IProjectBlueprintsRepository projectBlueprintsRepository,
             IProjectCollectionArtworkPlacementRepository artworkPlacementRepository,
             IProjectCollectionProductRepository collectionProductRepository,
+            IProjectCollectionRepository collectionRepository,
             IImageService imageService)
         {
             _productImageRepository = productImageRepository;
@@ -30,6 +32,7 @@ namespace Artsy.API.Controllers
             _projectBlueprintsRepository = projectBlueprintsRepository;
             _artworkPlacementRepository = artworkPlacementRepository;
             _collectionProductRepository = collectionProductRepository;
+            _collectionRepository = collectionRepository;
             _imageService = imageService;
         }
 
@@ -212,7 +215,16 @@ namespace Artsy.API.Controllers
                 }
 
                 ms.Position = 0;
-                return File(ms.ToArray(), "application/zip", $"Artsy-Collection-{DateTime.UtcNow:yyyyMMdd}.zip");
+                var collection = await _collectionRepository.GetByIdAsync(collectionId);
+                var collectionTitle = collection?.Title?.Trim();
+                if (string.IsNullOrWhiteSpace(collectionTitle))
+                    collectionTitle = "Collection";
+                // Sanitize the title for use as a filename
+                var invalidChars = System.IO.Path.GetInvalidFileNameChars();
+                var safeTitle = string.Join('_', collectionTitle.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries)).Trim();
+                if (string.IsNullOrWhiteSpace(safeTitle))
+                    safeTitle = "Collection";
+                return File(ms.ToArray(), "application/zip", $"{safeTitle}.zip");
             }
             catch
             {

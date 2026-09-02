@@ -135,6 +135,7 @@ namespace Artsy.API.Services
             string? requestedChanges = null,
             List<GenerateProjectItemPreviewAnswer>? answers = null,
             int resolutionTier = 1,
-            string design = "artwork");
+            string design = "artwork",
+            string? placementOptionalPrompt = null);
     }
 }

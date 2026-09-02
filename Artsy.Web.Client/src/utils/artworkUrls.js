@@ -21,6 +21,16 @@ export function artworkImageUrl(collectionId, itemId, artworkId, { thumb = false
   return buildUrl(collectionId, itemId, artworkId, params);
 }
 
+export function artworkGroupImageUrl(collectionId, itemId, artworkId, groupId, position, { thumb = false, fullSize = false, png = false, cacheBust = null } = {}) {
+  const path = `${BASE}/collection/${collectionId}/item/${itemId}/artwork/${artworkId}/group/${groupId}/${position}`;
+  const params = [];
+  if (thumb) params.push('thumb=true');
+  if (fullSize) params.push('fullSize=true');
+  if (png) params.push('png=true');
+  if (cacheBust != null) params.push(`r=${cacheBust}`);
+  return params.length > 0 ? `${path}?${params.join('&')}` : path;
+}
+
 export function artworkThumbUrl(collectionId, itemId, artworkId, { placementIndex = null, cacheBust = null } = {}) {
   return artworkImageUrl(collectionId, itemId, artworkId, { thumb: true, placementIndex, cacheBust });
 }

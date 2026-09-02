@@ -51,6 +51,8 @@ namespace Artsy.API.Controllers
         readonly IProjectCollectionProductRepository _productRepository;
         readonly ICustomImageRepository _customImageRepository;
         readonly IProjectCollectionArtworkReferenceRepository _projectCollectionArtworkReferenceRepository;
+        readonly IProjectCollectionInstagramPostRepository _instagramPostRepository;
+        readonly ICollectionWizardRepository _collectionWizardRepository;
         readonly TokenCostOptions _tokenCostOptions;
         readonly IAITokenService _aiTokenService;
         readonly IArtworkGenerationPlanService _artworkGenerationPlanService;
@@ -91,6 +93,8 @@ namespace Artsy.API.Controllers
             IProjectCollectionProductRepository productRepository,
             ICustomImageRepository customImageRepository,
             IProjectCollectionArtworkReferenceRepository projectCollectionArtworkReferenceRepository,
+            IProjectCollectionInstagramPostRepository instagramPostRepository,
+            ICollectionWizardRepository collectionWizardRepository,
             IOptions<TokenCostOptions> tokenCostOptions,
             IAITokenService aiTokenService,
             IArtworkGenerationPlanService artworkGenerationPlanService)
@@ -130,6 +134,8 @@ namespace Artsy.API.Controllers
             _productRepository = productRepository;
             _customImageRepository = customImageRepository;
             _projectCollectionArtworkReferenceRepository = projectCollectionArtworkReferenceRepository;
+            _instagramPostRepository = instagramPostRepository;
+            _collectionWizardRepository = collectionWizardRepository;
             _tokenCostOptions = tokenCostOptions.Value;
             _aiTokenService = aiTokenService;
             _artworkGenerationPlanService = artworkGenerationPlanService;

@@ -6,6 +6,7 @@ import { PrintifyProducts } from '@/api/user/printifyProducts';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 import Icon from '@/components/ui/icon';
+import Input from '@/components/forms/input';
 
 export default function SelectProductsStep() {
   const session = useSession();
@@ -16,6 +17,7 @@ export default function SelectProductsStep() {
     projectQuestions, collectionArtwork, aiItems, blueprintItemIds,
     setCurrentItemIndex, loadItemData,
     setCollectionProducts, setPrintifyProducts, setAllProductImages, setProductBlueprintImages,
+    editableCollectionTitle, setEditableCollectionTitle,
   } = useCollection();
 
   const { getBlueprintImageUrl } = Printify(session);
@@ -91,6 +93,14 @@ export default function SelectProductsStep() {
 
       await api.saveCollectionProducts({ collectionId: colId, products });
 
+      // Update collection title if changed
+      const trimmedTitle = (editableCollectionTitle || '').trim();
+      if (trimmedTitle) {
+        try {
+          await api.updateCollectionTitle({ id: colId, title: trimmedTitle });
+        } catch { /* ignore title update errors */ }
+      }
+
       // Reload all dependent state so downstream steps reflect the updated selection
       const [cpRes, ppRes, prodImgRes, pbImgRes] = await Promise.all([
         api.getCollectionProducts(colId),
@@ -126,7 +136,7 @@ export default function SelectProductsStep() {
     } finally {
       setSaving(false);
     }
-  }, [collectionId, ensureCollection, blueprints, checkMap, api, setStep, STEPS, setMessage, projectQuestions, collectionArtwork, aiItems, blueprintItemIds, setCurrentItemIndex, loadItemData, project, printifyProductsApi, setCollectionProducts, setPrintifyProducts, setAllProductImages, setProductBlueprintImages]);
+  }, [collectionId, ensureCollection, blueprints, checkMap, api, setStep, STEPS, setMessage, projectQuestions, collectionArtwork, aiItems, blueprintItemIds, setCurrentItemIndex, loadItemData, project, printifyProductsApi, setCollectionProducts, setPrintifyProducts, setAllProductImages, setProductBlueprintImages, editableCollectionTitle]);
 
   if (blueprints.length === 0) {
     return (
@@ -143,6 +153,16 @@ export default function SelectProductsStep() {
 
   return (
     <div className="flex flex-col h-full">
+      <div className="max-w-[30em] mx-auto w-full mb-4">
+        <Input
+          label="Collection Title"
+          name="collectionTitle"
+          value={editableCollectionTitle || ''}
+          onChange={(e) => setEditableCollectionTitle(e.target.value)}
+          placeholder="Collection title"
+          formPadding={false}
+        />
+      </div>
       <p className="text-center text-lg mb-4">
         Select which products to include in this collection.
       </p>

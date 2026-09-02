@@ -14,8 +14,8 @@ import Spinner from '@/components/ui/spinner';
 import Icon from '@/components/ui/icon';
 const TokenCostBreakdownModal = lazy(() => import('../TokenCostBreakdownModal'));
 const CustomImageSelector = lazy(() => import('../CustomImageSelector'));
-import PatternSettings from './PatternSettings';
-import PatternPreview from './PatternPreview';
+const PatternSettings = lazy(() => import('./PatternSettings'));
+const PatternPreview = lazy(() => import('./PatternPreview'));
 
 export default function ArtworkQuestions() {
   const session = useSession();
@@ -47,6 +47,8 @@ export default function ArtworkQuestions() {
   const [patternAspectRatio, setPatternAspectRatio] = useState('1:1');
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [previewImageOverride, setPreviewImageOverride] = useState(null);
+  const [previewImageOverrideFull, setPreviewImageOverrideFull] = useState(null);
+  const [previewError, setPreviewError] = useState(null);
   const optionalPromptTimerRef = useRef(null);
   const optionalPromptRef = useRef(null);
   const loadedOptionalPromptRef = useRef('');
@@ -292,14 +294,16 @@ export default function ArtworkQuestions() {
 
     setIsGeneratingPreview(true);
     setPreviewImageOverride(null);
+    setPreviewImageOverrideFull(null);
+    setPreviewError(null);
     try {
       // Save form changes before generating preview
       // 1. Save AI image model
       if (currentArtwork?.imageModel !== selectedImageModel.model) {
         await api.updateItemImageModel({ itemId: currentItem.id, imageModel: selectedImageModel.model });
       }
-      // 2. Save design + aspect ratio (pattern mode)
-      if (design === 'pattern') {
+      // 2. Save design + aspect ratio
+      if (design === 'pattern' || design === 'artwork') {
         await api.updateItemAspectRatio({ itemId: currentItem.id, aspectRatio: patternAspectRatio, design });
       } else if (currentArtwork?.design !== design) {
         await api.updateItemAspectRatio({ itemId: currentItem.id, aspectRatio: currentArtwork?.aspectRatio || '1:1', design });
@@ -335,10 +339,14 @@ export default function ArtworkQuestions() {
         const newestPreview = (updated.data.data || [])[0];
         if (newestPreview) {
           setPreviewImageOverride(api.getItemPreviewUrl(currentItem.id, newestPreview.id, true));
+          setPreviewImageOverrideFull(api.getItemPreviewUrl(currentItem.id, newestPreview.id, false));
         }
+      } else {
+        setPreviewError(response.data.message || 'Failed to generate preview.');
       }
     } catch (error) {
       console.error('Preview generation error:', error?.response?.data || error);
+      setPreviewError(error?.response?.data?.message || error?.message || 'Failed to generate preview.');
     } finally {
       setIsGeneratingPreview(false);
     }
@@ -385,6 +393,11 @@ export default function ArtworkQuestions() {
           Product selections have changed. Please regenerate this artwork to include placements for all selected products.
         </p>
       )}
+      {previewError && (
+        <div className="mb-4 px-4 py-2 rounded border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/30 text-sm text-red-700 dark:text-red-300">
+          {previewError}
+        </div>
+      )}
       {isGeneratingPreview ? (
         <div className="w-full max-w-[500px] mx-auto rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 mb-4">
           <div className="w-full h-[400px] flex items-center justify-center bg-gray-100 dark:bg-gray-700">
@@ -392,14 +405,16 @@ export default function ArtworkQuestions() {
           </div>
         </div>
       ) : design === 'pattern' ? (
-        <PatternPreview
-          patternSettings={patternSettings}
-          previewImage={previewImageOverride || (thumbImages.length > 0 ? thumbImages[0] : (previewThumbImages.length > 0 ? previewThumbImages[0] : null))}
-        />
+        <Suspense fallback={<Spinner className="text-3xl my-16" />}>
+          <PatternPreview
+            patternSettings={patternSettings}
+            previewImage={previewImageOverride || (thumbImages.length > 0 ? thumbImages[0] : (previewThumbImages.length > 0 ? previewThumbImages[0] : null))}
+          />
+        </Suspense>
       ) : (
         <>
           {previewImageOverride ? (
-            <div className="w-full max-w-[300px] mx-auto rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 mb-4">
+            <div className="w-full max-w-[300px] mx-auto rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 mb-4 cursor-pointer" onClick={() => previewImageOverrideFull && setArtworkPreview({ images: [previewImageOverrideFull], src: previewImageOverrideFull, alt: 'Artwork Preview' })}>
               <img
                 src={previewImageOverride}
                 alt="Preview"
@@ -463,7 +478,7 @@ export default function ArtworkQuestions() {
               fitContent
             />
           </div>
-          {design === 'pattern' && (
+          {(design === 'pattern' || design === 'artwork') && (
             <div style={{ width: '10em' }}>
               <SelectGrid
                 name="patternAspectRatio"
@@ -500,10 +515,12 @@ export default function ArtworkQuestions() {
         </div>
       </div>
       {design === 'pattern' && (
-        <PatternSettings
-          patternSettings={patternSettings}
-          setPatternSettings={setPatternSettings}
-        />
+        <Suspense fallback={<Spinner className="text-3xl my-8" />}>
+          <PatternSettings
+            patternSettings={patternSettings}
+            setPatternSettings={setPatternSettings}
+          />
+        </Suspense>
       )}
       <div className="mb-4">
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Prompt (optional)</label>

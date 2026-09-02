@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
 import { useCollection } from '@/context/collection';
 import { useSession } from '@/context/session';
 import { PrintifyProducts } from '@/api/user/printifyProducts';
@@ -9,8 +9,8 @@ import List, { Item } from '@/components/ui/list';
 import Checked from '@/components/ui/checked';
 import Icon from '@/components/ui/icon';
 import Tooltip from '@/components/ui/tooltip';
-import ConfirmModal from '@/components/ui/confirm-modal';
-import EditCollectionProductDetails from './EditCollectionProductDetails';
+const ConfirmModal = lazy(() => import('@/components/ui/confirm-modal'));
+const EditCollectionProductDetails = lazy(() => import('./EditCollectionProductDetails'));
 
 export default function CreateProducts() {
   const session = useSession();
@@ -37,6 +37,7 @@ export default function CreateProducts() {
   const [archivingUpload, setArchivingUpload] = useState({});
   const [editProductBp, setEditProductBp] = useState(null);
   const [createCheckMap, setCreateCheckMap] = useState({});
+  const [editedBlueprints, setEditedBlueprints] = useState({});
 
   const createdBlueprints = useMemo(() => {
     const map = {};
@@ -775,6 +776,7 @@ export default function CreateProducts() {
                     </span>
                     <ButtonOutline
                       size="small"
+                      color={editedBlueprints[bp.id] ? 'purple' : undefined}
                       className="whitespace-nowrap"
                       onClick={() => setEditProductBp(bp)}
                     >
@@ -839,37 +841,45 @@ export default function CreateProducts() {
         </ButtonOutline>
       </div>
 
-      <ConfirmModal
-        show={!!productToDelete}
-        title="Delete Product"
-        message={`Do you really want to delete the product ${productToDelete?.blueprintName || ''}? This will delete it from your Printify shop.`}
-        confirmLabel="Delete"
-        onConfirm={() => productToDelete && handleDeleteProduct(productToDelete)}
-        onClose={() => setProductToDelete(null)}
-      />
-      <EditCollectionProductDetails
-        show={!!editProductBp}
-        collectionId={collectionId}
-        projectBlueprintId={editProductBp?.id}
-        blueprintName={editProductBp?.name}
-        collectionProducts={collectionProducts}
-        allProductImages={allProductImages}
-        mockups={mockups}
-        printifyProducts={printifyProducts}
-        api={api}
-        onClose={() => setEditProductBp(null)}
-        onSaved={() => {
-          // Refresh collection products to reflect name changes
-          if (collectionId) {
-            api.getCollectionProducts(collectionId).then(res => {
-              if (res.data.success) {
-                const products = res.data.data || [];
-                setCollectionProducts(prev => products.length > 0 ? products : prev);
-              }
-            }).catch(() => {});
-          }
-        }}
-      />
+      <Suspense fallback={null}>
+        <ConfirmModal
+          show={!!productToDelete}
+          title="Delete Product"
+          message={`Do you really want to delete the product ${productToDelete?.blueprintName || ''}? This will delete it from your Printify shop.`}
+          confirmLabel="Delete"
+          onConfirm={() => productToDelete && handleDeleteProduct(productToDelete)}
+          onClose={() => setProductToDelete(null)}
+        />
+      </Suspense>
+      <Suspense fallback={null}>
+        <EditCollectionProductDetails
+          show={!!editProductBp}
+          collectionId={collectionId}
+          projectBlueprintId={editProductBp?.id}
+          blueprintName={editProductBp?.name}
+          collectionProducts={collectionProducts}
+          allProductImages={allProductImages}
+          mockups={mockups}
+          printifyProducts={printifyProducts}
+          api={api}
+          onClose={() => setEditProductBp(null)}
+          onSaved={() => {
+            // Mark this blueprint as edited (turns Edit Details button purple)
+            if (editProductBp) {
+              setEditedBlueprints(prev => ({ ...prev, [editProductBp.id]: true }));
+            }
+            // Refresh collection products to reflect name changes
+            if (collectionId) {
+              api.getCollectionProducts(collectionId).then(res => {
+                if (res.data.success) {
+                  const products = res.data.data || [];
+                  setCollectionProducts(prev => products.length > 0 ? products : prev);
+                }
+              }).catch(() => {});
+            }
+          }}
+        />
+      </Suspense>
     </div>
   );
 }

@@ -62,6 +62,7 @@ namespace Artsy.Data.Services
             builder.Services.AddTransient<ITrendRepository, TrendRepository>();
             builder.Services.AddTransient<IProjectCollectionInstagramPostRepository, ProjectCollectionInstagramPostRepository>();
             builder.Services.AddTransient<IProjectCollectionInstagramPostImageRepository, ProjectCollectionInstagramPostImageRepository>();
+            builder.Services.AddTransient<ICollectionWizardRepository, CollectionWizardRepository>();
             builder.Services.AddTransient<IOrderRepository, OrderRepository>();
             builder.Services.AddTransient<IOrderItemAnswerRepository, OrderItemAnswerRepository>();
             builder.Services.AddTransient<IOrderItemArtworkRepository, OrderItemArtworkRepository>();

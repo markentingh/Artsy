@@ -149,7 +149,15 @@ export default function CollectionsSection({ projectId, project, showNewButton =
               .filter(a => a.active)
               .map(a => artworkThumbUrl(collection.id, a.itemId, a.id));
             const productImages = (collection.productImages || [])
-              .filter(p => p.active)
+              .filter(p => p.active && p.generated)
+              .sort((a, b) => {
+                // Product images with null ProjectBlueprintId come first
+                const aNull = a.projectBlueprintId == null;
+                const bNull = b.projectBlueprintId == null;
+                if (aNull && !bNull) return -1;
+                if (!aNull && bNull) return 1;
+                return 0;
+              })
               .map(p => p.imageUrl);
             const hasCollectionImages = productImages.length > 0 || artworkImages.length > 0;
             const previewImages = !hasCollectionImages

@@ -102,6 +102,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const [currentArtwork, setCurrentArtwork] = useState(null);
   const [blueprints, setBlueprints] = useState([]);
   const [answers, setAnswers] = useState({});
+  const [editableCollectionTitle, setEditableCollectionTitle] = useState(collectionTitle || '');
   const [itemAnswers, setItemAnswers] = useState({});
   const [previewImageData, setPreviewImageData] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -123,7 +124,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const [currentGeneratingItemId, setCurrentGeneratingItemId] = useState(null);
   const [generationError, setGenerationError] = useState(null);
   const [artworkPreview, setArtworkPreview] = useState(null);
-  const [initialLoading, setInitialLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const cancelRef = useRef(false);
   const advanceToNextItemRef = useRef(null);
 
@@ -152,6 +153,11 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   const [socialMediaSelectedImages, setSocialMediaSelectedImages] = useState({});
   const [instagramPosted, setInstagramPosted] = useState(false);
   const [instagramPost, setInstagramPost] = useState(null);
+
+  // Sync editable title when the prop changes (e.g. opening an existing collection)
+  useEffect(() => {
+    setEditableCollectionTitle(collectionTitle || '');
+  }, [collectionTitle]);
 
   const blueprintItemIds = useMemo(() => {
     const activeBlueprintIds = new Set(
@@ -459,6 +465,8 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       }
     } catch (error) {
       setMessage({ type: 'error', text: error?.response?.data?.message || 'Failed to load artwork data' });
+    } finally {
+      setInitialLoading(false);
     }
   }, [aiItems, collectionId, savedAnswers, api, ensureCollection, doGeneratePreview, projectId]);
 
@@ -633,83 +641,111 @@ export function CollectionProvider({ children, projectId, project, collectionId:
   };
 
   const doGenerateAll = useCallback(async (colId) => {
-    // Find artwork items that have at least one placement needing upscaling
-    const pendingItems = collectionArtwork.filter(a =>
-      aiItems.some(item => String(item.id) === String(a.itemId)) &&
-      hasPendingPlacements(a)
-    );
+    // Build a flat list of individual upscale tasks (one per group, placement, or base artwork)
+    const tasks = [];
+    for (const a of collectionArtwork) {
+      if (!aiItems.some(item => String(item.id) === String(a.itemId))) continue;
+      if (!hasPendingPlacements(a)) continue;
 
-    // Count total placement images that need upscaling (per-placement)
-    const countPendingImages = (a) => {
-      let count = 0;
-      if (a.hasGroups) {
-        // Group image needs upscaling if any group placement isn't fullSize
-        const groupPlacements = (a.placements || []).filter(p => p.groupId);
-        const groupNeedsUpscale = groupPlacements.length > 0 ? groupPlacements.some(p => !p.fullSize) : !a.fullSize;
-        if (groupNeedsUpscale) count++;
+      const item = aiItems.find(i => String(i.id) === String(a.itemId));
+
+      // Group tasks — one per group
+      if (a.hasGroups && a.groupPlacements) {
+        for (const grp of a.groupPlacements) {
+          const groupPlacements = (a.placements || []).filter(p => p.groupId === grp.groupId);
+          const needsUpscale = groupPlacements.length > 0 ? groupPlacements.some(p => !p.fullSize) : !a.fullSize;
+          if (needsUpscale) {
+            tasks.push({
+              artwork: a, item, groupId: grp.groupId,
+              label: `${item?.title || 'Untitled'} (Group)`,
+            });
+          }
+        }
       }
-      const pendingPlacements = (a.placements || []).filter(p => !p.groupId && !p.fullSize);
-      count += pendingPlacements.length;
-      if (count === 0 && !a.fullSize && (!a.placements || a.placements.length === 0)) count = 1;
-      return count;
-    };
-    const totalImageCount = pendingItems.reduce((sum, a) => sum + countPendingImages(a), 0);
 
-    if (pendingItems.length === 0) {
+      // Non-group placement tasks — one per placement index (deduplicated)
+      const seenIndices = new Set();
+      const nonGroupPlacements = (a.placements || []).filter(p => !p.groupId && !p.fullSize);
+      for (const p of nonGroupPlacements) {
+        if (seenIndices.has(p.index)) continue;
+        seenIndices.add(p.index);
+        tasks.push({
+          artwork: a, item, placementIndex: p.index,
+          label: `${item?.title || 'Untitled'} (Placement ${p.index + 1})`,
+        });
+      }
+
+      // Base artwork task (no placements at all)
+      if ((!a.placements || a.placements.length === 0) && !a.fullSize) {
+        tasks.push({
+          artwork: a, item,
+          label: `${item?.title || 'Untitled'}`,
+        });
+      }
+    }
+
+    if (tasks.length === 0) {
       setUpscaleComplete(true);
       return;
     }
 
+    const totalImageCount = tasks.length;
     setIsGeneratingAll(true);
     setGeneratingProgress(0);
     setGeneratedArtworks([]);
     setCurrentGeneratingIndex(0);
     setCurrentGeneratingItemId(null);
     setGenerationError(null);
-    setGeneratingMessage(`Generating artwork 1 of ${totalImageCount}...`);
+    setGeneratingMessage(`Upscaling artwork 1 of ${totalImageCount}...`);
     cancelRef.current = false;
 
-    const results = [];
+    const completedItemIds = new Set();
     let imagesProcessed = 0;
-    for (let i = 0; i < pendingItems.length; i++) {
+
+    for (let i = 0; i < tasks.length; i++) {
       if (cancelRef.current) break;
 
-      const art = pendingItems[i];
-      const item = aiItems.find(a => a.id === art.itemId);
-      const imgCount = countPendingImages(art);
+      const task = tasks[i];
+      const { artwork: art, item } = task;
       setCurrentGeneratingIndex(i);
       setCurrentGeneratingItemId(art.itemId);
-      setGeneratingMessage(`Generating artwork ${imagesProcessed + 1} of ${totalImageCount}: ${item?.title || 'Untitled'} (${art.width}x${art.height})...`);
+      setGeneratingMessage(`Upscaling artwork ${imagesProcessed + 1} of ${totalImageCount}: ${task.label} (${art.width}x${art.height})...`);
 
       try {
         const res = await api.upscaleArtwork({
           projectId,
           collectionId: colId,
           itemId: art.itemId,
+          groupId: task.groupId || undefined,
+          placementIndex: task.placementIndex != null ? task.placementIndex : undefined,
         });
 
         if (res.data.success) {
-          const artwork = res.data.data;
-          const url = artworkImageUrl(colId, art.itemId, artwork.id, { thumb: true, cacheBust: Math.floor(Math.random() * 100000) });
-          results.push({ itemId: art.itemId, artworkId: artwork.id, url, width: art.width, height: art.height });
-          setGeneratedArtworks([...results]);
-          // Refresh from server to get accurate per-placement fullSize data
+          completedItemIds.add(art.itemId);
+          // Refresh from server to get accurate per-placement fullSize data after each task
           const artRes = await api.getCollectionArtwork(colId);
           if (artRes.data.success) {
             setCollectionArtwork(artRes.data.data || []);
           }
+          // Track completed tasks for the overlay checkmarks
+          const completedTask = {
+            itemId: art.itemId,
+            groupId: task.groupId,
+            placementIndex: task.placementIndex,
+          };
+          setGeneratedArtworks(prev => [...prev, completedTask]);
         } else {
-          setGenerationError(res.data.message || 'Failed to generate artwork');
+          setGenerationError(res.data.message || 'Failed to upscale artwork');
           setIsGeneratingAll(false);
           return;
         }
       } catch (error) {
-        setGenerationError(error?.response?.data?.message || error?.message || 'Failed to generate artwork');
+        setGenerationError(error?.response?.data?.message || error?.message || 'Failed to upscale artwork');
         setIsGeneratingAll(false);
         return;
       }
 
-      imagesProcessed += imgCount;
+      imagesProcessed++;
       setGeneratingProgress(Math.round((imagesProcessed / totalImageCount) * 100));
     }
 
@@ -721,7 +757,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
       if (onSaved) onSaved();
     }
     refreshTokens();
-  }, [aiItems, projectId, api, buildProjectAnswers, collectionArtwork, refreshTokens, onSaved]);
+  }, [aiItems, projectId, api, collectionArtwork, refreshTokens, onSaved]);
 
   const cancelAll = useCallback(() => {
     cancelRef.current = true;
@@ -789,113 +825,107 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
   const loadData = useCallback(async (existingCollectionId) => {
     try {
-      const [qRes, itemsRes, bpRes] = await Promise.all([
-        api.getQuestions(projectId),
-        api.getItems(projectId),
-        api.getBlueprints(projectId),
-      ]);
-
-      if (qRes.data.success) {
-        setProjectQuestions(qRes.data.data || []);
-      }
-      if (itemsRes.data.success) {
-        const allItems = itemsRes.data.data || [];
-        setItems(allItems);
-      }
-      if (bpRes.data.success) {
-        const allBps = bpRes.data.data || [];
-        const completeBps = allBps.filter(bp => bp.configured === true);
-        setBlueprints(completeBps);
-
-        const colorMap = {};
-        for (const bp of allBps) {
-          const idxMap = {};
-          for (const img of (bp.printifyImages || [])) {
-            if (img.variantColors && img.imageIndex !== undefined) {
-              for (const color of img.variantColors) {
-                idxMap[color] = img.imageIndex;
-              }
-            }
-          }
-          colorMap[bp.id] = idxMap;
-        }
-        setPrintifyImageIndexByColor(colorMap);
+      const res = await api.loadCollectionWizard(projectId, existingCollectionId || null);
+      if (!res.data.success) {
+        setMessage({ type: 'error', text: res.data.message || 'Failed to load data' });
+        setInitialLoading(false);
+        return;
       }
 
-      if (existingCollectionId) {
+      const d = res.data.data;
+
+      // Questions
+      setProjectQuestions(d.questions || []);
+
+      // Items
+      const allItems = d.items || [];
+      setItems(allItems);
+
+      // Blueprints
+      const allBps = d.blueprints || [];
+      const completeBps = allBps.filter(bp => bp.configured === true);
+      setBlueprints(completeBps);
+      setPrintifyImageIndexByColor(d.printifyImageIndexByColor || {});
+
+      // Item references
+      const refs = (d.itemReferences || []).map(r => ({
+        ...r,
+        itemId: r.itemId ?? r.ItemId,
+        artworkId: r.artworkId ?? r.ArtworkId,
+      }));
+
+      // Collection-specific data
+      if (existingCollectionId && d.answers) {
         let savedAnsMap = {};
-        let artworkList = [];
-
-        const [ansRes, artRes, ppRes, mkRes, igRes, igPostRes, cpRes, pbImgRes, prodImgRes] = await Promise.all([
-          api.getCollectionAnswers(existingCollectionId),
-          api.getCollectionArtwork(existingCollectionId),
-          printifyProductsApi.getByCollection(existingCollectionId),
-          printifyProductsApi.getMockups(existingCollectionId),
-          instagramApi.checkPosted(existingCollectionId),
-          instagramApi.getPost(existingCollectionId),
-          api.getCollectionProducts(existingCollectionId),
-          api.getAllProductBlueprintImages(projectId),
-          api.getProductImages(existingCollectionId),
-        ]);
-
-        if (ansRes.data.success) {
-          savedAnsMap = {};
-          for (const a of (ansRes.data.data || [])) {
-            const key = a.itemId ? `${a.itemId}:${a.questionId}` : `project:${a.questionId}`;
-            savedAnsMap[key] = a.answer;
-            if (a.itemId) {
-              setItemAnswers(prev => ({ ...prev, [a.questionId]: a.answer }));
-            } else {
-              setAnswers(prev => ({ ...prev, [a.questionId]: a.answer }));
-            }
+        for (const a of d.answers) {
+          const key = a.itemId ? `${a.itemId}:${a.questionId}` : `project:${a.questionId}`;
+          savedAnsMap[key] = a.answer;
+          if (a.itemId) {
+            setItemAnswers(prev => ({ ...prev, [a.questionId]: a.answer }));
+          } else {
+            setAnswers(prev => ({ ...prev, [a.questionId]: a.answer }));
           }
-          setSavedAnswers(savedAnsMap);
         }
+        setSavedAnswers(savedAnsMap);
 
-        if (artRes.data.success) {
-          artworkList = artRes.data.data || [];
-          setCollectionArtwork(artworkList);
-        }
+        const artworkList = d.artwork || [];
+        setCollectionArtwork(artworkList);
 
-        // Compute upscaleComplete from collection artwork directly
         const hasArtwork = artworkList.length > 0;
         const allUpscaled = hasArtwork && artworkList.every(a => a.fullSize);
         setUpscaleComplete(allUpscaled);
 
-        if (ppRes.data.success) {
-          setPrintifyProducts(ppRes.data.data || []);
-        }
+        setPrintifyProducts(d.printifyProducts || []);
+        setMockups(d.mockups || []);
+        setCollectionProducts(d.collectionProducts || []);
+        setProductBlueprintImages(d.productBlueprintImages || []);
+        setAllProductImages((d.productImages || []).filter(img => img.active));
+        setInstagramPosted(d.instagramPosted || false);
+        setInstagramPost(d.instagramPost || null);
 
-        if (mkRes.data.success) {
-          setMockups(mkRes.data.data || []);
-        }
-
-        if (cpRes.data.success) {
-          setCollectionProducts(cpRes.data.data || []);
-        }
-
-        if (pbImgRes.data.success) {
-          setProductBlueprintImages(pbImgRes.data.data || []);
-        }
-
-        if (prodImgRes.data.success) {
-          setAllProductImages((prodImgRes.data.data || []).filter(img => img.active));
-        }
-
-        if (igRes.data.success) {
-          setInstagramPosted(igRes.data.data?.posted || false);
-        }
-
-        if (igPostRes.data.success) {
-          setInstagramPost(igPostRes.data.data || null);
-        }
-
-        const questions = qRes.data.success ? (qRes.data.data || []) : [];
-        const collectionProductsList = cpRes.data.success ? (cpRes.data.data || []) : [];
+        // Determine resume step
+        const questions = d.questions || [];
+        const collectionProductsList = d.collectionProducts || [];
         const allProjectQuestionsAnswered = questions.length === 0 || questions.every(q => savedAnsMap[`project:${q.id}`]);
-        const loadedBlueprints = bpRes.data.success ? (bpRes.data.data || []).filter(bp => bp.configured === true) : [];
+        const loadedBlueprints = completeBps;
         const allBlueprintsHaveProducts = loadedBlueprints.length > 0 &&
           loadedBlueprints.every(bp => collectionProductsList.some(cp => String(cp.projectBlueprintId) === String(bp.id)));
+
+        // Compute aiItems so ResumeManager has everything immediately
+        const activeBlueprintIds = new Set(
+          collectionProductsList.filter(cp => cp.active).map(cp => cp.projectBlueprintId)
+        );
+        const computedBlueprintItemIds = new Set();
+        for (const bp of loadedBlueprints) {
+          if (collectionProductsList.length > 0 && !activeBlueprintIds.has(bp.id)) continue;
+          if (!bp.placementJson) continue;
+          try {
+            const placements = JSON.parse(bp.placementJson);
+            if (!placements || !Array.isArray(placements)) continue;
+            for (const p of placements) {
+              if (p.source === 'item' && p.itemId) computedBlueprintItemIds.add(String(p.itemId));
+            }
+          } catch { /* ignore */ }
+        }
+        const referencedArtworkIds = new Set();
+        for (const ref of refs) {
+          if (ref.artworkId) referencedArtworkIds.add(String(ref.artworkId));
+        }
+        for (const item of allItems) {
+          if (!item.opacityJson) continue;
+          try {
+            const parsed = JSON.parse(item.opacityJson);
+            if (parsed?.background?.type === 'artwork' && parsed.background.id) {
+              referencedArtworkIds.add(String(parsed.background.id));
+            }
+          } catch { /* ignore */ }
+        }
+        const computedAiItems = allItems.filter(i =>
+          i.artworkType !== 'custom' &&
+          (computedBlueprintItemIds.has(String(i.id)) || i.socialMedia || referencedArtworkIds.has(String(i.id)))
+        );
+        setAiItems(computedAiItems);
+
         console.log('[ResumeCheck]', {
           blueprints: loadedBlueprints.map(bp => ({ id: bp.id, configured: bp.configured })),
           collectionProducts: collectionProductsList.map(cp => ({ projectBlueprintId: cp.projectBlueprintId, active: cp.active })),
@@ -910,7 +940,8 @@ export function CollectionProvider({ children, projectId, project, collectionId:
         } else {
           setResumeStep('artwork_resume');
         }
-        setInitialLoading(false);
+        // Don't set initialLoading=false here — ResumeManager will set it
+        // after navigating to the correct step.
       } else {
         setInitialLoading(false);
       }
@@ -1054,7 +1085,7 @@ export function CollectionProvider({ children, projectId, project, collectionId:
 
   const value = {
     // props
-    projectId, project, collectionTitle, onClose, onSaved, api,
+    projectId, project, collectionTitle, editableCollectionTitle, setEditableCollectionTitle, onClose, onSaved, api,
     // step
     step, setStep, STEPS, wizardSteps, stepIndex, maxStepIndex, goBack,
     // data

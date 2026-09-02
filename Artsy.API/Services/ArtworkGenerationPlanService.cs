@@ -65,7 +65,8 @@ namespace Artsy.API.Services
             string? requestedChanges = null,
             List<GenerateProjectItemPreviewAnswer>? answers = null,
             int resolutionTier = 1,
-            string design = "artwork")
+            string design = "artwork",
+            string? placementOptionalPrompt = null)
         {
             var artworkList = await _projectItemArtworkRepository.GetByItemIdAsync(itemId);
             var artwork = artworkList.FirstOrDefault();
@@ -133,12 +134,19 @@ namespace Artsy.API.Services
                 finalPrompt += $" the background for this image must be a completely flat, uniform, solid color using {hexColor} hex color with no gradients, textures, shadows, or objects, filling the entire background area, so that we can apply a chroma key to the image later";
             }
 
-            // Append optional user-provided prompt from collection artwork at the very bottom
+            // Append optional user-provided prompt: prefer placement-level, fall back to artwork-level
             if (collectionId != Guid.Empty)
             {
-                var collectionArtwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(collectionId, itemId);
-                if (collectionArtwork != null && !string.IsNullOrWhiteSpace(collectionArtwork.OptionalPrompt))
-                    finalPrompt += $" {collectionArtwork.OptionalPrompt.Trim()}";
+                if (!string.IsNullOrWhiteSpace(placementOptionalPrompt))
+                {
+                    finalPrompt += $" {placementOptionalPrompt.Trim()}";
+                }
+                else
+                {
+                    var collectionArtwork = await _projectCollectionArtworkRepository.GetByCollectionAndItemIdAsync(collectionId, itemId);
+                    if (collectionArtwork != null && !string.IsNullOrWhiteSpace(collectionArtwork.OptionalPrompt))
+                        finalPrompt += $" {collectionArtwork.OptionalPrompt.Trim()}";
+                }
             }
 
             // --- Collect blueprint placements for this item ---

@@ -55,6 +55,31 @@ export default function CustomImageSelector({ show, selectedImageId, onSelect, o
     fetchImages(images.length);
   };
 
+  const convertWebpToJpg = (file) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        // Fill white background so transparency becomes white in JPG
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob((blob) => {
+          if (!blob) { reject(new Error('Failed to convert webp to jpg')); return; }
+          const jpgName = file.name.replace(/\.webp$/i, '.jpg');
+          resolve(new File([blob], jpgName, { type: 'image/jpeg' }));
+        }, 'image/jpeg', 0.92);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load webp image')); };
+      img.src = url;
+    });
+  };
+
   const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -63,7 +88,16 @@ export default function CustomImageSelector({ show, selectedImageId, onSelect, o
     try {
       let lastUploaded = null;
       for (const file of files) {
-        const response = await uploadCustomImage(file);
+        let uploadFile = file;
+        if (file.type === 'image/webp' || /\.webp$/i.test(file.name)) {
+          try {
+            uploadFile = await convertWebpToJpg(file);
+          } catch {
+            setMessage({ type: 'error', text: `Failed to convert ${file.name} to JPG` });
+            continue;
+          }
+        }
+        const response = await uploadCustomImage(uploadFile);
         if (response.data.success) {
           lastUploaded = response.data.data;
         } else {
@@ -129,7 +163,7 @@ export default function CustomImageSelector({ show, selectedImageId, onSelect, o
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/png"
+            accept="image/jpeg,image/png,image/webp"
             multiple
             onChange={handleFileSelect}
             className="hidden"

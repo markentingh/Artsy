@@ -5,8 +5,8 @@ import Spinner from '@/components/ui/spinner';
 import Message from '@/components/ui/message';
 import Steps from '@/components/ui/steps';
 import Icon from '@/components/ui/icon';
-import ArtworkPreviewModal from './ProductImagePreview';
-import CollectionSetupList from './CollectionSetupList';
+const ArtworkPreviewModal = lazy(() => import('./ProductImagePreview'));
+const CollectionSetupList = lazy(() => import('./CollectionSetupList'));
 const SelectProductsStep = lazy(() => import('./collection-steps/SelectProductsStep'));
 const ProjectQuestions = lazy(() => import('./collection-steps/ProjectQuestions'));
 const ArtworkQuestions = lazy(() => import('./collection-steps/ArtworkQuestions'));
@@ -111,7 +111,9 @@ function CollectionWizard() {
           <div className={showChecklist ? "flex gap-4 items-stretch" : ""}>
             {showChecklist && (
               <div className="w-[450px] shrink-0 overflow-y-auto max-h-[60vh]">
-                <CollectionSetupList />
+                <Suspense fallback={<div className="flex items-center justify-center py-12"><Spinner className="text-4xl" /></div>}>
+                  <CollectionSetupList />
+                </Suspense>
               </div>
             )}
             <div className={showChecklist ? "flex-1 min-w-[600px] flex flex-col" : ""}>
@@ -132,20 +134,22 @@ function CollectionWizard() {
         </>
       )}
 
-      <ArtworkPreviewModal
-        show={!!artworkPreview}
-        images={artworkPreview?.images || []}
-        alt="Artwork Preview"
-        defaultIndex={artworkPreview ? (artworkPreview._idx ?? artworkPreview.images.indexOf(artworkPreview.src)) : 0}
-        onClose={() => setArtworkPreview(null)}
-      />
+      <Suspense fallback={null}>
+        <ArtworkPreviewModal
+          show={!!artworkPreview}
+          images={artworkPreview?.images || []}
+          alt="Artwork Preview"
+          defaultIndex={artworkPreview ? (artworkPreview._idx ?? artworkPreview.images.indexOf(artworkPreview.src)) : 0}
+          onClose={() => setArtworkPreview(null)}
+        />
+      </Suspense>
     </Modal>
   );
 }
 
 function ResumeManager({ show, projectId, initialCollectionId }) {
   const {
-    items, setAiItems, aiItems,
+    aiItems,
     resumeStep, setResumeStep, blueprintItemIds,
     collectionArtwork, savedAnswers, upscaleComplete,
     setStep, setCurrentItemIndex, loadItemData,
@@ -159,7 +163,6 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
   } = useCollection();
 
   const [aiItemsLoaded, setAiItemsLoaded] = useState(false);
-  const [itemReferences, setItemReferences] = useState([]);
 
   useEffect(() => {
     if (!show || !projectId) return;
@@ -169,49 +172,12 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show, projectId]);
 
+  // Mark aiItems as loaded once resumeStep is set (loadData has completed and aiItems is computed)
   useEffect(() => {
-    if (!show || !projectId) return;
-    api.getAllItemReferences(projectId)
-      .then(res => {
-        const refs = res.data?.success ? res.data.data || [] : [];
-        setItemReferences(refs.map(r => ({
-          ...r,
-          itemId: r.itemId ?? r.ItemId,
-          artworkId: r.artworkId ?? r.ArtworkId,
-        })));
-      })
-      .catch(() => setItemReferences([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show, projectId]);
-
-  useEffect(() => {
-    if (!items || items.length === 0) return;
-
-    // Include any AI artwork that is referenced by another artwork
-    const referencedArtworkIds = new Set();
-    for (const ref of itemReferences) {
-      if (ref.artworkId) referencedArtworkIds.add(String(ref.artworkId));
+    if (resumeStep) {
+      setAiItemsLoaded(true);
     }
-
-    // Also include any AI artwork used as an opacity background by another artwork
-    for (const item of items) {
-      if (!item.opacityJson) continue;
-      try {
-        const parsed = JSON.parse(item.opacityJson);
-        if (parsed?.background?.type === 'artwork' && parsed.background.id) {
-          referencedArtworkIds.add(String(parsed.background.id));
-        }
-      } catch { /* ignore malformed opacity json */ }
-    }
-
-    const ai = items.filter(i =>
-      i.artworkType !== 'custom' &&
-      (blueprintItemIds.has(String(i.id)) || i.socialMedia || referencedArtworkIds.has(String(i.id)))
-    );
-    setAiItems(ai);
-    setAiItemsLoaded(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, blueprintItemIds, itemReferences]);
+  }, [resumeStep]);
 
   useEffect(() => {
     if (!resumeStep) return;
@@ -241,8 +207,8 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
           loadItemData(firstBlueprintItemIndex);
         } else {
           setStep(STEPS.READY_TO_GENERATE);
+          setInitialLoading(false);
         }
-        setInitialLoading(false);
         return;
       }
 
@@ -299,8 +265,8 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
               loadItemData(firstRegenIndex, true);
             } else {
               setStep(STEPS.ARTWORK_QUESTIONS);
+              setInitialLoading(false);
             }
-            setInitialLoading(false);
             return;
           }
 
@@ -445,14 +411,16 @@ function ResumeManager({ show, projectId, initialCollectionId }) {
                 setInitialLoading(false);
               } else {
                 setStep(STEPS.READY_TO_GENERATE);
+                setInitialLoading(false);
               }
             })();
           } else {
             setStep(STEPS.READY_TO_GENERATE);
+            setInitialLoading(false);
           }
         }
       }
-      setInitialLoading(false);
+      // loadItemData branches handle setInitialLoading(false) themselves via finally block
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiItems, aiItemsLoaded, resumeStep, blueprintItemIds, collectionArtwork, initialCollectionId]);

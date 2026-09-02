@@ -146,18 +146,21 @@ export default function ReadyToGenerate() {
   const [upscalingAgain, setUpscalingAgain] = useState({});
   const [hoveredIdx, setHoveredIdx] = useState(null);
 
-  const handleUpscaleAgain = useCallback(async (artwork) => {
+  const handleUpscaleAgain = useCallback(async (img) => {
     if (!collectionId || !projectId) return;
-    setUpscalingAgain(prev => ({ ...prev, [artwork.itemId]: true }));
+    const key = `${img.artwork.itemId}-${img.groupId || ''}-${img.placementIndex ?? ''}`;
+    setUpscalingAgain(prev => ({ ...prev, [key]: true }));
     try {
       const res = await api.upscaleArtwork({
         projectId,
         collectionId,
-        itemId: artwork.itemId,
+        itemId: img.artwork.itemId,
         force: true,
+        groupId: img.groupId || undefined,
+        placementIndex: img.placementIndex != null && img.placementIndex >= 0 ? img.placementIndex : undefined,
       });
       if (res.data.success) {
-        // Refresh artwork data from server to get updated printifyImageId (cleared) and fullSize
+        // Refresh artwork data from server to get updated fullSize
         const artRes = await api.getCollectionArtwork(collectionId);
         if (artRes.data.success) {
           setCollectionArtwork(artRes.data.data || []);
@@ -167,7 +170,7 @@ export default function ReadyToGenerate() {
     } catch (error) {
       console.error('Upscale again failed:', error);
     } finally {
-      setUpscalingAgain(prev => ({ ...prev, [artwork.itemId]: false }));
+      setUpscalingAgain(prev => ({ ...prev, [key]: false }));
     }
   }, [collectionId, projectId, api, setCollectionArtwork, refreshTokens]);
 
@@ -191,22 +194,21 @@ export default function ReadyToGenerate() {
 
     const isAlreadyUpscaled = img.fullSize; // per-placement fullSize
     const isCurrent = isGeneratingAll && artwork?.itemId === currentItemGenId;
-    const isDone = generatedArtworks.some(g => g.itemId === artwork?.itemId);
-    const isUpscalingAgain = upscalingAgain[artwork.itemId];
+    // Match completed tasks by itemId + groupId or placementIndex
+    const isDone = generatedArtworks.some(g =>
+      g.itemId === artwork?.itemId &&
+      (g.groupId ? g.groupId === img.groupId : !g.groupId && !img.groupId) &&
+      (g.placementIndex != null ? g.placementIndex === img.placementIndex : g.placementIndex == null && img.placementIndex == null)
+    );
+    const isUpscalingAgain = upscalingAgain[`${artwork.itemId}-${img.groupId || ''}-${img.placementIndex ?? ''}`];
 
-    // Only show spinner on the first non-upscaled image for the current item
+    // Show spinner on pending images for the current item being upscaled
     if (isCurrent && !isDone && !isAlreadyUpscaled) {
-      const isFirstPendingForCurrent = !artworkImages.slice(0, i).some(
-        prev => prev.artwork?.itemId === artwork.itemId && !prev.fullSize
+      return (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg">
+          <Spinner className="text-2xl text-white" />
+        </div>
       );
-      if (isFirstPendingForCurrent) {
-        return (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg">
-            <Spinner className="text-2xl text-white" />
-          </div>
-        );
-      }
-      return null;
     }
     if (isUpscalingAgain) {
       return (
@@ -227,7 +229,7 @@ export default function ReadyToGenerate() {
             <Button
               onClick={(e) => {
                 e.stopPropagation();
-                handleUpscaleAgain(artwork);
+                handleUpscaleAgain(img);
               }}
               size="small"
               className="!text-xs"
@@ -302,7 +304,7 @@ export default function ReadyToGenerate() {
       ) : upscaleComplete ? (
         <>
           <p className="text-center text-lg mb-4">
-            Upscaling complete! {artworkImages.filter(img => img.fullSize).length} artwork{artworkImages.filter(img => img.fullSize).length !== 1 ? 's' : ''} upscaled to full size.
+            Upscaling complete! {artworkImages.filter(img => img.fullSize).length} image{artworkImages.filter(img => img.fullSize).length !== 1 ? 's' : ''} upscaled to full size.
           </p>
           <div className="buttons flex justify-end gap-2 mt-auto">
             <ButtonOutline color="gray" onClick={goBack}>Back</ButtonOutline>

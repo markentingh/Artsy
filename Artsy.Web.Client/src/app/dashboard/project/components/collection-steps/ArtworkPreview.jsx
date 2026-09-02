@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { useCollection } from '@/context/collection';
 import { useDashboard } from '@/context/dashboard';
-import { artworkImageUrl, artworkJpgWithBgUrl } from '@/utils/artworkUrls';
+import { artworkImageUrl, artworkJpgWithBgUrl, artworkGroupImageUrl } from '@/utils/artworkUrls';
 import TextArea from '@/components/forms/textarea';
 import Select from '@/components/forms/select';
 import ButtonOutline from '@/components/ui/button-outline';
@@ -9,8 +9,8 @@ import Button from '@/components/ui/button';
 import Spinner from '@/components/ui/spinner';
 import Tooltip from '@/components/ui/tooltip';
 import Icon from '@/components/ui/icon';
-import PatternPreview from './PatternPreview';
-import RegenerateArtworkModal from './RegenerateArtworkModal';
+const PatternPreview = lazy(() => import('./PatternPreview'));
+const RegenerateArtworkModal = lazy(() => import('./RegenerateArtworkModal'));
 
 export default function ArtworkPreview() {
   const {
@@ -132,28 +132,39 @@ export default function ArtworkPreview() {
     const images = [];
     const cacheBust = rnd();
 
-    // For group artworks, show the combined artwork image from the artworkId folder (jpg/png)
+    // For group artworks, show the combined group image
     if (currentArtwork.hasGroups) {
       images.push({
+        key: 'group',
         index: 0,
         thumb: artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { thumb: true, cacheBust }),
         full: artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust }),
       });
     }
 
-    // Show non-group placement thumbnails
-    const nonGroupPlacements = (currentArtwork.placements || []).filter(p => !p.groupId);
+    // Show non-group placement thumbnails (deduplicated by index — multiple products
+    // can share the same placement index, but they all point to the same image file)
+    const seenIndices = new Set();
+    const nonGroupPlacements = (currentArtwork.placements || [])
+      .filter(p => !p.groupId)
+      .filter(p => {
+        if (seenIndices.has(p.index)) return false;
+        seenIndices.add(p.index);
+        return true;
+      });
     for (const p of nonGroupPlacements) {
       images.push({
+        key: `placement-${p.index}`,
         index: p.index,
         thumb: artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { thumb: true, cacheBust, placementIndex: p.index }),
         full: artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust, placementIndex: p.index }),
       });
     }
 
-    // If no placements at all, show the base artwork
+    // If no placements at all (pattern design or artwork without placements), show the base artwork
     if (images.length === 0) {
       images.push({
+        key: 'base',
         index: 0,
         thumb: previewImageData || artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { thumb: true, cacheBust }),
         full: artworkImageUrl(collectionId, currentItem.id, currentArtwork.id, { cacheBust }),
@@ -181,31 +192,34 @@ export default function ArtworkPreview() {
     let placementIndex = null;
     let hasPlacementRecords = false;
 
+    // Artwork-level optional prompt (fallback when placement doesn't have its own)
+    const colArt = collectionArtwork.find(a => String(a.itemId) === String(currentItem.id));
+    const artworkOptionalPrompt = colArt?.optionalPrompt || '';
+
     if (isGroupImage) {
       // Group artwork — index 0 is the combined image
       groupId = currentArtwork.groupPlacements?.[0]?.groupId || null;
       const firstGroup = currentArtwork.groupPlacements?.[0];
       if (firstGroup) {
-        existingPrompt = firstGroup.placements?.[0]?.optionalPrompt || '';
+        existingPrompt = firstGroup.placements?.[0]?.optionalPrompt || artworkOptionalPrompt;
         label = `Placement Group`;
         hasPlacementRecords = true;
       }
     } else if (nonGroupPlacement) {
       // Non-group placement
       placementIndex = img.index;
-      existingPrompt = nonGroupPlacement.optionalPrompt || '';
+      existingPrompt = nonGroupPlacement.optionalPrompt || artworkOptionalPrompt;
       label = `Placement ${img.index + 1}`;
       hasPlacementRecords = true;
     } else {
       // Pattern or single artwork with no placement records — load from ProjectCollectionArtwork
-      const colArt = collectionArtwork.find(a => String(a.itemId) === String(currentItem.id));
-      existingPrompt = colArt?.optionalPrompt || '';
+      existingPrompt = artworkOptionalPrompt;
       label = 'Artwork';
     }
 
     setRegenerateModalState({
       img,
-      imageUrl: img.thumb,
+      imageUrl: `${img.thumb}${img.thumb.includes('?') ? '&' : '?'}r=${Math.floor(Math.random() * 100000)}`,
       label,
       existingPrompt,
       hasPlacementRecords,
@@ -427,10 +441,12 @@ export default function ArtworkPreview() {
       </h3>
       <div className="flex flex-col items-center gap-4">
         {isPattern && !isGenerating && previewImageData && (
-          <PatternPreview
-            patternSettings={patternSettings}
-            previewImage={previewImageData}
-          />
+          <Suspense fallback={<Spinner className="text-3xl my-16" />}>
+            <PatternPreview
+              patternSettings={patternSettings}
+              previewImage={previewImageData}
+            />
+          </Suspense>
         )}
         <div className="min-h-[100px] flex items-center justify-center">
           {isGenerating && previewGenerationThumbs.length === 0 ? (
@@ -463,7 +479,7 @@ export default function ArtworkPreview() {
                   : img.thumb;
                 return (
                   <div
-                    key={img.index}
+                    key={img.key}
                     className="group relative w-[150px] h-[150px] rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 cursor-pointer bg-gray-100 dark:bg-gray-700"
                     onClick={() => setArtworkPreview({ images: placementGridImages.map(p => p.full), src: img.full, alt: 'Artwork Preview' })}
                   >
@@ -573,17 +589,19 @@ export default function ArtworkPreview() {
         <ButtonOutline color="gray" className="cancel" onClick={() => { cancelAll(); onClose(); }}>Cancel</ButtonOutline>
       </div>
 
-      <RegenerateArtworkModal
-        show={!!regenerateModalState}
-        imageUrl={regenerateModalState?.imageUrl}
-        placementLabel={regenerateModalState?.label}
-        existingOptionalPrompt={regenerateModalState?.existingPrompt}
-        isGenerating={regenerateModalState && regeneratingIndices.has(regenerateModalState.img.index)}
-        isApplyingEdits={regenerateModalState && applyingEditsIndex === regenerateModalState.img.index}
-        onGenerate={handleModalGenerate}
-        onApplyEdits={handleApplyEdits}
-        onClose={() => setRegenerateModalState(null)}
-      />
+      <Suspense fallback={null}>
+        <RegenerateArtworkModal
+          show={!!regenerateModalState}
+          imageUrl={regenerateModalState?.imageUrl}
+          placementLabel={regenerateModalState?.label}
+          existingOptionalPrompt={regenerateModalState?.existingPrompt}
+          isGenerating={regenerateModalState && regeneratingIndices.has(regenerateModalState.img.index)}
+          isApplyingEdits={regenerateModalState && applyingEditsIndex === regenerateModalState.img.index}
+          onGenerate={handleModalGenerate}
+          onApplyEdits={handleApplyEdits}
+          onClose={() => setRegenerateModalState(null)}
+        />
+      </Suspense>
     </div>
   );
 }

@@ -58,6 +58,7 @@ const Projects = (args) => Api({ ...args }).endpoints(({ api }) => {
     updateItemQuestion: (request) => api.post(`${apiPath}/update-item-question`, request),
     deleteItemQuestion: (request) => api.post(`${apiPath}/delete-item-question`, request),
     getQuestions: (projectId) => api.get(`${apiPath}/get-questions?projectId=${projectId}`),
+    loadCollectionWizard: (projectId, collectionId) => api.get(`${apiPath}/load-collection-wizard?projectId=${projectId}${collectionId ? `&collectionId=${collectionId}` : ''}`),
     getChecklist: (projectId) => api.get(`${apiPath}/get-checklist?projectId=${projectId}`),
     createQuestion: (request) => api.post(`${apiPath}/create-question`, request),
     updateQuestion: (request) => api.post(`${apiPath}/update-question`, request),

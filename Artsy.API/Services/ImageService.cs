@@ -11,6 +11,7 @@ namespace Artsy.API.Services
 {
     public interface IImageService
     {
+        Task<byte[]> GenerateThumbnailAsync(byte[] imageData, int size = 350);
         Task<byte[]> GetProjectCollectionArtworkAsync(Guid collectionId, Guid artworkId, int index);
         Task SaveProjectItemPreviewAsync(Guid projectId, Guid itemId, Guid previewId, byte[] imageData);
         Task<byte[]> GetProjectItemPreviewAsync(Guid projectId, Guid itemId, Guid previewId, bool thumb = false);
@@ -345,7 +346,7 @@ namespace Artsy.API.Services
             return files.Count(f => !f.EndsWith("_thumb.jpg", StringComparison.OrdinalIgnoreCase));
         }
 
-        async Task<byte[]> GenerateThumbnailAsync(byte[] imageData, int size = 350)
+        public async Task<byte[]> GenerateThumbnailAsync(byte[] imageData, int size = 350)
         {
             using var image = Image.Load(imageData);
             var ratio = Math.Min((double)size / image.Width, (double)size / image.Height);

@@ -3,7 +3,7 @@ import { useCollection } from '@/context/collection';
 import ButtonOutline from '@/components/ui/button-outline';
 import Carousel from '@/components/ui/carousel';
 import CarouselElements from '@/components/ui/carousel-elements';
-import EditCollectionProductDetails from './EditCollectionProductDetails';
+const EditCollectionProductDetails = lazy(() => import('./EditCollectionProductDetails'));
 const ConfigureMultiProductModal = lazy(() => import('./ConfigureMultiProductModal'));
 
 export default function PublishProductsStep() {
@@ -97,8 +97,9 @@ export default function PublishProductsStep() {
   }, [productImagesByBlueprint, mockupsByBlueprint]);
 
   const getBlueprintFullImages = useCallback((bp) => {
-    const productImgs = (productImagesByBlueprint[bp.id] || []).map(img => (img.imageUrl || '').replace('?thumb=true', ''));
-    const mockupImgs = (mockupsByBlueprint[bp.id] || []).map(m => (m.imageUrl || '').replace('&thumb=true', ''));
+    const stripQuery = (url) => (url || '').split('?')[0];
+    const productImgs = (productImagesByBlueprint[bp.id] || []).map(img => stripQuery(img.imageUrl));
+    const mockupImgs = (mockupsByBlueprint[bp.id] || []).map(m => m.imageUrl);
     return [...productImgs, ...mockupImgs];
   }, [productImagesByBlueprint, mockupsByBlueprint]);
 
@@ -242,28 +243,30 @@ export default function PublishProductsStep() {
         <ButtonOutline color="gray" className="cancel" onClick={onClose}>Close</ButtonOutline>
       </div>
 
-      <EditCollectionProductDetails
-        show={!!editProductBp}
-        collectionId={collectionId}
-        projectBlueprintId={editProductBp?.id}
-        blueprintName={editProductBp?.name}
-        collectionProducts={collectionProducts}
-        allProductImages={allProductImages}
-        mockups={mockups}
-        printifyProducts={printifyProducts}
-        api={api}
-        onClose={() => setEditProductBp(null)}
-        onSaved={() => {
-          if (collectionId) {
-            api.getCollectionProducts(collectionId).then(res => {
-              if (res.data.success) {
-                const products = res.data.data || [];
-                setCollectionProducts(prev => products.length > 0 ? products : prev);
-              }
-            }).catch(() => {});
-          }
-        }}
-      />
+      <Suspense fallback={null}>
+        <EditCollectionProductDetails
+          show={!!editProductBp}
+          collectionId={collectionId}
+          projectBlueprintId={editProductBp?.id}
+          blueprintName={editProductBp?.name}
+          collectionProducts={collectionProducts}
+          allProductImages={allProductImages}
+          mockups={mockups}
+          printifyProducts={printifyProducts}
+          api={api}
+          onClose={() => setEditProductBp(null)}
+          onSaved={() => {
+            if (collectionId) {
+              api.getCollectionProducts(collectionId).then(res => {
+                if (res.data.success) {
+                  const products = res.data.data || [];
+                  setCollectionProducts(prev => products.length > 0 ? products : prev);
+                }
+              }).catch(() => {});
+            }
+          }}
+        />
+      </Suspense>
 
       {showMultiProductModal && (
         <Suspense fallback={null}>

@@ -15,5 +15,11 @@ namespace Artsy.API.Models.Collections
 
         [JsonPropertyName("force")]
         public bool Force { get; set; }
+
+        [JsonPropertyName("placementIndex")]
+        public int? PlacementIndex { get; set; }
+
+        [JsonPropertyName("groupId")]
+        public Guid? GroupId { get; set; }
     }
 }
